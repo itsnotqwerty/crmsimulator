@@ -27,10 +27,10 @@ export default function RootPage({ data }: PageProps<RootPageData>) {
   return (
     <>
       <Head>
-        <title>Signal Ridge CRM</title>
+        <title>CRM Simulator</title>
         <meta
           name="description"
-          content="Run a growing B2B software company from a living CRM workspace."
+          content="Create and grow your virtual business through real-world CRM workflows. Manage your contacts, sales, and marketing campaigns and build to infinity."
         />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#173f35" />
