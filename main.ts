@@ -5,9 +5,9 @@
 /// <reference lib="deno.ns" />
 
 try {
-	await import("$std/dotenv/load.ts");
+  await import("$std/dotenv/load.ts");
 } catch {
-	// Ignore unreadable or missing .env files in production; systemd provides env vars.
+  // Ignore unreadable or missing .env files in production; systemd provides env vars.
 }
 
 import { start } from "$fresh/server.ts";

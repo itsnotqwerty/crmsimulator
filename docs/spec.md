@@ -1,297 +1,418 @@
-# 16spaces product and game spec
+# CRM Simulator Product Specification
 
-| Field | Value |
-| --- | --- |
-| **Status** | Draft / planning |
-| **Date** | 2026-08-16 |
-| **Live** | https://16space.deno.dev |
-| **Companion** | [design.md](design.md) (architecture), [roadmap.md](roadmap.md) (PR plan) |
+## 1. Product statement
 
-This is the product + game specification. Implement UX and copy from this file. Technical APIs, schema, and RLS live in [design.md](design.md). No new product decisions beyond the approved design.
+CRM Simulator is a single-player incremental management game presented entirely
+as an original, realistic customer relationship management application. The
+player operates a small B2B SaaS company and grows it from a founder-managed
+lead inbox into a mature marketing, sales, customer success, support, and
+operations organization.
 
----
+The interface must look and behave like working business software. Progress
+appears as new records, reports, controls, teams, and modules becoming necessary
+and available. The game must not use a separate map, character screen, XP bar,
+or conventional game HUD.
 
-## What it is
+## 2. Product principles
 
-16spaces is a 4×4 two-player abstract game (a Tic-Tac-Toe variant with a stone cap and sliding). Today it is a **single-browser hot-seat prototype** (`routes/index.tsx` → `islands/GameManager.tsx`). The planned product is a complete multiplayer game: auth, private/public lobbies, ELO matchmaking, and host-set options — still a Deno Fresh app on Deno Deploy.
+1. **The CRM is the game.** Every meaningful action occurs through a credible
+   CRM workflow.
+2. **Complexity is earned.** The first session exposes only the tools needed to
+   acquire and manage initial customers.
+3. **Business milestones unlock tools.** Features unlock because the company has
+   reached an operational need, not because the player gained an abstract level.
+4. **Decisions have operating consequences.** Growth consumes cash and staff
+   capacity; poor targeting, neglected follow-up, and weak service reduce
+   performance.
+5. **Failure is real and legible.** Active mismanagement can bankrupt the
+   company. The CRM must show why.
+6. **Growth is endless.** There is no final victory screen. Mature companies
+   continue pursuing scale, efficiency, retention, and resilience.
+7. **Records feel real but remain fictional.** Generated people and companies
+   must be plausible without copying real organizations or a branded CRM.
 
-The in-game chrome already pretends at multiplayer (names, ELO 1000, connection dots, move list, clocks). Player O is hardcoded disconnected. That chrome becomes real in later PRs.
+## 3. Audience and experience
 
----
+The game is for players who enjoy incremental systems, optimization, management
+simulations, or operational software. Familiarity with CRM terminology is not
+required.
+
+The intended opening experience is a stylish, restrained workspace with:
 
-## Goals (v1)
+- a live inbox containing the first inbound leads;
+- a short queue of contextual work tasks;
+- a compact dashboard with cash, MRR, leads, and customers;
+- contacts and account records that become richer through interaction;
+- locked navigation entries that state their business requirement.
 
-- Playable **rated** and **unrated** online games, two humans, server-validated rules and clocks.
-- **Auth:** email/password, magic link, GitHub, Google, anonymous guest.
-- **Profiles:** unique username, created_at, rating, W/L/D, match history. Avatar is initials / generated, not uploaded.
-- **Lobbies:** private code/link, public list, host options, ready, presence, host transfer, idle expiry.
-- **ELO matchmaking** with expanding window, serverless pairing.
-- **Game options** locked at start (time, increment, rated, color, privacy).
-- **Local hot-seat** remains on `/local` (and linked from home).
-- **Leaderboard** (top 50, min 5 rated games).
-- AdSense remains on marketing/home surfaces; no PII in ad slots or client env.
+Instruction is embedded in tasks, empty states, field labels, and feedback.
+There is no detached tutorial level.
 
-## Non-goals (v1)
+## 4. Company premise
 
-- Spectators, tournament brackets, bots, analysis board, puzzles.
-- Changing board size, stone cap, adjacency, or win length.
-- Draw by repetition / insufficient material / 50-move.
-- Account linking / guest upgrade (Phase 2; technically feasible).
-- Avatar uploads / Supabase Storage.
-- Custom domains, native apps, i18n.
-- Chat (presence is enough; chat is a moderation problem).
-- Redis, Deno KV as source of truth, Fly machines, Socket.io, long-lived WS game servers.
-- Fresh 2 migration.
+The player is the founder-operator of a small B2B SaaS company selling monthly
+subscriptions to fictional businesses.
+
+The company begins with:
+
+- a player-defined company name;
+- a modest cash runway;
+- no employees;
+- no paying customers;
+- one basic product plan;
+- a small stream of inbound leads;
+- founder capacity for outreach and account work;
+- Dashboard, Inbox, Contacts, and Tasks modules.
+
+The company grows through recurring revenue. Its main constraints are cash,
+demand, lead quality, conversion, workload, service quality, and staff capacity.
 
-## Phase 2 (not scheduled in v1 PRs)
+## 5. Time model
 
-- Link guest → email/OAuth (`linkIdentity` / `updateUser`).
-- Spectators (read-only RLS + no input).
-- Optional in-game chat with report/block.
-- Puzzle / daily + bot opponent using `lib/game`.
-- Avatar upload.
+### 5.1 Game clock
 
----
+One real minute equals one game hour. The simulation advances from elapsed
+timestamps rather than animation frames.
 
-## Full rules
+Rules and recurring effects are evaluated in fixed intervals. Given the same
+saved state, seed, player commands, and elapsed time, the result must be
+identical.
 
-As implemented in `islands/Board.tsx` / `islands/GameManager.tsx`, plus online/draw/ply-cap decisions. The two long diagonals in `checkWin` are **correct** on 4×4 — they are the only 4-long diagonals. Core rules are frozen.
+The UI may update its clock every second, but simulation correctness must not
+depend on render frequency or tab focus.
 
-1. Two players, **X** and **O**, on a 4×4 board. Cells are `A1`–`D4` (files A–D left→right, ranks 1–4 top→bottom). `A1` is `(x=0, y=0)` top-left.
-2. **X moves first.** First-move-as-O is color assignment, not a separate rule.
-3. On your turn, either **place** a stone on an empty cell if you have fewer than **5** stones on the board, or **slide** one of your stones to an **8-adjacent** empty cell (including diagonally). You may not capture or jump.
-4. First player to get **four** stones in a straight line (row, column, or either long diagonal) wins.
-5. If your clock reaches zero on your turn, you lose (`timeout`).
-6. If you have no legal place or slide, you lose (`no_legal_moves`). Do not skip the turn.
-7. Online games may be **resigned** or **drawn by agreement**. A game that reaches **400 half-moves** without a 4-in-a-row is a draw (`ply_cap`). This is the only automatic draw. Rated games update ELO except handshake **aborts**.
-8. **Local hot-seat:** both colors share one browser; clocks start after the first move (X's opening is untimed).
-9. **Online:** clocks start when **both** players have loaded the game (heartbeat). If someone never shows up within **45 seconds**, the game is aborted and does not affect rating.
+### 5.2 Active progress
 
-Notation stays as `Board.tsx` formats it: `A1` for a place, `A1->B2` for a slide.
+While the application is open:
 
-### Example legal / illegal moves
+- inbound leads, task deadlines, campaigns, recurring revenue, payroll,
+  workload, customer health, renewals, and incidents advance with game time;
+- manual actions apply immediately through validated game commands;
+- the game autosaves after meaningful mutations and at safe lifecycle
+  boundaries;
+- cash may fall below the bankruptcy threshold.
 
-Starting empty board, X to move:
+### 5.3 Offline progress
 
-- `place A1` → legal, notation `A1`
-- `place A1` again → illegal (occupied)
-- After 5 X stones on the board, further `place` by X → illegal; X must slide
-- `slide A1 → B3` → illegal (not adjacent)
-- `slide A1 → B2` if B2 empty and A1 is X → legal, notation `A1->B2`
-- Four X on `A1..A4` → `four_in_a_row`
-- Four X on `B1,C2,D3` only → **not** a win (length 3)
-- Four X on `A1,B2,C3,D4` → win (main diagonal)
-- Four X on `A4,B3,C2,D1` → win (anti-diagonal)
+When the player returns, the game simulates at most 24 real hours of elapsed
+time.
 
-### How a game ends
+Offline resolution uses the same engine as active play, with one exception: it
+stops at the last safe interval before an expense would cause bankruptcy. The
+company enters **Crisis Pause**, and the player must reduce costs, recover
+revenue, or otherwise act before resuming time.
 
-| Reason | Winner | Rated? |
-| --- | --- | --- |
-| `four_in_a_row` | the line owner | yes if `games.rated` |
-| `timeout` | opponent | yes if rated |
-| `resign` | opponent | yes if rated (clocks must have started) |
-| `no_legal_moves` | the mover who left the opponent with none | yes if rated |
-| `draw_agreement` | none | yes if rated (`S = 0.5`) |
-| `ply_cap` (400 half-moves) | none | yes if rated (`S = 0.5`) |
-| `abort` (handshake miss) | none | **never** |
+Elapsed time beyond the 24-hour cap is discarded. It is not queued for later
+resolution.
 
-Sidebar `winState`: `"X" | "O" | "draw" | "aborted" | null`. `draw` covers `draw_agreement` and `ply_cap`.
+The player receives an offline summary showing elapsed time processed, leads
+received, revenue and costs accrued, customer changes, completed work,
+incidents, and the reason for any crisis pause.
 
-Reset exists **only** on `/local`. Online games never reset in place; "Play again" returns to the lobby (same code, new game) or re-queues.
+## 6. Core resources and metrics
 
----
+### 6.1 Primary resources
 
-## Modes
+- **Cash:** Liquid operating balance. Active play below the bankruptcy threshold
+  ends the company.
+- **MRR:** Monthly recurring revenue from active subscriptions.
+- **Capacity:** Available founder and employee work time by function.
+- **Demand:** Rate and quality of inbound leads generated organically or by
+  campaigns.
+- **Customer health:** Per-account likelihood of renewal, expansion, support
+  load, and churn.
 
-### Local hot-seat (`/local`)
+### 6.2 Core KPIs
 
-- Both colors in one browser. No account required.
-- Same rules and time-preset list. No rated / privacy / color options.
-- Clocks start after the first committed move. Display interval is cosmetic.
-- Never persisted. `islands/GameManager.tsx` stays local-only and never depends on Supabase.
-- Kept working for the entire multiplayer rollout.
+The CRM surfaces metrics only when they become actionable:
 
-### Challenge (pre-lobby online)
+- leads created and qualified;
+- response and conversion rates;
+- open pipeline and weighted pipeline;
+- customers and net-new MRR;
+- cash burn and runway;
+- campaign spend, CAC, and attribution;
+- workload and utilization;
+- gross and net revenue retention;
+- ticket volume and SLA attainment;
+- forecast versus actual performance.
 
-- Unrated only. Challenger picks an opponent username and optional time control (default Classic).
-- Share URL `/c/{id}`. Inbox: incoming and outgoing pending challenges on home.
-- Expires after **5 minutes** (expiry-on-read).
-- Challenger occupies an engagement slot until the challenge leaves `pending`. The opponent does **not**, until they accept.
-- Accept creates a game and starts the online handshake. If the opponent is already engaged, accept is 409 and the challenge becomes **declined** (not left pending).
-- Challenger may cancel while pending. Opponent declines.
-- After lobbies ship, hide challenge **create** on home; inbox + `/c/:id` stay (also used for tests).
+Early dashboards show only cash, MRR, leads, customers, and due tasks.
+Additional metrics unlock with their underlying module.
 
-### Lobby
+## 7. Initial playable loop
 
-- **Code:** 6 chars from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (no `0/O/1/I`). Share `https://16space.deno.dev/l/ABC234`.
-- **Privacy:** `public` listed on the public lobby browse; `private` join-by-code only.
-- **Capacity:** 2 players. No spectators in v1.
-- Host sets options while `open`. Both members ready; host starts.
-- Play again: when the current game is `completed` or `aborted` and both still in the lobby, host starts a new game (same options unless changed while `open` — options are locked on the **game** at insert).
-- Leave: remaining member becomes host. Zero members → expired.
-- Idle: open lobby expires after 15 minutes with no member heartbeat, or 2 minutes if empty. A **started** lobby is **not** expired while its current game is `active`.
-- Cancel: host marks the lobby cancelled.
+The first release must support a complete lead-to-customer loop:
 
-### Queue (matchmaking)
+1. An inbound lead appears in the Inbox.
+2. The player opens the lead and reviews fit and engagement signals.
+3. The player qualifies, disqualifies, emails, or calls the lead.
+4. Successful outreach creates follow-up work and advances interest.
+5. A qualified lead becomes a deal with value, plan, probability, and expected
+   close time.
+6. Continued timely work can close the deal.
+7. A won deal creates an account, contact, subscription, activity history, MRR,
+   and onboarding tasks.
+8. Subscription revenue and operating expenses accrue over game time.
+9. Repeated success unlocks acquisition and sales tools; neglect reduces
+   conversion and customer health.
 
-- Separate queues for `(rated, time_control_id)`. A 3+0 player never pairs with Classic 150.
-- Color is **random**. Handshake clocks still apply after a match.
-- Expanding rating window: start ±50, +50 every 10s, cap ±400.
-- One queued ticket per user. Second enqueue returns the existing ticket.
-- Cancel anytime while queued. Ticket expires 60s after the last tick if the client disappears.
-- Rated queue requires a non-guest, non-`user_*` account.
+Manual work consumes capacity. Ignored leads cool over time, overdue tasks
+reduce outcomes, and activity records explain state changes.
 
-### One engagement at a time
+## 8. CRM records
 
-A user occupies exactly one of:
+### 8.1 Leads and contacts
 
-- this lobby **and** its current game (one slot),
-- a standalone active game (match or challenge),
-- a queued ticket,
-- an open lobby with no game,
-- an **outgoing** pending challenge.
+Records include fictional identity, company, role, source, fit, engagement,
+lifecycle status, owner, last activity, next task, and generated communication
+history. Some fields are hidden until scoring or enrichment unlocks.
 
-Start/rematch is allowed when the only slot is **this** lobby. Incoming pending challenges do not occupy the opponent.
+### 8.2 Companies and accounts
 
----
+Company records include industry, size, region, contacts, open deals,
+subscriptions, health, owner, activities, and service history. Early in the
+game, company and contact information may be incomplete.
 
-## Game options
+### 8.3 Deals
 
-Host (lobby) or queue picker. Copied onto the game at start and **immutable**.
+Deals move through credible stages: New, Qualified, Discovery, Evaluation,
+Negotiation, Won, and Lost. Stage progression is caused by player work, lead
+fit, response, timing, and capacity rather than arbitrary clicking alone.
 
-| Option | Values | Default | Matchmaking? |
-| --- | --- | --- | --- |
-| Time control | presets below | `classic` (150+0) | yes, queue key |
-| Rated | `true` / `false` | lobby: false; home buttons choose | yes, queue key |
-| Color | `random` / `host_x` / `host_o` | `random` | always `random` |
-| Privacy | `public` / `private` | create-private / browse-public | n/a |
-| First move | X always | — | not configurable |
+### 8.4 Activities and tasks
 
-### Time presets
+Calls, emails, notes, status changes, campaign touches, support events, and
+system outcomes appear in chronological activity history. Tasks carry type,
+priority, due time, owner, related records, and completion state.
 
-| `id` | Label | Initial | Increment (Fischer) |
-| --- | --- | --- | --- |
-| `bullet30` | 30s | 30s | 0 |
-| `1+0` | 1+0 | 60s | 0 |
-| `2+1` | 2+1 | 120s | 1s |
-| `classic` | Classic 2:30 | **150s** | 0 |
-| `3+0` | 3+0 | 180s | 0 |
-| `3+2` | 3+2 | 180s | 2s |
-| `5+0` | 5+0 | 300s | 0 |
-| `5+3` | 5+3 | 300s | 3s |
+Old detailed activity may be summarized into immutable aggregate history when
+required to keep cookie saves within budget.
 
-Increment is added to the mover's remaining **after** a legal move, not after flag-fall.
+## 9. Progression and unlocks
 
-**Rated lobby invariants:** cannot set `rated=true` if any member is a guest or still has a `user_*` placeholder. Guests cannot join a rated lobby. Start re-checks both members.
+Exact numeric thresholds are balancing data, not hard-coded UI logic. Each
+unlock must require both measurable company progress and a demonstrated
+operational need.
 
----
+### Tier 0: Founder inbox
 
-## Clocks and handshake (player-facing)
+Available immediately:
 
-### Local
+- Dashboard;
+- Lead Inbox;
+- Contacts and basic companies;
+- Tasks;
+- call, email, qualify, disqualify, and follow-up actions;
+- cash, MRR, expense, and capacity simulation.
 
-Clocks start after the first committed move. Each player has a bank (default Classic 150s). The clock ticks only for the player to move. At 0, the opponent wins.
+### Tier 1: Repeatable acquisition
 
-### Online
+Unlocked after acquiring and retaining the first customers:
 
-- Clocks do **not** run when the game row is created.
-- Each client must heartbeat. When **both** have heartbeated, clocks start and X is on clock.
-- If after **45 seconds** either player still has not heartbeated, the game **aborts** (no rating change).
-- **Rated:** there is no voluntary abort button. Only the 45s miss aborts.
-- **Unrated:** you may abort only if the opponent has never heartbeated (true no-show). If both have loaded, abort is refused; resign after clocks start.
-- Resign and draw are refused until clocks have started.
-- After the first legal move, disconnect is just the clock. Flag-fall rates if the game is rated.
-- The on-screen timer is cosmetic. A sleeping tab cannot pause the server clock.
+- Marketing workspace;
+- campaigns with audience, channel, message, daily budget, and duration;
+- deterministic channel spend and attributed lead delivery over game time;
+- campaign pause and resume controls;
+- audience segments;
+- basic lead scoring;
+- single-touch attribution;
+- CAC and conversion reporting.
 
----
+### Tier 2: Sales operations
 
-## Draws and resign
+Unlocked at $1,000 MRR and three open deals:
 
-Anytime (not only your turn), after clocks have started:
+- pipeline board and list views;
+- stage age, expected close timing, value, probability, weighted pipeline, and
+  forecast MRR derived from canonical deals;
+- editable Starter, Growth, and Scale product tiers, with explicit reasons for
+  closed-lost deals;
+- deal-stage customization within supported rules;
+- sales representatives, ownership, and assignment;
+- targets, territories, routing, and forecast views;
+- quotes and expanded product plans.
 
-| Outstanding offer | You do | Result |
-| --- | --- | --- |
-| none | offer | you offered |
-| yours | offer again | no change |
-| opponent's | offer | treated as **accept** |
-| opponent's | accept | draw |
-| anyone's | decline | cleared |
-| anyone's | legal move | cleared, then the move |
-| anyone's | resign | you lose; not a draw |
+### Tier 3: Retention and service
 
-No 3-fold or 50-move. Ply 400 without a 4-in-a-row is the only automatic draw.
+Unlocked through active-customer and renewal volume:
 
----
+- customer health and success workspaces;
+- onboarding, renewals, expansion, and churn risk;
+- support inbox, tickets, SLAs, and service staffing;
+- NPS and retention reporting.
 
-## Auth and guests (player-facing)
+### Tier 4: Automation and analytics
 
-| Method | v1 |
-| --- | --- |
-| Email + password | yes (confirm-email **off**; password min 8) |
-| Magic link | yes — open it in the **same browser** you requested it from |
-| GitHub / Google | yes |
-| Guest / anonymous | yes |
-| Phone | no |
+Unlocked when manual process load becomes material:
 
-**Guest copy:** "Sign in to keep a rating. Guest cookies last 7 days on this browser; we cannot merge guest history if you create a new account."
+- sequences and workflow automation;
+- funnel, cohort, and attribution reports;
+- forecasting and variance analysis;
+- custom fields, filters, dashboards, and saved views;
+- simulated integrations.
 
-Guests may play local, unrated lobby, unrated challenge, and unrated queue only. They cannot play rated.
+### Tier 5: Mature operations
 
-New accounts start with a placeholder username `user_` + 8 hex characters until they pick a name at signup or `/settings`. OAuth users land on `/settings` until they pick a name. Rated play is blocked while the name still matches `user_*`.
+Unlocked as staffing and process complexity grow:
 
-Username: 3–20 characters, `^[a-zA-Z][a-zA-Z0-9_]{2,19}$`, unique (case-insensitive). Rename at most every 30 days. Reserved: `admin, api, play, local, login, signup, settings, leaderboard, u, l, queue, auth, guest, anonymous, 16spaces`.
+- departments, budgets, hiring, training, and burnout;
+- advanced capacity planning and data hygiene;
+- simulated roles and permissions;
+- larger market segments and operational incidents;
+- aggregate historical analysis and endless scaling goals.
 
-Account linking (keep guest history when you sign up) is **Phase 2**. Until then, signing up creates a new user.
+Locked modules remain visible in navigation and state the milestone or condition
+required to unlock them.
 
----
+## 10. Marketing simulation
 
-## ELO (player-facing)
+Campaigns combine audience, channel, spend, duration, and message. Results
+depend on market fit, audience quality, saturation, channel performance, and
+deterministic seeded variation.
 
-- Everyone starts at **1000** (matches the current sidebar default).
-- Rated games only. Unrated results do not change rating or W/L/D.
-- First 10 rated games: provisional, larger swings (K=40). After that K=20.
-- Floor 100. No ceiling.
-- Handshake **abort** never changes rating.
-- Leaderboard: top 50 by rating, at least **5** rated games, no guests or placeholders.
+The first marketing release uses single-touch attribution. Weighted multi-touch
+attribution belongs to the later analytics tier.
 
----
+Campaigns generate leads over time rather than immediately. Spend reduces cash
+as configured. Poor campaigns may create low-quality demand and increase
+workload without producing viable pipeline. Repeated delivery into the same
+campaign audience increases saturation and lowers the fit of later leads.
 
-## UX routes
+Detailed campaign records are bounded. The oldest archived records compact into
+aggregate campaign counts, spend, and lead history so long-running saves remain
+within the cookie budget.
 
-`_app.tsx` keeps the `#161512` dark shell, a single `<title>`, OG tags (`https://16space.deno.dev`), and the AdSense script **once**. `components/Layout.tsx` provides top nav: logo, Play, Leaderboard, username or Sign in.
+## 11. Staffing and operations
 
-| Route | Auth | Purpose |
-| --- | --- | --- |
-| `/` | optional | Home: Play Rated, Play Unrated, Create Lobby, Join by code, Play Local, Leaderboard. AdSense above/below. **No embedded live board.** Incoming-challenge inbox when signed in. |
-| `/local` | none | Hot-seat. Time-preset select. |
-| `/login` | guest | Email/password, magic link, OAuth, "Play as guest". |
-| `/signup` | guest | Email/password. |
-| `/l/:code` | required (guest ok) | Lobby. |
-| `/c/:id` | required | Challenge accept/decline. Participants only. |
-| `/queue` | required | Matchmaking wait + cancel. |
-| `/play/:id` | required, must be a player | Online board + sidebar. Refresh resumes. |
-| `/u/:username` | optional | Public profile + match history. |
-| `/leaderboard` | optional | Top 50. |
-| `/settings` | required | Change username. Link-account placeholder hidden until Phase 2. |
+Employees have function, compensation, skill, capacity, utilization, and
+burnout. Hiring increases throughput but creates recurring costs. Training
+temporarily consumes capacity while improving future performance.
 
-### Home buttons (unauthenticated)
+The first sales hires are named junior, mid-level, or senior representatives.
+Their level fixes monthly compensation, selling skill, and concurrent-deal
+capacity. Deals can remain founder-owned or be explicitly assigned. Skill
+improves stage probability gains, while assignments above capacity reduce them.
+Each representative also has a territory and monthly target. Manual routing
+assigns active unowned leads to the least-loaded eligible representative, and
+qualification carries ownership into the resulting deal. Rep queues and target
+coverage derive from canonical lead and deal ownership.
 
-- **Play Local** — always, no session.
-- **Play Unrated / Create Lobby / Join by code** — create a guest session, then continue (one click).
-- **Play Rated** — requires a non-guest, non-`user_*` account. Button goes to `/login?next=/queue?rated=1` and explains why.
-- **Leaderboard / public profiles / public lobby browse** — no session, no auto-guest.
+Work must be assigned explicitly or through unlocked routing and automation.
+Overloaded teams miss deadlines and reduce customer outcomes. Underused teams
+waste cash.
 
-Ads stay on `/` only. No ad slots on game, lobby, queue, settings, or profile. Never pass email, user id, or tokens into ad markup.
+Permissions are a simulated organizational control only. They never create real
+users, login, authentication, or authorization.
 
-Rules modal stays on the board (copy from this spec). Close control must not sit inside the rules `<ul>` (current markup bug in `islands/Board.tsx`).
+## 12. Failure and restart
 
-Connection dots in the sidebar are Presence (best-effort). They are not a security boundary.
+### 12.1 Bankruptcy
 
----
+During active play, the company is bankrupt when cash crosses the configured
+threshold and no immediate protected transaction remains to resolve.
 
-## Current prototype (what players see today)
+The simulation stops and displays a bankruptcy report containing:
 
-- Single page at `/` with `GameManager` / `Board` / `Sidebar`.
-- 150s bank, clock starts after first move, hardcoded "Anonymous" 1000, O disconnected.
-- `maxTime` has no UI yet; presets will replace it on `/local`.
-- Duplicate `<title>` and duplicate AdSense loader — to be cleaned up when the home menu lands.
+- company age;
+- peak and final MRR;
+- customers acquired and lost;
+- cash-flow history;
+- major expenses and incidents;
+- the events immediately preceding failure;
+- unlocked modules and operational milestones.
+
+The run cannot continue. The player starts a new company with a new seed.
+Exporting the failed run as a historical record may be offered, but it cannot
+bypass bankruptcy.
+
+### 12.2 Crisis Pause
+
+Crisis Pause exists only to prevent unseen offline bankruptcy. It is not a
+general safety net. Time remains paused until the player makes a valid
+corrective change or elects to resume and accept the risk.
+
+## 13. Persistence and portability
+
+Cookies are the only live persistence mechanism. The game must not store state
+in localStorage, sessionStorage, IndexedDB, a service worker cache, a database,
+or an external service.
+
+The game supports:
+
+- automatic cookie saves;
+- schema-version migrations;
+- signed and validated save data;
+- explicit JSON export and import through `/`;
+- reset from settings;
+- visible save status and storage-budget usage;
+- recovery from corrupt or incompatible cookies without silently overwriting the
+  last valid save.
+
+An exported file is a user backup, not an alternate source of live application
+state.
+
+## 14. Interface requirements
+
+- The application is a single-page workspace mounted at `/`.
+- Internal navigation changes the active workspace without page navigation.
+- The design is original, light, neutral, data-dense, and suitable for repeated
+  operational work.
+- It must not reproduce another CRM's branding, proprietary assets, wording, or
+  exact trade dress.
+- Tables support useful sorting, filtering, selection, and row actions.
+- Detail records preserve context through panels or workspace transitions.
+- Controls have keyboard access, visible focus, and appropriate labels.
+- Desktop and mobile layouts must not overlap, clip controls, or resize
+  unpredictably.
+- Motion is restrained and honors reduced-motion preferences.
+- Company identity and accessibility preferences persist with the company save.
+- Game concepts appear as business language and CRM feedback, not arcade
+  effects.
+
+## 15. Routing requirements
+
+All application and persistence traffic uses `/`:
+
+- `GET /` renders and hydrates the current company;
+- `POST /` handles save, reset, export, and import actions.
+
+There are no additional page routes or API routes. Fresh-generated JavaScript,
+CSS, source maps, icons, fonts, and other static assets may use their normal
+asset URLs. This asset exception is required by the Fresh runtime and does not
+permit application data endpoints.
+
+## 16. Initial release acceptance criteria
+
+The first playable release is complete when:
+
+1. A new player can enter the CRM at `/` without login or setup screens.
+2. Contextual tasks guide the player through the first lead-to-customer
+   workflow.
+3. Leads arrive, cool, and respond deterministically over game time.
+4. The player can qualify leads, perform outreach, manage tasks, close deals,
+   and create customers.
+5. Cash, MRR, expenses, capacity, and recurring subscription effects advance
+   correctly.
+6. Refreshing the page restores the company exclusively from cookies.
+7. Returning after elapsed time produces a bounded offline summary and pauses
+   before unseen bankruptcy.
+8. Active cash failure produces a bankruptcy report and requires restart.
+9. At least one milestone unlock reveals a new CRM capability.
+10. Export, import, reset, and corrupt-save recovery work through `POST /`.
+11. No application or data request uses a route other than `/`.
+12. The production build passes formatting, linting, type checks, engine tests,
+    and responsive browser verification.
+
+## 17. Out of scope
+
+The following are intentionally excluded:
+
+- login, authentication, real users, or real permissions;
+- multiplayer, leaderboards, shared companies, or cloud saves;
+- databases, Supabase, external analytics, or server-side game storage;
+- localStorage, sessionStorage, IndexedDB, or service-worker persistence;
+- real email, phone, payment, advertising, or third-party integrations;
+- additional application or API routes;
+- exact imitation of a branded CRM;
+- a finite campaign ending or final victory state.

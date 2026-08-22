@@ -32,5 +32,3 @@ jobs:
           project: "16spaces"
           entrypoint: "main.ts"
           root: "."
-          
-          

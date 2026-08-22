@@ -1,118 +1,176 @@
-# 16spaces
+# CRM Simulator
 
-16spaces is a 4×4 two-player abstract game — a Tic-Tac-Toe variant with a five-stone cap and sliding. Play it live at [https://16space.deno.dev](https://16space.deno.dev).
+CRM Simulator is a single-player incremental management game presented as an
+original, realistic CRM. The player runs a small B2B SaaS company, beginning
+with a minimal lead inbox and gradually unlocking marketing, sales, customer
+success, support, analytics, automation, and operations tools.
 
-**Status (2026-08-16):** local hot-seat is live at `/local`, with a menu-first home page at `/`. Multiplayer (auth, lobbies, ELO matchmaking) is planned; see [docs/](docs/README.md).
+The CRM is the game: leads arrive over time, outreach consumes capacity, deals
+become subscriptions, recurring revenue competes with operating costs, and
+neglected work creates measurable business consequences. There is no login,
+multiplayer, database, or cloud save.
 
-Source: [github.com/itsnotqwerty/16spaces](https://github.com/itsnotqwerty/16spaces)
+## Status
 
-## Rules (short)
+The product specification, technical design, and implementation roadmap are
+complete. Release 1 is implemented: the deterministic headless company engine,
+command reducers, offline crisis rules, compact save codec, signed cookie
+chunks, migrations, and foundation tests are available under `lib/`.
 
-- Two players, **X** and **O**, on a 4×4 board. Cells are `A1`–`D4` (files A–D left→right, ranks 1–4 top→bottom). X moves first.
-- On your turn, **place** a stone on an empty cell if you have fewer than 5 stones on the board, or **slide** one of your stones to an adjacent empty cell (including diagonally). No capture, no jumping.
-- First to **four** in a row — horizontally, vertically, or either long diagonal — wins.
-- Each player has a clock. If your clock hits zero on your turn, you lose. If you have no legal place or slide, you lose.
-- A game that reaches **400** half-moves without a four-in-a-row is a draw.
-- **Local:** both colors share one browser; clocks start after the first move.
-- **Online (planned):** clocks start when both players have loaded the game. If someone never shows up within 45 seconds, the game is aborted and does not affect rating.
+Release 2 is complete with a playable root-only SPA: the responsive CRM shell,
+global search, Dashboard, Lead Inbox, Contacts, Companies, Tasks, deal workflow,
+customer-referral acquisition, live simulation, cookie autosave, company naming,
+reduced-motion preferences, import/export/reset, and recovery modals
+implemented.
 
-Full rules, modes, and options: [docs/spec.md](docs/spec.md).
+Release 3 is complete with persistent campaign records, configurable audience,
+channel, budget, duration, and messaging, deterministic spend and attributed
+lead delivery, full-funnel channel reporting, and campaign pause, edit,
+duplicate, resume, archive, saturation, and bounded-history controls.
 
-## Current app
+Release 4 begins with a Pipeline workspace unlocked by $1,000 MRR and three open
+deals. Its list and board views expose stage age, expected close timing, deal
+value, product tier, probability, weighted pipeline, forecast MRR, and explicit
+closed-lost reasons. Named sales representatives add recurring compensation,
+skill, deal capacity, ownership, territory routing, targets, derived activity
+queues, and workload-sensitive forecasting.
 
-Today the site uses a menu-first home page (`routes/index.tsx`) and a dedicated local route (`routes/local.tsx`) that mounts `islands/GameManager.tsx`. Local mode supports shared-preset clocks and both sides are still played in one browser. There is no auth, database, or network play yet. The sidebar shows names, ELO, connection dots, and clocks as a preview of the multiplayer UI.
+## Core rules
 
-## Usage
+- One real minute equals one game hour.
+- The simulation is deterministic from the company seed, state, commands, and
+  elapsed time.
+- Returning players receive up to 24 real hours of offline progress.
+- Offline simulation pauses before unseen bankruptcy and opens a financial
+  crisis workflow.
+- Active mismanagement can bankrupt the company and require a new run.
+- Progress is endless; there is no final victory screen.
+- CRM modules unlock through business milestones and operational need, not XP
+  levels.
 
-Install [Deno](https://docs.deno.com). Then:
+## Application constraints
+
+### Single-page, root-only application
+
+All application and persistence traffic uses `/`:
+
+- `GET /` loads, validates, migrates, advances, renders, and hydrates the
+  company.
+- `POST /` handles save, reset, export, and import actions.
+
+There are no feature pages or API routes. Fresh-generated JavaScript, CSS,
+source maps, icons, fonts, and static media may use their normal asset paths
+because Fresh requires those requests to run the client application.
+
+### Cookie-only storage
+
+Cookies are the only live persistence mechanism. The game will not use:
+
+- localStorage or sessionStorage;
+- IndexedDB;
+- service-worker game storage;
+- a database or server-side save store;
+- Supabase or another cloud persistence service.
+
+Saves are designed to be compact, schema-versioned, gzip-compressed,
+base64url-encoded, split across bounded cookie chunks, and signed by the server.
+The root handler writes HttpOnly, SameSite=Strict cookies and sets Secure in
+production.
+
+Exported JSON files are explicit user backups, not an alternate source of live
+state.
+
+## First playable release
+
+The initial release provides a complete founder-led lead-to-customer loop:
+
+- compact CRM shell and responsive workspace navigation;
+- Dashboard, Lead Inbox, Contacts, Companies, and Tasks;
+- qualification, calls, emails, follow-up, deals, and customer creation;
+- cash, MRR, operating expenses, founder capacity, and recurring subscriptions;
+- contextual onboarding inside the live inbox;
+- cookie autosave, import, export, reset, and corrupt-save recovery;
+- offline summaries, Crisis Pause, bankruptcy reports, and restart;
+- a customer milestone that unlocks referral-based acquisition.
+
+Later releases add campaigns and attribution, sales teams and forecasting,
+customer success and support, workflow automation and analytics, then mature
+company operations.
+
+## Stack
+
+- [Deno](https://deno.com/) 2.x
+- [Fresh](https://fresh.deno.dev/) 1.7
+- [Preact](https://preactjs.com/) and Signals
+- [Tailwind CSS](https://tailwindcss.com/) 3.4
+- Deno standard library
+
+## Development
+
+Install Deno, then run:
 
 ```bash
 deno task start
 ```
 
-Dev server: http://localhost:8000 (`dev.ts`, watches `static/` and `routes/`).
+The development server is available at <http://localhost:8000>.
 
-`deno task start|build|preview` now loads `.env` automatically via `--env-file=.env`.
+Available tasks:
 
-Other tasks from `deno.json`:
+| Task                 | Purpose                                               |
+| -------------------- | ----------------------------------------------------- |
+| `deno task start`    | Start the Fresh development server with file watching |
+| `deno task test`     | Run engine and persistence tests under `lib/`         |
+| `deno task check`    | Check formatting, lint, and TypeScript types          |
+| `deno task build`    | Create a production Fresh build                       |
+| `deno task preview`  | Serve the production entry point locally              |
+| `deno task manifest` | Regenerate the Fresh manifest                         |
 
-| Task | Command purpose |
-| --- | --- |
-| `deno task start` | Fresh dev server |
-| `deno task build` | Production build (`dev.ts build`) |
-| `deno task preview` | Serve the built app (`main.ts`) |
-| `deno task check` | `deno fmt --check`, lint, and typecheck |
+The test task covers deterministic simulation, commands, offline crisis versus
+active bankruptcy, schema validation, compression, signing, tamper rejection,
+cookie flags, stale chunk cleanup, save-size budgets, and the root persistence
+adapter including revision conflicts and corrupt-save recovery.
 
-Engine tests are available via `deno task test` for the shared rules module (`lib/game`).
+## Production configuration
 
-Basic health check is available at `/api/health` and returns app readiness, `FEATURE_*` flag values, plus a Supabase `healthcheck` RPC probe when env/secrets are configured.
+Production requires a stable, high-entropy cookie signing secret:
 
-Session scaffold endpoint is available at `/api/auth/session` and currently returns a no-store placeholder envelope for upcoming auth integration.
-
-Auth scaffold routes are available:
-
-- Pages: `/login`, `/signup`
-- API: `/api/auth/login`, `/api/auth/signup`, `/api/auth/magic`, `/api/auth/guest`, `/api/auth/logout`, `/api/auth/session`, `/api/auth/callback`
-
-Create auth endpoints are gated by `FEATURE_AUTH`; existing cookie sessions can still be read via middleware + `/api/auth/session`.
-Magic-link callback now exchanges auth params and sets httpOnly session cookies before redirecting back into the app.
-Signup now accepts a `username` field (validated against spec format/reserved names) and stores it in Supabase auth user metadata.
-
-## Stack and deploy
-
-- **Runtime:** Deno (CI uses Deno 2.x)
-- **Framework:** [Fresh 1.7.3](https://fresh.deno.dev) + Preact 10.22 + Tailwind 3.4.1
-- **Live:** Deno Deploy project `16spaces` (`.github/workflows/deploy.yml` → `main.ts` on push to `main` and on PRs)
-- **Planned DB / auth / realtime:** Postgres + Auth + Realtime through [Supabase](https://supabase.com). No long-lived game server, Redis, or worker.
-
-Supabase wiring is now scaffolded (`lib/supabase.ts` and `supabase/migrations/0001_init.sql`).
-Copy `.env.example` to `.env` (already gitignored). High-level variables:
-
-- `SUPABASE_URL`, `SUPABASE_ANON_KEY` — public client config
-- `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` — server secrets (Deno Deploy only)
-- `SITE_URL` — `http://localhost:8000` locally, `https://16space.deno.dev` in production
-- `FEATURE_AUTH`, `FEATURE_ONLINE`, `FEATURE_MATCHMAKING`, `FEATURE_RATED` — all default **off** unless set to the string `true`
-	- Accepted truthy values: `true`, `"true"`, `1`, `yes` (case-insensitive)
-
-Important: `.env` only affects local runs. On Deno Deploy, set these variables in the project Environment Variables UI.
-
-Production: push to `main` → deploy workflow → https://16space.deno.dev.
-
-Architecture and APIs: [docs/design.md](docs/design.md). Incremental PR plan: [docs/roadmap.md](docs/roadmap.md).
-
-## Docs
-
-| Doc | Contents |
-| --- | --- |
-| [docs/spec.md](docs/spec.md) | Product and game spec (rules, modes, options, UX) |
-| [docs/design.md](docs/design.md) | Technical architecture |
-| [docs/roadmap.md](docs/roadmap.md) | Implementation / PR plan |
-
-Current transitional routes:
-
-- `/` home menu
-- `/local` hot-seat gameplay
-- `/leaderboard` placeholder page for rated rollout
-- `/login` and `/signup` auth scaffold pages
-- `/queue` and `/l/new` queue/lobby scaffold pages
-
-Deployment scaffolding lives in [deploy/](deploy/): nginx example config, systemd unit example, and an install script.
-The nginx template now serves HTTPS on `443` and redirects `80` to `https://`.
-Example:
-
-```bash
-sudo ./deploy/install.sh -n 16space.example.com -p 8000 -e .env
+```text
+COOKIE_SECRET=<stable high-entropy secret>
 ```
 
-Default cert paths are Let’s Encrypt style:
+The deployed application must use HTTPS so persistence cookies can use the
+Secure flag. Changing or losing `COOKIE_SECRET` invalidates existing signed
+saves unless an explicit key-rotation strategy is added later.
 
-- `/etc/letsencrypt/live/<domain>/fullchain.pem`
-- `/etc/letsencrypt/live/<domain>/privkey.pem`
+The files under `deploy/` are project-neutral systemd and nginx templates. The
+installer requires an explicit service name and production command, supports
+optional env/TLS/nginx configuration, and provides a non-root `--dry-run`. See
+[deploy/README.md](deploy/README.md) for usage and prerequisites.
 
-Override them with `--cert` and `--key` if you use a different certificate layout.
+## Documentation
 
-The installer will try to install nginx if it is missing, and it will bump the app port upward if the requested port is already in use.
+| Document                           | Contents                                                                           |
+| ---------------------------------- | ---------------------------------------------------------------------------------- |
+| [docs/spec.md](docs/spec.md)       | Product rules, progression, time, failure, UX, and acceptance criteria             |
+| [docs/design.md](docs/design.md)   | Root-only architecture, deterministic engine, cookie format, security, and testing |
+| [docs/roadmap.md](docs/roadmap.md) | Independently playable releases and quality gates                                  |
 
-## License
+These documents are the implementation contract. Intentional behavior changes
+should update the relevant document before or alongside code.
 
-© Samuel Roux. See the site footer. Code: [github.com/itsnotqwerty/16spaces](https://github.com/itsnotqwerty/16spaces).
+## Explicitly out of scope
+
+- authentication, real users, or real permission enforcement;
+- multiplayer, leaderboards, shared companies, or cloud synchronization;
+- real email, calling, payments, advertising, or third-party integrations;
+- exact imitation of Salesforce, HubSpot, or another branded CRM;
+- additional application or API routes;
+- a finite campaign ending.
+
+## Data durability
+
+Browser cookies can be cleared by the user, browser policy, privacy tools, or
+storage pressure. The game therefore provides explicit export and import, but it
+cannot guarantee cloud-level durability. Players should export companies they
+want to preserve before clearing browser data.

@@ -2,120 +2,16 @@
 // This file SHOULD be checked into source version control.
 // This file is automatically updated during development when running `dev.ts`.
 
-import * as $_404 from "./routes/_404.tsx";
-import * as $_app from "./routes/_app.tsx";
-import * as $_middleware from "./routes/_middleware.ts";
-import * as $ai from "./routes/ai.tsx";
-import * as $api_auth_callback from "./routes/api/auth/callback.ts";
-import * as $api_auth_guest from "./routes/api/auth/guest.ts";
-import * as $api_auth_login from "./routes/api/auth/login.ts";
-import * as $api_auth_logout from "./routes/api/auth/logout.ts";
-import * as $api_auth_magic from "./routes/api/auth/magic.ts";
-import * as $api_auth_password from "./routes/api/auth/password.ts";
-import * as $api_auth_reset from "./routes/api/auth/reset.ts";
-import * as $api_auth_session from "./routes/api/auth/session.ts";
-import * as $api_auth_signup from "./routes/api/auth/signup.ts";
-import * as $api_gameplay_move from "./routes/api/gameplay/move.ts";
-import * as $api_gameplay_resign from "./routes/api/gameplay/resign.ts";
-import * as $api_gameplay_state from "./routes/api/gameplay/state.ts";
-import * as $api_health from "./routes/api/health.ts";
-import * as $api_lobbies_code_heartbeat from "./routes/api/lobbies/[code]/heartbeat.ts";
-import * as $api_lobbies_code_index from "./routes/api/lobbies/[code]/index.ts";
-import * as $api_lobbies_code_join from "./routes/api/lobbies/[code]/join.ts";
-import * as $api_lobbies_code_leave from "./routes/api/lobbies/[code]/leave.ts";
-import * as $api_lobbies_code_ready from "./routes/api/lobbies/[code]/ready.ts";
-import * as $api_lobbies_code_start from "./routes/api/lobbies/[code]/start.ts";
-import * as $api_lobbies_shared from "./routes/api/lobbies/_shared.ts";
-import * as $api_lobbies_index from "./routes/api/lobbies/index.ts";
-import * as $api_matchmaking_cancel from "./routes/api/matchmaking/cancel.ts";
-import * as $api_matchmaking_enqueue from "./routes/api/matchmaking/enqueue.ts";
-import * as $api_matchmaking_status from "./routes/api/matchmaking/status.ts";
-import * as $g_id_ from "./routes/g/[id].tsx";
 import * as $index from "./routes/index.tsx";
-import * as $l_code_ from "./routes/l/[code].tsx";
-import * as $l_new from "./routes/l/new.tsx";
-import * as $l_public from "./routes/l/public.tsx";
-import * as $leaderboard from "./routes/leaderboard.tsx";
-import * as $local from "./routes/local.tsx";
-import * as $login from "./routes/login.tsx";
-import * as $queue from "./routes/queue.tsx";
-import * as $reset_password from "./routes/reset-password.tsx";
-import * as $signup from "./routes/signup.tsx";
-import * as $AiGame from "./islands/AiGame.tsx";
-import * as $AuthForm from "./islands/AuthForm.tsx";
-import * as $Board from "./islands/Board.tsx";
-import * as $Dropdown from "./islands/Dropdown.tsx";
-import * as $GameManager from "./islands/GameManager.tsx";
-import * as $HomeMenu from "./islands/HomeMenu.tsx";
-import * as $LobbyCreate from "./islands/LobbyCreate.tsx";
-import * as $LobbyRoom from "./islands/LobbyRoom.tsx";
-import * as $LobbyViewer from "./islands/LobbyViewer.tsx";
-import * as $LogoutButton from "./islands/LogoutButton.tsx";
-import * as $OnlineGame from "./islands/OnlineGame.tsx";
-import * as $QueueWait from "./islands/QueueWait.tsx";
-import * as $ResetPasswordForm from "./islands/ResetPasswordForm.tsx";
-import * as $Sidebar from "./islands/Sidebar.tsx";
-import * as $TimeControlPicker from "./islands/TimeControlPicker.tsx";
+import * as $CrmApp from "./islands/CrmApp.tsx";
 import type { Manifest } from "$fresh/server.ts";
 
 const manifest = {
   routes: {
-    "./routes/_404.tsx": $_404,
-    "./routes/_app.tsx": $_app,
-    "./routes/_middleware.ts": $_middleware,
-    "./routes/ai.tsx": $ai,
-    "./routes/api/auth/callback.ts": $api_auth_callback,
-    "./routes/api/auth/guest.ts": $api_auth_guest,
-    "./routes/api/auth/login.ts": $api_auth_login,
-    "./routes/api/auth/logout.ts": $api_auth_logout,
-    "./routes/api/auth/magic.ts": $api_auth_magic,
-    "./routes/api/auth/password.ts": $api_auth_password,
-    "./routes/api/auth/reset.ts": $api_auth_reset,
-    "./routes/api/auth/session.ts": $api_auth_session,
-    "./routes/api/auth/signup.ts": $api_auth_signup,
-    "./routes/api/gameplay/move.ts": $api_gameplay_move,
-    "./routes/api/gameplay/resign.ts": $api_gameplay_resign,
-    "./routes/api/gameplay/state.ts": $api_gameplay_state,
-    "./routes/api/health.ts": $api_health,
-    "./routes/api/lobbies/[code]/heartbeat.ts": $api_lobbies_code_heartbeat,
-    "./routes/api/lobbies/[code]/index.ts": $api_lobbies_code_index,
-    "./routes/api/lobbies/[code]/join.ts": $api_lobbies_code_join,
-    "./routes/api/lobbies/[code]/leave.ts": $api_lobbies_code_leave,
-    "./routes/api/lobbies/[code]/ready.ts": $api_lobbies_code_ready,
-    "./routes/api/lobbies/[code]/start.ts": $api_lobbies_code_start,
-    "./routes/api/lobbies/_shared.ts": $api_lobbies_shared,
-    "./routes/api/lobbies/index.ts": $api_lobbies_index,
-    "./routes/api/matchmaking/cancel.ts": $api_matchmaking_cancel,
-    "./routes/api/matchmaking/enqueue.ts": $api_matchmaking_enqueue,
-    "./routes/api/matchmaking/status.ts": $api_matchmaking_status,
-    "./routes/g/[id].tsx": $g_id_,
     "./routes/index.tsx": $index,
-    "./routes/l/[code].tsx": $l_code_,
-    "./routes/l/new.tsx": $l_new,
-    "./routes/l/public.tsx": $l_public,
-    "./routes/leaderboard.tsx": $leaderboard,
-    "./routes/local.tsx": $local,
-    "./routes/login.tsx": $login,
-    "./routes/queue.tsx": $queue,
-    "./routes/reset-password.tsx": $reset_password,
-    "./routes/signup.tsx": $signup,
   },
   islands: {
-    "./islands/AiGame.tsx": $AiGame,
-    "./islands/AuthForm.tsx": $AuthForm,
-    "./islands/Board.tsx": $Board,
-    "./islands/Dropdown.tsx": $Dropdown,
-    "./islands/GameManager.tsx": $GameManager,
-    "./islands/HomeMenu.tsx": $HomeMenu,
-    "./islands/LobbyCreate.tsx": $LobbyCreate,
-    "./islands/LobbyRoom.tsx": $LobbyRoom,
-    "./islands/LobbyViewer.tsx": $LobbyViewer,
-    "./islands/LogoutButton.tsx": $LogoutButton,
-    "./islands/OnlineGame.tsx": $OnlineGame,
-    "./islands/QueueWait.tsx": $QueueWait,
-    "./islands/ResetPasswordForm.tsx": $ResetPasswordForm,
-    "./islands/Sidebar.tsx": $Sidebar,
-    "./islands/TimeControlPicker.tsx": $TimeControlPicker,
+    "./islands/CrmApp.tsx": $CrmApp,
   },
   baseUrl: import.meta.url,
 } satisfies Manifest;

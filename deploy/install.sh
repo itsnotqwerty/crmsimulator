@@ -1,64 +1,174 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+shopt -u patsub_replacement 2>/dev/null || true
 
 usage() {
   cat <<'EOF'
-Usage: sudo ./deploy/install.sh [options]
+Usage: sudo ./deploy/install.sh --name NAME --command COMMAND [options]
 
-Options:
-  -d, --dir PATH        Project directory (default: repo root, one level above deploy/)
-  -n, --domain NAME     Nginx server_name (default: 16space.example.com)
-  -p, --port PORT       App port (default: 8000)
-  -u, --user USER       System user for the service (default: project owner)
-  --cert FILE           TLS certificate chain path (default: /etc/letsencrypt/live/<domain>/fullchain.pem)
-  --key FILE            TLS private key path (default: /etc/letsencrypt/live/<domain>/privkey.pem)
-  -e, --env FILE        Source .env file to copy into /etc/16spaces/16spaces.env
-  --skip-env-copy       Do not copy an env file; assume /etc/16spaces/16spaces.env already exists
+Required:
+  --name NAME             Stable systemd/nginx configuration name
+  --command COMMAND       Production command for systemd ExecStart
+
+Application:
+  -d, --dir PATH          Working directory (default: repository root)
+  -u, --user USER         Service user (default: project directory owner)
+  -g, --group GROUP       Service group (default: service user's primary group)
+  --description TEXT      Systemd description (default: <name> web application)
+  -p, --port PORT         Local application port (default: 8000)
+  -e, --env FILE          Environment file to copy into project-owned /etc storage
+  --config-root PATH      Application config root (default: /etc)
+
+Nginx and TLS:
+  -n, --domain NAME       Nginx server_name (default: localhost)
+  --cert FILE             TLS certificate chain path
+  --key FILE              TLS private key path
+  --http-only             Install the HTTP proxy even when certificates exist
+  --skip-nginx            Install only the systemd service
+  --nginx-dir PATH        Nginx included config directory (default: /etc/nginx/conf.d)
+  --client-max-body SIZE  Nginx request body limit (default: 1m)
+  --acme-root PATH        ACME challenge root (default: /var/lib/letsencrypt)
+
+System:
+  --systemd-dir PATH      Systemd unit directory (default: /etc/systemd/system)
+  --dry-run               Render configurations without installing or requiring root
+  -h, --help              Show this help
 EOF
 }
 
-server_name="16space.example.com"
-port="8000"
-app_user=""
-env_source=""
-skip_env_copy="false"
+require_value() {
+  if [[ $# -lt 2 || -z "${2:-}" ]]; then
+    echo "Missing value for $1" >&2
+    exit 2
+  fi
+}
+
+reject_newline() {
+  local label="$1"
+  local value="$2"
+  if [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+    echo "$label must not contain newlines." >&2
+    exit 2
+  fi
+}
+
+app_name=""
+start_command=""
+description=""
 project_dir=""
+app_user=""
+app_group=""
+port="8000"
+env_source=""
+config_root="/etc"
+server_name="localhost"
 ssl_certificate=""
 ssl_certificate_key=""
+http_only="false"
+skip_nginx="false"
+nginx_dir="/etc/nginx/conf.d"
+client_max_body_size="1m"
+acme_root="/var/lib/letsencrypt"
+systemd_dir="/etc/systemd/system"
+dry_run="false"
+cert_was_set="false"
+key_was_set="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --name)
+      require_value "$@"
+      app_name="$2"
+      shift 2
+      ;;
+    --command)
+      require_value "$@"
+      start_command="$2"
+      shift 2
+      ;;
     -d|--dir)
+      require_value "$@"
       project_dir="$2"
       shift 2
       ;;
-    -n|--domain)
-      server_name="$2"
-      shift 2
-      ;;
-    -p|--port)
-      port="$2"
-      shift 2
-      ;;
     -u|--user)
+      require_value "$@"
       app_user="$2"
       shift 2
       ;;
-    --cert)
-      ssl_certificate="$2"
+    -g|--group)
+      require_value "$@"
+      app_group="$2"
       shift 2
       ;;
-    --key)
-      ssl_certificate_key="$2"
+    --description)
+      require_value "$@"
+      description="$2"
+      shift 2
+      ;;
+    -p|--port)
+      require_value "$@"
+      port="$2"
       shift 2
       ;;
     -e|--env)
+      require_value "$@"
       env_source="$2"
       shift 2
       ;;
-    --skip-env-copy)
-      skip_env_copy="true"
+    --config-root)
+      require_value "$@"
+      config_root="$2"
+      shift 2
+      ;;
+    -n|--domain)
+      require_value "$@"
+      server_name="$2"
+      shift 2
+      ;;
+    --cert)
+      require_value "$@"
+      ssl_certificate="$2"
+      cert_was_set="true"
+      shift 2
+      ;;
+    --key)
+      require_value "$@"
+      ssl_certificate_key="$2"
+      key_was_set="true"
+      shift 2
+      ;;
+    --http-only)
+      http_only="true"
+      shift
+      ;;
+    --skip-nginx)
+      skip_nginx="true"
+      shift
+      ;;
+    --nginx-dir)
+      require_value "$@"
+      nginx_dir="$2"
+      shift 2
+      ;;
+    --client-max-body)
+      require_value "$@"
+      client_max_body_size="$2"
+      shift 2
+      ;;
+    --acme-root)
+      require_value "$@"
+      acme_root="$2"
+      shift 2
+      ;;
+    --systemd-dir)
+      require_value "$@"
+      systemd_dir="$2"
+      shift 2
+      ;;
+    --dry-run)
+      dry_run="true"
       shift
       ;;
     -h|--help)
@@ -68,215 +178,230 @@ while [[ $# -gt 0 ]]; do
     *)
       echo "Unknown argument: $1" >&2
       usage >&2
-      exit 1
+      exit 2
       ;;
   esac
 done
 
-if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-  echo "Run this script as root (for example with sudo)." >&2
-  exit 1
-fi
-
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
-nginx_template="${script_dir}/nginx.example.conf"
-service_template="${script_dir}/16spaces.service"
+service_template="${script_dir}/systemd.service.template"
+nginx_http_template="${script_dir}/nginx.http.conf.template"
+nginx_https_template="${script_dir}/nginx.https.conf.template"
+
+if [[ -z "$app_name" || -z "$start_command" ]]; then
+  echo "--name and --command are required." >&2
+  usage >&2
+  exit 2
+fi
+if [[ ! "$app_name" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+  echo "--name may contain only letters, numbers, dot, underscore, and hyphen." >&2
+  exit 2
+fi
+if [[ ! "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+  echo "--port must be an integer between 1 and 65535." >&2
+  exit 2
+fi
+if [[ "$start_command" != /* ]]; then
+  echo "--command must begin with an absolute executable path." >&2
+  exit 2
+fi
 
 if [[ -z "$project_dir" ]]; then
   project_dir="$repo_root"
 fi
-
-if [[ -z "$app_user" ]]; then
-  app_user="$(stat -c '%U' "$project_dir")"
-fi
-
-if command -v ss >/dev/null 2>&1; then
-  while ss -ltnH "sport = :${port}" | grep -q .; do
-    port="$((port + 1))"
-  done
-fi
-
-if [[ -z "$ssl_certificate" ]]; then
-  ssl_certificate="/etc/letsencrypt/live/${server_name}/fullchain.pem"
-fi
-
-if [[ -z "$ssl_certificate_key" ]]; then
-  ssl_certificate_key="/etc/letsencrypt/live/${server_name}/privkey.pem"
-fi
-
-have_tls_certs="false"
-if [[ -f "$ssl_certificate" && -f "$ssl_certificate_key" ]]; then
-  have_tls_certs="true"
-fi
-
 if [[ ! -d "$project_dir" ]]; then
   echo "Project directory not found: $project_dir" >&2
   exit 1
 fi
+project_dir="$(cd "$project_dir" && pwd)"
 
-if [[ ! -f "$nginx_template" || ! -f "$service_template" ]]; then
-  echo "Missing deploy templates in $script_dir" >&2
-  exit 1
+if [[ -z "$app_user" ]]; then
+  app_user="$(stat -c '%U' "$project_dir")"
 fi
-
-deno_bin=""
-if command -v deno >/dev/null 2>&1; then
-  deno_bin="$(command -v deno)"
-elif [[ -x /usr/local/bin/deno ]]; then
-  deno_bin="/usr/local/bin/deno"
-elif [[ -x /usr/bin/deno ]]; then
-  deno_bin="/usr/bin/deno"
-elif [[ -x /root/.deno/bin/deno ]]; then
-  deno_bin="/root/.deno/bin/deno"
-else
-  if command -v curl >/dev/null 2>&1; then
-    echo "Deno not found; bootstrapping it with the official installer..."
-    curl -fsSL https://deno.land/install.sh | sh >/dev/null
-  elif command -v wget >/dev/null 2>&1; then
-    echo "Deno not found; bootstrapping it with the official installer..."
-    wget -qO- https://deno.land/install.sh | sh >/dev/null
-  else
-    echo "Could not find a deno binary on this server, and curl/wget are unavailable to install it automatically." >&2
-    exit 1
-  fi
-
-  if [[ -x /root/.deno/bin/deno ]]; then
-    deno_bin="/root/.deno/bin/deno"
-  elif command -v deno >/dev/null 2>&1; then
-    deno_bin="$(command -v deno)"
-  else
-    echo "Deno installation did not produce a usable binary. Check the install output and rerun." >&2
-    exit 1
-  fi
-fi
-
-if [[ "$deno_bin" == /root/.deno/bin/deno ]]; then
-  install -d -m 0755 /usr/local/bin
-  install -m 0755 "$deno_bin" /usr/local/bin/deno
-  deno_bin="/usr/local/bin/deno"
-fi
-
-if ! command -v nginx >/dev/null 2>&1; then
-  if command -v apt-get >/dev/null 2>&1; then
-    apt-get update
-    apt-get install -y nginx
-  elif command -v dnf >/dev/null 2>&1; then
-    dnf install -y nginx
-  elif command -v yum >/dev/null 2>&1; then
-    yum install -y nginx
-  elif command -v pacman >/dev/null 2>&1; then
-    pacman -Sy --noconfirm nginx
-  else
-    echo "nginx is not installed and no supported package manager was found." >&2
-    exit 1
-  fi
-fi
-
 if ! id -u "$app_user" >/dev/null 2>&1; then
-  useradd --system --create-home --shell /usr/sbin/nologin --user-group "$app_user"
+  echo "Service user does not exist: $app_user" >&2
+  exit 1
+fi
+if [[ -z "$app_group" ]]; then
+  app_group="$(id -gn "$app_user")"
+fi
+if [[ -z "$description" ]]; then
+  description="${app_name} web application"
 fi
 
-if ! runuser -u "$app_user" -- test -x "$project_dir"; then
-  echo "Service user '$app_user' cannot traverse '$project_dir'. Re-run with -u set to a user that can access the repo, or move the repo to an accessible path." >&2
+for pair in \
+  "name:$app_name" \
+  "command:$start_command" \
+  "description:$description" \
+  "directory:$project_dir" \
+  "user:$app_user" \
+  "group:$app_group" \
+  "domain:$server_name"; do
+  reject_newline "${pair%%:*}" "${pair#*:}"
+done
+
+if [[ -n "$env_source" ]]; then
+  if [[ ! -f "$env_source" ]]; then
+    echo "Environment source not found: $env_source" >&2
+    exit 1
+  fi
+  env_source="$(cd "$(dirname "$env_source")" && pwd)/$(basename "$env_source")"
+fi
+
+env_dir="${config_root%/}/${app_name}"
+env_dest="${env_dir}/${app_name}.env"
+service_dest="${systemd_dir%/}/${app_name}.service"
+nginx_dest="${nginx_dir%/}/${app_name}.conf"
+
+if [[ -z "$ssl_certificate" ]]; then
+  ssl_certificate="/etc/letsencrypt/live/${server_name}/fullchain.pem"
+fi
+if [[ -z "$ssl_certificate_key" ]]; then
+  ssl_certificate_key="/etc/letsencrypt/live/${server_name}/privkey.pem"
+fi
+
+use_tls="false"
+if [[ "$http_only" == "false" && -f "$ssl_certificate" && -f "$ssl_certificate_key" ]]; then
+  use_tls="true"
+elif [[ "$http_only" == "false" && ("$cert_was_set" == "true" || "$key_was_set" == "true") ]]; then
+  echo "Both TLS certificate files must exist, or use --http-only." >&2
   exit 1
 fi
 
-env_dest="/etc/16spaces/16spaces.env"
-install -d -m 0755 /etc/16spaces
-
-if [[ "$skip_env_copy" == "false" ]]; then
-  if [[ -z "$env_source" ]]; then
-    if [[ -f "${project_dir}/.env" ]]; then
-      env_source="${project_dir}/.env"
-    else
-      echo "No env source provided and ${project_dir}/.env not found." >&2
-      exit 1
-    fi
-  fi
-
-  if [[ ! -f "$env_source" ]]; then
-    echo "Env source not found: $env_source" >&2
+for template in "$service_template"; do
+  if [[ ! -f "$template" ]]; then
+    echo "Missing deployment template: $template" >&2
     exit 1
   fi
+done
+if [[ "$skip_nginx" == "false" ]]; then
+  selected_nginx_template="$nginx_http_template"
+  if [[ "$use_tls" == "true" ]]; then
+    selected_nginx_template="$nginx_https_template"
+  fi
+  if [[ ! -f "$selected_nginx_template" ]]; then
+    echo "Missing deployment template: $selected_nginx_template" >&2
+    exit 1
+  fi
+fi
 
+work_dir="$(mktemp -d)"
+trap 'rm -rf "$work_dir"' EXIT
+rendered_service="${work_dir}/${app_name}.service"
+rendered_nginx="${work_dir}/${app_name}.conf"
+
+render_service() {
+  local content
+  content="$(<"$service_template")"
+  content="${content//__DESCRIPTION__/$description}"
+  content="${content//__APP_USER__/$app_user}"
+  content="${content//__APP_GROUP__/$app_group}"
+  content="${content//__APP_DIR__/$project_dir}"
+  content="${content//__PORT__/$port}"
+  content="${content//__ENV_FILE__/$env_dest}"
+  content="${content//__START_COMMAND__/$start_command}"
+  printf '%s\n' "$content" > "$rendered_service"
+}
+
+render_nginx() {
+  local content
+  content="$(<"$selected_nginx_template")"
+  content="${content//__SERVER_NAME__/$server_name}"
+  content="${content//__PORT__/$port}"
+  content="${content//__CLIENT_MAX_BODY_SIZE__/$client_max_body_size}"
+  content="${content//__ACME_ROOT__/$acme_root}"
+  content="${content//__SSL_CERTIFICATE__/$ssl_certificate}"
+  content="${content//__SSL_CERTIFICATE_KEY__/$ssl_certificate_key}"
+  printf '%s\n' "$content" > "$rendered_nginx"
+}
+
+render_service
+if [[ "$skip_nginx" == "false" ]]; then
+  render_nginx
+fi
+
+if grep -q '__[A-Z0-9_]*__' "$rendered_service"; then
+  echo "Unresolved placeholder in rendered systemd service." >&2
+  exit 1
+fi
+if [[ "$skip_nginx" == "false" ]] && grep -q '__[A-Z0-9_]*__' "$rendered_nginx"; then
+  echo "Unresolved placeholder in rendered nginx config." >&2
+  exit 1
+fi
+
+if [[ "$dry_run" == "true" ]]; then
+  printf '%s\n' "--- ${service_dest}"
+  cat "$rendered_service"
+  if [[ "$skip_nginx" == "false" ]]; then
+    printf '%s\n' "--- ${nginx_dest}"
+    cat "$rendered_nginx"
+  fi
+  if [[ -n "$env_source" ]]; then
+    printf '%s\n' "--- copy ${env_source} -> ${env_dest} (mode 0600)"
+  fi
+  exit 0
+fi
+
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+  echo "Run this installer as root, or use --dry-run." >&2
+  exit 1
+fi
+if ! command -v systemctl >/dev/null 2>&1; then
+  echo "systemctl is required." >&2
+  exit 1
+fi
+if ! runuser -u "$app_user" -- test -x "$project_dir"; then
+  echo "Service user '$app_user' cannot traverse '$project_dir'." >&2
+  exit 1
+fi
+if [[ "$skip_nginx" == "false" ]] && ! command -v nginx >/dev/null 2>&1; then
+  echo "nginx is required unless --skip-nginx is used." >&2
+  exit 1
+fi
+
+install -d -m 0755 "$systemd_dir"
+install -d -m 0755 "$env_dir"
+if [[ -n "$env_source" ]]; then
   install -m 0600 "$env_source" "$env_dest"
 fi
+install -m 0644 "$rendered_service" "$service_dest"
 
-tmp_nginx="$(mktemp)"
-tmp_service="$(mktemp)"
-
-if [[ "$have_tls_certs" == "true" ]]; then
-  sed \
-    -e "s|__SERVER_NAME__|${server_name}|g" \
-    -e "s|__PORT__|${port}|g" \
-    -e "s|__APP_DIR__|${project_dir}|g" \
-    -e "s|__SSL_CERTIFICATE__|${ssl_certificate}|g" \
-    -e "s|__SSL_CERTIFICATE_KEY__|${ssl_certificate_key}|g" \
-    "$nginx_template" > "$tmp_nginx"
-else
-  cat > "$tmp_nginx" <<EOF
-server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-  server_name ${server_name} localhost;
-
-    client_max_body_size 1m;
-
-    location / {
-        proxy_pass http://127.0.0.1:${port};
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 60s;
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-    }
-}
-EOF
+nginx_backup=""
+if [[ "$skip_nginx" == "false" ]]; then
+  install -d -m 0755 "$nginx_dir"
+  if [[ -f "$nginx_dest" ]]; then
+    nginx_backup="${work_dir}/nginx.backup"
+    cp "$nginx_dest" "$nginx_backup"
+  fi
+  install -m 0644 "$rendered_nginx" "$nginx_dest"
+  if ! nginx -t; then
+    if [[ -n "$nginx_backup" ]]; then
+      cp "$nginx_backup" "$nginx_dest"
+    else
+      rm -f "$nginx_dest"
+    fi
+    echo "nginx validation failed; restored the previous configuration." >&2
+    exit 1
+  fi
 fi
-
-sed \
-  -e "s|__APP_USER__|${app_user}|g" \
-  -e "s|__APP_DIR__|${project_dir}|g" \
-  -e "s|__PORT__|${port}|g" \
-  -e "s|__ENV_FILE__|${env_dest}|g" \
-  -e "s|__DENO_BIN__|${deno_bin}|g" \
-  "$service_template" > "$tmp_service"
-
-install -d -m 0755 /etc/nginx/sites-available
-install -d -m 0755 /etc/nginx/sites-enabled
-install -m 0644 "$tmp_nginx" /etc/nginx/sites-available/16spaces.conf
-ln -sf /etc/nginx/sites-available/16spaces.conf /etc/nginx/sites-enabled/16spaces.conf
-rm -f /etc/nginx/sites-enabled/default
-
-if ! grep -q 'sites-enabled/\*\.conf' /etc/nginx/nginx.conf; then
-  perl -0pi -e 's/(http \{\n)/$1    include \/etc\/nginx\/sites-enabled\/*.conf;\n/' /etc/nginx/nginx.conf
-fi
-
-install -m 0644 "$tmp_service" /etc/systemd/system/16spaces.service
-
-rm -f "$tmp_nginx" "$tmp_service"
 
 systemctl daemon-reload
-systemctl enable 16spaces.service
-systemctl restart 16spaces.service
+systemctl enable "$app_name.service"
+systemctl restart "$app_name.service"
 
-if command -v nginx >/dev/null 2>&1; then
-  nginx -t
+if [[ "$skip_nginx" == "false" ]]; then
   systemctl enable nginx
-  systemctl start nginx
   systemctl reload nginx
 fi
 
-echo "Installed nginx config: /etc/nginx/sites-available/16spaces.conf"
-echo "Installed systemd unit: /etc/systemd/system/16spaces.service"
-echo "Env file: ${env_dest}"
-if [[ "$have_tls_certs" != "true" ]]; then
-  echo "TLS certs not found yet, so nginx was bootstrapped in HTTP-only mode."
-  echo "Run certbot now, then rerun this installer to enable HTTPS."
+printf '%s\n' "Installed systemd unit: ${service_dest}"
+if [[ -n "$env_source" ]]; then
+  printf '%s\n' "Installed environment file: ${env_dest}"
+fi
+if [[ "$skip_nginx" == "false" ]]; then
+  printf '%s\n' "Installed nginx config: ${nginx_dest}"
+  if [[ "$use_tls" != "true" ]]; then
+    printf '%s\n' "TLS is not enabled. Obtain certificates and rerun without --http-only."
+  fi
 fi

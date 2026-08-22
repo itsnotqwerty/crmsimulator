@@ -1,238 +1,332 @@
-# 16spaces implementation roadmap
+# CRM Simulator Implementation Roadmap
 
-| Field | Value |
-| --- | --- |
-| **Status** | Draft / planning |
-| **Date** | 2026-08-16 |
-| **Companion** | [spec.md](spec.md), [design.md](design.md) |
+This roadmap delivers the game as a sequence of independently playable releases.
+Every release extends the same deterministic engine, root-only application
+route, and cookie save contract.
 
-Incremental plan to take the local hot-seat prototype to serverless multiplayer. `/local` stays green in every PR. No new product or schema decisions here — they live in spec and design.
+A checkbox means implemented and verified, not merely scaffolded.
 
----
+## Release 0: Documentation and clean baseline
 
-## Goals (v1)
+**Outcome:** The repository accurately describes the CRM simulator and no longer
+presents the old project as current behavior.
 
-- Playable **rated** and **unrated** online games, two humans, server-validated rules and clocks.
-- **Auth:** email/password, magic link, GitHub, Google, anonymous guest.
-- **Profiles:** unique username, created_at, rating, W/L/D, match history. Avatar is initials / generated, not uploaded.
-- **Lobbies:** private code/link, public list, host options, ready, presence, host transfer, idle expiry.
-- **ELO matchmaking** with expanding window, serverless pairing.
-- **Game options** locked at start (time, increment, rated, color, privacy).
-- **Local hot-seat** remains on `/local`.
-- **Leaderboard** (top 50, min 5 rated games).
-- AdSense remains on marketing/home surfaces; no PII in ad slots or client env.
+- [x] Define the product, time model, progression, failure, persistence, and
+      routing rules.
+- [x] Define the root-only Fresh architecture and deterministic engine
+      boundaries.
+- [x] Publish the staged implementation roadmap.
+- [x] Replace the stale README with CRM Simulator setup and constraints.
+- [x] Rename and verify stale `16spaces` deployment templates.
+- [x] Remove unused Supabase and `jose` imports only after implementation proves
+      they are unnecessary.
 
-## Non-goals (v1)
+**Acceptance checks**
 
-- Spectators, tournament brackets, bots, analysis board, puzzles.
-- Changing board size, stone cap, adjacency, or win length.
-- Draw by repetition / insufficient material / 50-move.
-- Account linking / guest upgrade (Phase 2).
-- Avatar uploads / Supabase Storage.
-- Custom domains, native apps, i18n.
-- Chat.
-- Redis, Deno KV as source of truth, Fly machines, Socket.io, long-lived WS game servers.
-- Fresh 2 migration.
+- Product, design, roadmap, and README agree on one real minute per game hour.
+- They agree that cookies are the only live storage.
+- They agree that `GET /` and `POST /` are the only app/data traffic paths.
+- Transitional deployment naming is disclosed rather than presented as ready.
 
-## Phase 2 (not scheduled in these PRs)
+## Release 1: Engine and save foundation
 
-- Link guest → email/OAuth.
-- Spectators.
-- Optional in-game chat with report/block.
-- Puzzle / daily + bot using `lib/game`.
-- Avatar upload.
+**Outcome:** A tested headless company can advance deterministically and survive
+a cookie round trip.
 
----
+### Domain model
 
-## Feature flags
+- [x] Add canonical types for company, clock, economy, capacity, CRM records,
+      unlocks, history, onboarding, and preferences.
+- [x] Define compact persisted representations separately from readable domain
+      types.
+- [x] Add stable IDs, sequence counters, schema version, content version, seed,
+      PRNG cursor, revision, and timestamps.
+- [x] Define runtime invariants and bounded collection limits.
 
-Read in `lib/flags.ts`. Code: `flag(name) => Deno.env.get(name) === "true"`. Omit or any other value → **false**.
+### Simulation
 
-| Env | Default | Gates (**create only**) |
-| --- | --- | --- |
-| `FEATURE_AUTH` | false | `POST` signup/login/magic/guest/oauth start. Existing sessions still authenticate. |
-| `FEATURE_ONLINE` | false | Create/join/start lobby, `POST /api/challenges`. Home buttons. |
-| `FEATURE_MATCHMAKING` | false | `POST /api/matchmaking/enqueue` only. |
-| `FEATURE_RATED` | false | Rated enqueue, `PATCH rated=true`, start of a rated lobby. In-flight rated games still write ELO. |
+- [x] Implement a seeded deterministic PRNG.
+- [x] Generate plausible fictional leads, people, and companies from catalogs.
+- [x] Implement fixed-interval clock advancement.
+- [x] Implement lead arrival, cooling, outreach responses, qualification, deal
+      creation, deal outcomes, and customer creation.
+- [x] Implement cash, MRR, baseline expenses, founder capacity, and subscription
+      accrual.
+- [x] Emit bounded typed domain events and aggregate history.
+- [x] Implement milestone evaluation and feature unlock events.
+- [x] Implement active bankruptcy.
+- [x] Implement 24-hour offline catch-up and Crisis Pause.
 
-**Never 404 these when a flag is off** if the caller is a participant:
+### Commands
 
-- `GET/POST /api/games/:id/**` (move, claim-timeout, resign, draw, heartbeat, abort)
-- `GET /play/:id`
-- `POST /api/matchmaking/tick|cancel` for an existing ticket
-- `GET /api/lobbies/:code` for a member
-- `POST /api/lobbies/:code/leave`, `ready`, `heartbeat`
-- `GET /api/challenges`, `GET /c/:id`
-- `GET /api/auth/session`, logout
+- [x] Create typed commands for outreach, qualification, follow-up, task
+      completion, deal progression, crisis action, and new-company reset.
+- [x] Route every state mutation through pure validated reducers.
+- [x] Ensure rejected commands leave state unchanged and explain the rejection.
 
-Rollback = flip the newest flag to `false` (or revert the git SHA). Schema stays. In-flight games finish.
+### Persistence
 
-**Preview Deploy:** one shared Supabase project. Preview env leaves all `FEATURE_*` unset. Production secrets stay on the production Deno Deploy project.
+- [x] Validate current and imported save schemas at runtime.
+- [x] Add sequential migration infrastructure.
+- [x] Implement compact JSON conversion, UTF-8, native gzip, and base64url.
+- [x] Implement HMAC-SHA-256 signing with `COOKIE_SECRET`.
+- [x] Implement a signed manifest and bounded numbered cookie chunks.
+- [x] Expire stale chunks after smaller replacement saves.
+- [x] Leave the previous save untouched when encoding or size checks fail.
+- [x] Build representative opening and mature save-size fixtures.
 
----
+**Acceptance checks**
 
-## Rollout stages
+- Identical seed, commands, and elapsed time produce identical state.
+- Batched and segmented time advancement produce the same canonical result.
+- Offline catch-up never exceeds 24 real hours and stops before bankruptcy.
+- Active play can enter bankruptcy.
+- Corrupt or modified chunks fail validation.
+- Opening and mature fixtures remain below the documented save budget.
+- `deno task test` and `deno task check` pass.
 
-Keep `/local` green. One production project (`16spaces` on Deno Deploy, existing `.github/workflows/deploy.yml`).
+## Release 2: First playable CRM
 
-```mermaid
-flowchart LR
-  P1[PR1 Engine] --> P2[PR2 Shell]
-  P2 --> P3[PR3 Supabase schema]
-  P3 --> P4[PR4 Auth]
-  P4 --> P5[PR5 Profiles]
-  P4 --> P6[PR6 OAuth]
-  P5 --> P7[PR7 Protocol + challenges]
-  P7 --> P8[PR8 Lobbies]
-  P7 --> P9[PR9 Draw/resign]
-  P8 --> P10[PR10 Matchmaking]
-  P10 --> P11[PR11 Rated ELO]
-  P11 --> P12[PR12 Leaderboard + history]
-  P12 --> P13[PR13 Hardening]
-```
+**Outcome:** A player can open `/`, acquire the first customers through
+realistic CRM work, reload safely, and fail through active bankruptcy.
 
-| Stage | Flag | What users see on 16space.deno.dev |
-| --- | --- | --- |
-| 0 (today) | all off conceptually | Hot-seat on `/` |
-| 1 | — | Hot-seat moves to `/local`; home is a menu |
-| 2 | `FEATURE_AUTH=true` | Sign in / guest; still local-only play |
-| 3 | `FEATURE_ONLINE=true` | Lobbies + online games unrated |
-| 4 | `FEATURE_MATCHMAKING=true` | Unrated queue |
-| 5 | `FEATURE_RATED=true` | Rated queue + leaderboard |
+### Root route
 
-`routes/local.tsx` + `islands/GameManager.tsx` never depend on Supabase.
+- [x] Create `routes/index.tsx` as the only application route.
+- [x] Implement new-game, load, migration, and offline catch-up behavior in
+      `GET /`.
+- [x] Implement discriminated `save`, `reset`, `export`, and `import` actions in
+      `POST /`.
+- [x] Enforce same-origin state changes, strict body limits, schema validation,
+      and no-store responses.
+- [x] Set HttpOnly, SameSite=Strict, Path=/, bounded Max-Age, and production
+      Secure cookie flags.
+- [x] Reject stale save revisions without overwriting newer state.
 
-### Migrations (apply in numeric order)
+### Application shell
 
-1. `0001_init.sql` — PR 3
-2. `0002_challenges.sql` — PR 7
-3. `0003_lobbies.sql` — PR 8
-4. `0004_matchmake.sql` — PR 10
-5. `0005_ratings.sql` — PR 11
+- [x] Create one `CrmApp` root island and client store.
+- [x] Add a compact responsive sidebar, top bar, global search/command entry,
+      notifications, company menu, and save status.
+- [x] Keep internal workspace navigation in component state without feature
+      URLs.
+- [x] Show locked modules with their business requirements.
+- [x] Add visible Saved, Saving, and Save failed states.
+- [x] Debounce saves and flush at supported page lifecycle boundaries.
 
----
+### Initial CRM modules
 
-## PR Plan
+- [x] Build the Dashboard with cash, MRR, leads, customers, due tasks, and
+      recent activity.
+- [x] Build the Lead Inbox with sorting, filtering, selection, status, and
+      outreach actions.
+- [x] Build Contacts and Companies with a compact table and contextual record
+      details.
+- [x] Build Tasks with type, priority, due time, related record, and completion
+      controls.
+- [x] Build deal details sufficient for the first qualification-to-close loop
+      without exposing the full pipeline module.
+- [x] Add realistic empty, loading, blocked, validation, and error states.
 
-Each PR is independently reviewable and mergeable. Flags default so production stays local-only until a later env change. Tests travel with the engine and with any RPC SQL.
+### Guided opening
 
-### PR 1 — Extract `lib/game` and fix local rules bugs
+- [x] Start directly in a live lead inbox with no setup wizard.
+- [x] Use contextual tasks to teach inspection, qualification, outreach,
+      follow-up, and closing.
+- [x] Unlock the first acquisition capability after retained customers
+      demonstrate repeatable demand.
+- [x] Keep all guidance inside credible CRM UI.
 
-- **Title:** Extract shared game engine and fix board-state bugs
-- **Depends on:** none
-- **Files:** `lib/game/types.ts`, `board.ts`, `notation.ts`, `rules.ts`, `clock.ts`, `time_controls.ts`, `index.ts`, `lib/game/*.test.ts`, `islands/Board.tsx`, `islands/GameManager.tsx`, `deno.json` (`lib/` + `test` task)
-- **Description:** Move `isAdjacent`, `countStones`, `checkWin`, place/slide, notation, **and the full clock helper** into `lib/game` (the same surface online will call). Allocate independent rows. Single `currentPlayer` in `GameManager`. `Board` emits intents. Local clock and reset unchanged (clock still starts after first move via `turnStartedAt === null`). Tests: win lines (3-long diagonal is not a win), stone cap, adjacency, row independence, **flag-fall does not place the stone**, `afterLegalMove` with null start uses stored remaining, ply-cap at 400, **first local move succeeds when `clocksStarted` is false and then starts the clock**.
+### Failure and recovery
 
-### PR 2 — App shell, routes, home menu, `/local`
+- [x] Show a detailed offline summary after meaningful elapsed time.
+- [x] Show Crisis Pause with corrective actions and explicit resume risk.
+- [x] Show an active-bankruptcy report with company history and required
+      restart.
+- [x] Add settings for company naming, accessibility preferences, cookie usage,
+      export, import, and reset.
+- [x] Recover visibly from corrupt or incompatible saves.
 
-- **Title:** Add app shell and move hot-seat to `/local`
-- **Depends on:** PR 1
-- **Files:** `components/Layout.tsx`, `routes/index.tsx`, `routes/local.tsx`, `routes/_app.tsx`, `routes/_404.tsx`, `islands/HomeMenu.tsx`, `islands/GameManager.tsx` (time preset select bound to former `maxTime`)
-- **Description:** Home becomes Welcome + Play Local (other buttons can render disabled or hidden). Deduplicate titles and AdSense. Dark 404. Production still playable (one extra click to `/local`).
+**Acceptance checks**
 
-### PR 3 — Supabase project wiring and first migration
+- A new player reaches a paying customer without leaving `/`.
+- Leads cool, tasks expire, revenue accrues, and expenses reduce cash with game
+  time.
+- Hard refresh restores the accepted save exclusively from cookies.
+- Closing and reopening produces deterministic bounded catch-up.
+- Crisis Pause prevents unseen bankruptcy; active bankruptcy requires restart.
+- Export/import/reset use only `POST /`.
+- Browser storage inspection shows no localStorage, sessionStorage, or IndexedDB
+  game data.
+- Browser network inspection shows no app/data path other than `/`; Fresh/static
+  assets are exempt.
+- Desktop and mobile screenshots show no clipping or overlap.
+- `deno task test`, `deno task check`, and `deno task build` pass.
 
-- **Title:** Add Supabase clients, env, and v1 schema migrations
-- **Depends on:** PR 2
-- **Files:** `lib/supabase.ts`, `lib/flags.ts`, `.env.example` (includes `SUPABASE_JWT_SECRET`), `supabase/migrations/0001_init.sql` (citext, enums, tables except `challenges`, indexes including `lobbies_public_list`, RLS, `SECURITY DEFINER public_lobbies`, trigger, `expire_stale_lobbies`, `healthcheck`, `REPLICA IDENTITY FULL` + publication), `routes/api/health.ts`, `deno.json` supabase + jose imports
-- **Description:** No user-facing auth UI. Health uses `supabaseAdmin().rpc('healthcheck')`. Dashboard steps in the PR body (Auth providers off until PR 4–6; Realtime enabled on the published tables). All `FEATURE_*` default false. `challenges` and matchmake/rating RPCs are later migrations.
+## Release 3: Repeatable acquisition
 
-### PR 4 — Session middleware, email/password, magic link, guest
+**Unlock:** The company has acquired and retained its first cohort of customers.
 
-- **Title:** Supabase Auth with httpOnly cookies and guest play
-- **Depends on:** PR 3
-- **Files:** `lib/auth_cookies.ts`, `lib/auth.ts` (`verifyAccessJwt`), `routes/_middleware.ts`, `routes/login.tsx`, `routes/signup.tsx`, `islands/AuthForm.tsx`, `routes/api/auth/signup.ts`, `routes/api/auth/login.ts`, `routes/api/auth/magic.ts`, `routes/api/auth/guest.ts`, `routes/api/auth/callback.ts`, `routes/api/auth/logout.ts`, `routes/api/auth/session.ts`
-- **Description:** Cookie adapter (K15), **jose + `SUPABASE_JWT_SECRET` verify** (K21), `Secure` iff https, refresh path, `X-Request-Id`. Guest updates placeholder → `GuestXXXX` via admin (`is_guest` not client-writable). Callback without `sb-pkce` → 400 same-browser message. No OAuth yet. `FEATURE_AUTH=true` in prod after verify.
+**Outcome:** The player can deliberately generate and evaluate demand instead of
+relying only on organic leads.
 
-### PR 5 — Profiles and username
+- [x] Add Marketing navigation and workspace.
+- [x] Add campaign creation with audience, channel, spend, duration, and
+      message.
+- [x] Accrue spend and generate leads over game time.
+- [x] Add audience segments and basic lead scoring.
+- [x] Add source, campaign, and single-touch attribution fields.
+- [x] Add spend, leads, conversion, pipeline, revenue, CAC, and channel reports.
+- [x] Model saturation, poor targeting, and low-quality workload.
+- [x] Add campaign pause and resume workflows.
+- [x] Add campaign edit, duplicate, and archive workflows.
+- [x] Extend save fixtures and aggregate old campaign history.
 
-- **Title:** Profiles, unique usernames, `/settings`
-- **Depends on:** PR 4
-- **Files:** `lib/username.ts`, `routes/settings.tsx`, `islands/UsernameForm.tsx`, `routes/api/me.ts`, `routes/u/[username].tsx` (stub history)
-- **Description:** Trigger already inserted `user_*`. Settings claims a real name. OAuth/email-without-name land here. Reserved list + 30-day rename. Rated blocked on `^user_`. `GET /api/me` does **not** yet sweep games (that is PR 11).
+**Acceptance checks**
 
-### PR 6 — OAuth GitHub and Google
+- Campaign results are deterministic from state, configuration, and elapsed
+  time.
+- Spend can increase bankruptcy risk.
+- Low-quality acquisition can harm capacity and conversion.
+- Marketing records behave like CRM records rather than instant purchase
+  buttons.
+- Existing saves migrate without losing the initial company.
 
-- **Title:** Add GitHub and Google OAuth
-- **Depends on:** PR 4 (parallel to PR 5)
-- **Files:** `routes/api/auth/oauth/[provider].ts`, `routes/api/auth/callback.ts` (PKCE cookie), `islands/AuthForm.tsx` buttons
-- **Description:** Dashboard client IDs. Redirect `SITE_URL/api/auth/callback`. After exchange, if username is `user_*`, 303 `/settings?next=`.
+## Release 4: Sales operations
 
-### PR 7 — Authoritative online game protocol + challenges
+**Unlock:** Sustained MRR and open-pipeline volume make founder-only selling
+inefficient.
 
-- **Title:** Server-authoritative games, clocks, challenges, slim OnlineGame
-- **Depends on:** PR 5
-- **Files:** `supabase/migrations/0002_challenges.sql` (`challenges` + RLS + `accept_challenge` + replica identity + publication), `lib/resolve_clocks.ts`, `lib/engagement.ts`, `lib/realtime.ts`, `routes/api/challenges/index.ts`, `routes/api/challenges/[id]/index.ts`, `routes/api/challenges/[id]/accept.ts`, `routes/api/challenges/[id]/decline.ts`, `routes/api/challenges/[id]/cancel.ts`, `routes/c/[id].tsx`, `islands/ChallengeRoom.tsx`, `routes/api/games/[id]/index.ts`, `routes/api/games/[id]/move.ts`, `routes/api/games/[id]/claim-timeout.ts`, `routes/api/games/[id]/heartbeat.ts`, `routes/api/games/[id]/abort.ts`, `routes/play/[id].tsx`, `islands/OnlineGame.tsx`
-- **Description:** Challenges are the only pre-lobby creator. Inbox `GET /api/challenges` + shareable `/c/:id`. Unrated, 5-minute expiry-on-read. Challenger occupies `challenge_out`; 409 accept declines the row. `resolve_clocks` implements K17 (rated: no voluntary abort). `GET /play/:id` SSRs `{ game, moves, supabaseUrl, supabaseAnonKey, me: { id, username, rating } }` — **no JWT, no email**. Island: mount → heartbeat → session → subscribe. Heartbeat on focus + every 15s until clocks start. `clock.ts` is already in PR 1.
+**Outcome:** The player manages a repeatable team-based sales process.
 
-### PR 8 — Lobbies
+- [x] Add pipeline list and board views.
+- [x] Add stage aging, probabilities, expected close dates, values, products,
+      and loss reasons.
+- [ ] Add quotes and expanded subscription plans.
+- [x] Add sales hiring, compensation, skill, capacity, assignment, and
+      ownership.
+- [x] Add lead routing, territories, targets, and rep activity queues.
+- [x] Add weighted pipeline and forecast views.
+- [ ] Model missed follow-up, overloaded representatives, training, and burnout.
+- [ ] Add bulk actions and saved views needed at larger record counts.
+- [x] Bound and aggregate detailed sales activities.
 
-- **Title:** Public and private lobbies with host options
-- **Depends on:** PR 7
-- **Files:** `supabase/migrations/0003_lobbies.sql` (`join_lobby`, `start_lobby`), `routes/api/lobbies/index.ts`, `routes/api/lobbies/[code]/index.ts`, `routes/api/lobbies/[code]/join.ts`, `routes/api/lobbies/[code]/leave.ts`, `routes/api/lobbies/[code]/ready.ts`, `routes/api/lobbies/[code]/start.ts`, `routes/api/lobbies/[code]/heartbeat.ts`, `routes/l/[code].tsx`, `islands/LobbyRoom.tsx`, `islands/HomeMenu.tsx`, Presence dots on `OnlineGame`/`Sidebar`
-- **Description:** `join_lobby` / `start_lobby` RPCs, `FOR UPDATE` capacity, expire-on-read (never expire `started` while game is `active`), K18 start-if-only-this-lobby, rated/guest invariants, play-again, host transfer. Non-member GET leaks no board. Set `FEATURE_ONLINE=true`. Hide challenge **create** on home; inbox + `/c/:id` stay.
+**Acceptance checks**
 
-### PR 9 — Resign and draw agreement
+- Hiring increases capacity and recurring cost.
+- Assignment and workload materially affect outcomes.
+- Forecasts derive from canonical deals and expose variance after outcomes
+  resolve.
+- The pipeline remains usable by keyboard and on narrow screens.
+- Mature sales fixtures remain within the cookie budget.
 
-- **Title:** Resign and draw offer/accept
-- **Depends on:** PR 7 only (parallel to PR 8 and PR 10)
-- **Files:** `routes/api/games/[id]/resign.ts`, `routes/api/games/[id]/draw.ts`, `islands/Sidebar.tsx`
-- **Description:** Anytime draw; mutual offer = accept; move declines; resign beats draw. Draw/resign before handshake → 403. `winState: "X" | "O" | "draw" | "aborted" | null`.
+## Release 5: Customer success and support
 
-### PR 10 — Unrated matchmaking
+**Unlock:** Customer and renewal volume creates retention work that founder
+follow-up cannot absorb.
 
-- **Title:** Serverless unrated queue with expanding window
-- **Depends on:** PR 8 only (does **not** depend on PR 9)
-- **Files:** `supabase/migrations/0004_matchmake.sql`, `routes/api/matchmaking/enqueue.ts`, `routes/api/matchmaking/tick.ts`, `routes/api/matchmaking/cancel.ts`, `routes/api/matchmaking/status.ts`, `routes/queue.tsx`, `islands/QueueWait.tsx`, `lib/matchmaking.ts`
-- **Description:** `FOR UPDATE SKIP LOCKED` pair, 3s tick, cancel, 200-on-second-enqueue, engagement lock, queue key `(rated=false, time_control_id)`. `FEATURE_MATCHMAKING=true`. Color random. Handshake clocks still apply.
+**Outcome:** Growth depends on retaining and supporting customers, not only
+acquiring them.
 
-### PR 11 — Rated play and ELO
+- [ ] Add account health, onboarding, adoption, renewal, expansion, and churn
+      risk.
+- [ ] Add customer-success staff, ownership, playbooks, and work queues.
+- [ ] Add Support Inbox, tickets, priority, channel, status, assignment, and SLA
+      timers.
+- [ ] Add support staffing, escalation, incidents, and resolution quality.
+- [ ] Add NPS and customer feedback workflows.
+- [ ] Add gross retention, net retention, churn, expansion, SLA, and workload
+      reports.
+- [ ] Model neglected accounts, service overload, recovery, and customer loss.
+- [ ] Aggregate closed ticket and historical health detail.
 
-- **Title:** Rated games, provisional K-factor, rating events
-- **Depends on:** PR 10
-- **Files:** `lib/elo.ts` + tests, `supabase/migrations/0005_ratings.sql` (`apply_game_result`), rated enqueue path, guest/`user_*` rejection, `routes/api/me.ts` sweep
-- **Description:** K=40/20, `Math.round` + floor 100 clamp, abort unrated, timeout/resign/no-move/draw/ply-cap rate. **This PR owns `GET /api/me` → `resolve_clocks` on the caller's active games** (unrated finalize already existed in PR 7 on GET game).
+**Acceptance checks**
 
-### PR 12 — Leaderboard and match history
+- Customer health responds to onboarding, support, product events, and neglect.
+- Renewals, expansion, and churn update recurring revenue correctly.
+- SLA and workload tradeoffs are visible before outcomes resolve.
+- Retention can stabilize or destroy an otherwise strong acquisition engine.
 
-- **Title:** Leaderboard and profile match history
-- **Depends on:** PR 11
-- **Files:** `routes/leaderboard.tsx`, `routes/api/leaderboard.ts`, `routes/u/[username].tsx`, `routes/api/u/[username].ts`
-- **Description:** Top 50, min 5 rated games, `supabaseAnon()`. History shows color, opponent, result, rating delta, time control, date. Link from completed `/play/:id`.
+## Release 6: Automation and analytics
 
-### PR 13 — Hardening: rate limits, observability, ads/PII pass
+**Unlock:** Manual process volume and reporting needs exceed available
+management capacity.
 
-- **Title:** Rate limits, observability, PII/ads audit
-- **Depends on:** PR 12
-- **Files:** `lib/rate_limit.ts` (upsert + 2-window delete), call sites on enqueue/move/lobby/challenge, structured logs (`requestId`, `authMs`, `pgMs`)
-- **Description:** 429s, ads only on `/`, no email/JWT in island props, health includes flag state. Does **not** re-own the `/api/me` sweep.
+**Outcome:** The player designs systems that operate the CRM at scale.
 
----
+- [ ] Add sequences for repeatable sales and success outreach.
+- [ ] Add a visual trigger-condition-action workflow builder.
+- [ ] Execute automations through bounded deterministic commands and events.
+- [ ] Add loop detection, per-interval limits, errors, and execution history
+      summaries.
+- [ ] Add funnel, cohort, retention, attribution, and forecast-variance reports.
+- [ ] Add weighted multi-touch attribution.
+- [ ] Add custom fields, filters, saved views, and dashboard composition.
+- [ ] Add simulated integrations with sync status, mappings, and failures.
+- [ ] Add data-quality and duplicate-management workflows.
 
-## Open questions
+**Acceptance checks**
 
-These are unresolved on purpose. Everything else in spec/design is a decision.
+- Automations cannot create unbounded events or save growth.
+- The same workflow and inputs replay deterministically.
+- Reports derive from bounded canonical or aggregate history.
+- Integration failures are simulated locally and never call real external
+  services.
 
-1. **Custom domain** vs stay on `16space.deno.dev` (OG tags and share links assume the latter).
-2. **Email confirmation:** currently **off**. Turn on if abuse appears; magic link remains.
-3. **Phase 2 account linking priority** vs spectators vs chat.
-4. **Whether preview Deploy projects get their own Supabase branch** once traffic is non-zero.
-5. **Region pairing** of the existing Deploy project and the new Supabase project (measure RTT before rated launch). Prefer the same region; if undecided, `us-east-1` for both.
+## Release 7: Mature operations and endless scale
 
----
+**Unlock:** Multiple teams and larger markets require explicit operating
+structure.
 
-## Risks
+**Outcome:** The CRM becomes a full company operating system with no final
+victory state.
 
-| Risk | Severity | Mitigation |
-| --- | --- | --- |
-| Missed match when two players enqueue in parallel | High | 3s `tick` retries pairing; unique queued ticket |
-| Flag-fall never applied if both clients close | Med | `GET /api/me` and `GET /api/games/:id` run `resolve_clocks`. Abort wins over timeout at ply 0 without heartbeats. |
-| Realtime RLS misconfig leaks boards | High | Tests: second user JWT cannot `select` a foreign game; Realtime only on listed tables |
-| Clock drift / tab freeze looks like desync | Low | Display from timestamps; snap to server snapshot on every event |
-| Cold start + PG RTT exceeds 250ms | Med | Same region; verify JWT locally with `SUPABASE_JWT_SECRET`; log `authMs` vs `pgMs` |
-| Guest farm / rated evasion | Med | Rated requires `is_guest=false` written only by admin; no rated `POST /abort` |
-| Unsigned cookie impersonation | High | jose HS256 verify before any `ctx.state.user` / admin RPC |
-| `Array.fill` bug reintroduced | Low | Engine unit test for row independence |
-| AdSense policy on a game with usernames | Low | Ads only on `/`; no PII |
-| Supabase free-tier pause after inactivity | Med | Operator pings `/api/health` or paid compute once launched |
-| Duplicate titles / messy `_app.tsx` ships to OG scrapers | Low | Fixed in shell PR (PR 2) |
+- [ ] Add departments, managers, budgets, headcount plans, and cross-team
+      capacity.
+- [ ] Add hiring pipelines, training, compensation pressure, burnout, and
+      attrition.
+- [ ] Add larger customer segments with longer cycles, larger contracts, and
+      stricter service demands.
+- [ ] Add recurring operational incidents and resilience investments.
+- [ ] Add simulated roles, permissions, and approval workflows without real
+      auth.
+- [ ] Add quarterly planning and efficiency targets.
+- [ ] Add advanced data hygiene, audit summaries, and archive controls.
+- [ ] Add escalating endless goals for growth, efficiency, retention, and
+      resilience.
+- [ ] Consider an optional prestige-like voluntary company restart only after
+      the endless loop is balanced; it is not part of the base promise.
+
+**Acceptance checks**
+
+- Mature play introduces decisions rather than only larger numbers.
+- Every unlocked system appears as credible CRM or operations software.
+- Historical aggregation keeps saves bounded over indefinite play.
+- There is no final victory screen or forced campaign ending.
+
+## Cross-release quality gates
+
+Every release must:
+
+1. Preserve deterministic replay and fixed-interval equivalence.
+2. Migrate saves from all supported prior schema versions.
+3. Keep all live persistence in signed cookies.
+4. Keep every app/data request on `/`.
+5. Add tests proportional to the new engine and persistence risk.
+6. Pass `deno task test`, `deno task check`, and `deno task build`.
+7. Verify desktop and mobile layouts with no overlap, clipping, or unstable
+   control dimensions.
+8. Check normal and representative mature save sizes.
+9. Avoid unrelated infrastructure, auth, database, and branded-CRM scope.
+10. Update the specification or design before intentionally changing a
+    documented contract.
+
+## Deferred cleanup
+
+The repository began from a prior Fresh project scaffold. These items are not
+gameplay work but must be completed before production release:
+
+- verify deployment instructions against the final cookie secret and HTTPS
+  requirements;
+- review repository metadata, deploy workflow, and license text for stale
+  project references.

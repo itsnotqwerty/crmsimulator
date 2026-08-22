@@ -1,39 +1,47 @@
-import { Handlers, PageProps } from "$fresh/server.ts";
-import Layout from "../components/Layout.tsx";
-import HomeMenu from "../islands/HomeMenu.tsx";
-import type { AppState } from "./_middleware.ts";
+import { Head } from "$fresh/runtime.ts";
+import type { Handlers, PageProps } from "$fresh/server.ts";
+import CrmApp from "../islands/CrmApp.tsx";
+import {
+  getRootConfig,
+  handleRootPost,
+  loadRoot,
+  type RootPageData,
+} from "../lib/server/root.ts";
 
-type HomeData = {
-  isAuthenticated: boolean;
-};
-
-export const handler: Handlers<HomeData, AppState> = {
-  GET(_req, ctx) {
-    return ctx.render({ isAuthenticated: Boolean(ctx.state.user) });
+export const handler: Handlers<RootPageData> = {
+  async GET(request, context) {
+    const loaded = await loadRoot(request, getRootConfig(request));
+    const response = await context.render(loaded.data);
+    response.headers.set("Cache-Control", "no-store");
+    for (const cookie of loaded.setCookies) {
+      response.headers.append("Set-Cookie", cookie);
+    }
+    return response;
+  },
+  POST(request) {
+    return handleRootPost(request, getRootConfig(request));
   },
 };
 
-export default function Home({ data }: PageProps<HomeData>) {
+export default function RootPage({ data }: PageProps<RootPageData>) {
   return (
-    <Layout isAuthenticated={data.isAuthenticated}>
-      <div class="space-y-6">
-        <h1 class="text-4xl font-bold">Welcome to 16spaces</h1>
-        <p class="text-gray-300 max-w-2xl">
-          <b>16spaces</b> is a lightweight web game of strategy and tactics 
-          inspired by the ancient Roman game of <i>terni lapilli</i> (three
-          stones). The game is won when a player aligns their stones horizontally, 
-          vertically, or diagonally across the board or forces their opponent 
-          to run out of time. Players are additionally capped on how many stones 
-          that they can place (by default 5 on a 4x4 board). Instead of placing 
-          more stones, you move your already placed pieces to adjacent empty squares.
-        </p>
-        <HomeMenu />
-        <p class="text-gray-300 max-w-2xl">
-          Update: 16spaces is now in open beta! You can play unrated games
-          without signing in, but you will need to create an account to play 
-          rated games. Sign up or log in to get started.
-        </p>
-      </div>
-    </Layout>
+    <>
+      <Head>
+        <title>Signal Ridge CRM</title>
+        <meta
+          name="description"
+          content="Run a growing B2B software company from a living CRM workspace."
+        />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#173f35" />
+        <link rel="stylesheet" href="/crm.css" />
+      </Head>
+      <CrmApp
+        initial={data.game}
+        loadStatus={data.loadStatus}
+        offlineSummary={data.offlineSummary}
+        loadError={data.loadError}
+      />
+    </>
   );
 }
