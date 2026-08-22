@@ -74,8 +74,8 @@ demand, lead quality, conversion, workload, service quality, and staff capacity.
 
 At 1x, one real minute equals one game hour. The player may select 1x, 2x, or
 4x; a new company defaults to 2x. The selected scale applies to active and
-offline elapsed time and persists with the company. The simulation advances
-from elapsed timestamps rather than animation frames.
+offline elapsed time and persists with the company. The simulation advances from
+elapsed timestamps rather than animation frames.
 
 Rules and recurring effects are evaluated in fixed intervals. Given the same
 saved state, seed, player commands, and elapsed time, the result must be
@@ -184,6 +184,9 @@ game, company and contact information may be incomplete.
 Deals move through credible stages: New, Qualified, Discovery, Evaluation,
 Negotiation, Won, and Lost. Stage progression is caused by player work, lead
 fit, response, timing, and capacity rather than arbitrary clicking alone.
+Attempting to close below 70 percent intent risks a closed-lost outcome. The
+risk rises continuously as intent falls, reaching a 95 percent maximum at zero
+intent; sufficiently nurtured prospects close without this added risk.
 
 ### 8.4 Activities and tasks
 

@@ -25,6 +25,8 @@ export const DEFAULT_RULES: GameRules = {
   maxCampaignRecords: 40,
   maxSalesReps: 8,
   maxQuoteRecords: 60,
+  safeCloseIntent: 70,
+  maximumCloseLossChancePercent: 95,
   customerSuccessUnlockCustomers: 5,
   customerRenewalIntervalMinutes: 30 * 24 * 60,
   customerNeglectGraceMinutes: 7 * 24 * 60,

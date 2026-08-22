@@ -1,5 +1,6 @@
 import { projectEvents } from "./events.ts";
 import { generateLead } from "./catalog.ts";
+import { dealCloseLossChance } from "./deals.ts";
 import { randomInteger } from "./rng.ts";
 import { createInitialState, DEFAULT_RULES } from "./state.ts";
 import { applyPlatformCommand } from "./platform.ts";
@@ -8,6 +9,8 @@ import type {
   CampaignAudience,
   CampaignChannel,
   CommandResult,
+  Deal,
+  DealLossReason,
   DealProduct,
   DealStage,
   DomainEvent,
@@ -433,7 +436,9 @@ function prospectLead(
   state: GameState,
   rules: GameRules,
 ): CommandResult {
-  if (state.company.founderCapacityRemaining < rules.prospectingCapacityMinutes) {
+  if (
+    state.company.founderCapacityRemaining < rules.prospectingCapacityMinutes
+  ) {
     return rejected(state, "Not enough founder capacity to prospect a lead");
   }
 
@@ -700,21 +705,22 @@ function updateDeal(
   }], rules);
 }
 
-function loseDeal(
+function closeDealAsLost(
   state: GameState,
-  dealId: string,
-  reason: Extract<GameCommand, { type: "lose_deal" }>["reason"],
+  deal: Deal,
+  reason: DealLossReason,
   rules: GameRules,
+  summary = `Deal lost: ${reason.replaceAll("_", " ")}`,
 ): CommandResult {
-  if (!state.unlocks.includes("pipeline")) {
-    return rejected(state, "Unlock Pipeline to close deals");
-  }
-  const deal = state.records.deals[dealId];
-  if (!deal) return rejected(state, "Deal does not exist");
-  if (deal.stage === "won" || deal.stage === "lost") {
-    return rejected(state, "This deal is already closed");
-  }
   const gameMinute = state.clock.gameMinute;
+  const quotes = Object.fromEntries(
+    Object.entries(state.records.quotes).map(([quoteId, quote]) => [
+      quoteId,
+      quote.dealId === deal.id && ["draft", "sent"].includes(quote.status)
+        ? { ...quote, status: "expired" as const, updatedAt: gameMinute }
+        : quote,
+    ]),
+  );
   const nextState: GameState = {
     ...state,
     records: {
@@ -729,14 +735,32 @@ function loseDeal(
           updatedAt: gameMinute,
         },
       },
+      quotes,
     },
   };
   return accepted(nextState, [{
     kind: "deal_lost",
-    summary: `Deal lost: ${reason.replaceAll("_", " ")}`,
+    summary,
     relatedId: deal.id,
     gameMinute,
   }], rules);
+}
+
+function loseDeal(
+  state: GameState,
+  dealId: string,
+  reason: Extract<GameCommand, { type: "lose_deal" }>["reason"],
+  rules: GameRules,
+): CommandResult {
+  if (!state.unlocks.includes("pipeline")) {
+    return rejected(state, "Unlock Pipeline to close deals");
+  }
+  const deal = state.records.deals[dealId];
+  if (!deal) return rejected(state, "Deal does not exist");
+  if (deal.stage === "won" || deal.stage === "lost") {
+    return rejected(state, "This deal is already closed");
+  }
+  return closeDealAsLost(state, deal, reason, rules);
 }
 
 function hireSalesRep(
@@ -1200,25 +1224,43 @@ function acceptQuote(
           updatedAt: gameMinute,
         },
       },
-      quotes: {
-        ...state.records.quotes,
-        [quote.id]: { ...quote, status: "accepted", updatedAt: gameMinute },
-      },
     },
-  };
-  const quoteEvent: DomainEvent = {
-    kind: "quote_accepted",
-    summary: `Quote accepted for $${
-      (quote.monthlyValueCents / 100).toFixed(0)
-    } MRR`,
-    relatedId: quote.id,
-    gameMinute,
   };
   const closed = advanceDeal(prepared, deal.id, rules);
   if (!closed.accepted) return closed;
+  const won = closed.state.records.deals[deal.id].stage === "won";
+  const quoteEvent: DomainEvent = won
+    ? {
+      kind: "quote_accepted",
+      summary: `Quote accepted for $${
+        (quote.monthlyValueCents / 100).toFixed(0)
+      } MRR`,
+      relatedId: quote.id,
+      gameMinute,
+    }
+    : {
+      kind: "quote_expired",
+      summary: "Quote rejected after the prospect walked away",
+      relatedId: quote.id,
+      gameMinute,
+    };
+  const resolvedState: GameState = {
+    ...closed.state,
+    records: {
+      ...closed.state.records,
+      quotes: {
+        ...closed.state.records.quotes,
+        [quote.id]: {
+          ...quote,
+          status: won ? "accepted" : "expired",
+          updatedAt: gameMinute,
+        },
+      },
+    },
+  };
   return {
     accepted: true,
-    state: projectEvents(closed.state, [quoteEvent], rules),
+    state: projectEvents(resolvedState, [quoteEvent], rules),
     events: [...closed.events, quoteEvent],
   };
 }
@@ -1482,7 +1524,8 @@ function fireSuccessRep(
     records: { ...state.records, successReps, customers },
   }, [{
     kind: "success_rep_fired",
-    summary: `${rep.name} left customer success; their accounts were unassigned`,
+    summary:
+      `${rep.name} left customer success; their accounts were unassigned`,
     relatedId: rep.id,
     gameMinute: state.clock.gameMinute,
   }], rules);
@@ -2248,7 +2291,25 @@ function advanceDeal(
     }], rules);
   }
 
-  const customerSequence = state.sequences.customer + 1;
+  const lead = state.records.leads[deal.leadId];
+  if (!lead) return rejected(state, "Deal contact does not exist");
+  const lossChance = dealCloseLossChance(lead.engagement, rules);
+  let closeState = state;
+  if (lossChance > 0) {
+    const closeRoll = randomInteger(state.seed, state.rngCursor, 1, 100);
+    closeState = { ...state, rngCursor: closeRoll.cursor };
+    if (closeRoll.value <= lossChance) {
+      return closeDealAsLost(
+        closeState,
+        deal,
+        "no_decision",
+        rules,
+        `Close pushed too early at ${lead.engagement}% intent; ${lead.firstName} ${lead.lastName} walked away`,
+      );
+    }
+  }
+
+  const customerSequence = closeState.sequences.customer + 1;
   const customerId = `customer_${customerSequence}`;
   const taskSequence = state.sequences.task + 1;
   const taskId = `task_${taskSequence}`;
@@ -2285,9 +2346,8 @@ function advanceDeal(
     });
   }
 
-  const lead = state.records.leads[deal.leadId];
   const nextState: GameState = {
-    ...state,
+    ...closeState,
     company: {
       ...state.company,
       customerCount,

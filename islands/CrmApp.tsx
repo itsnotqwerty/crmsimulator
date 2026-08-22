@@ -40,6 +40,7 @@ import type { JSX } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import { notificationToneFor, SoundDesign } from "../lib/client/audio.ts";
 import { useGameStore } from "../lib/client/gameStore.ts";
+import { dealCloseLossChance } from "../lib/game/deals.ts";
 import { campaignSaturation } from "../lib/game/simulation.ts";
 import { analyticsReport, retentionReport } from "../lib/game/reports.ts";
 import type {
@@ -146,6 +147,114 @@ function EmptyState(props: { title: string; detail: string }) {
       <Target size={28} />
       <strong>{props.title}</strong>
       <span>{props.detail}</span>
+    </div>
+  );
+}
+
+function MobileContactList(props: {
+  leads: Lead[];
+  game: GameState;
+  selectedLeadId?: string;
+  dispatch: (command: GameCommand) => void;
+  onOpen: (leadId: string) => void;
+  emptyTitle?: string;
+  emptyDetail?: string;
+}) {
+  const contactWithoutLosingPlace = (
+    leadId: string,
+    channel: "call" | "email",
+  ) => {
+    const scrollX = globalThis.scrollX;
+    const scrollY = globalThis.scrollY;
+    props.dispatch({ type: "contact_lead", leadId, channel });
+    globalThis.requestAnimationFrame(() =>
+      globalThis.scrollTo(scrollX, scrollY)
+    );
+  };
+
+  return (
+    <div class="mobile-contact-list" aria-label="Contacts">
+      {props.leads.length === 0 && (
+        <EmptyState
+          title={props.emptyTitle ?? "No contacts yet"}
+          detail={props.emptyDetail ??
+            "New contacts will appear here as demand is generated."}
+        />
+      )}
+      {props.leads.map((lead) => {
+        const company = props.game.records.companies[lead.companyId];
+        const contactable = ["new", "contacted", "cold"].includes(lead.status);
+        const emailDisabled = !contactable ||
+          props.game.company.founderCapacityRemaining < 10;
+        const callDisabled = !contactable ||
+          props.game.company.founderCapacityRemaining < 20;
+        const contactBlockedReason = !contactable
+          ? "This contact is no longer an active lead."
+          : "Not enough founder capacity.";
+        const fullName = `${lead.firstName} ${lead.lastName}`;
+
+        return (
+          <article
+            class={`mobile-contact-card ${
+              props.selectedLeadId === lead.id ? "selected" : ""
+            }`}
+            key={lead.id}
+          >
+            <button
+              type="button"
+              class="mobile-contact-summary"
+              onClick={() => props.onOpen(lead.id)}
+              aria-label={`Open ${fullName}`}
+            >
+              <span class="contact-avatar" aria-hidden="true">
+                {lead.firstName[0]}
+                {lead.lastName[0]}
+              </span>
+              <span class="mobile-contact-identity">
+                <strong>{fullName}</strong>
+                <small>{lead.role} · {company.name}</small>
+              </span>
+              <span class={`status ${lead.status}`}>
+                {statusLabel(lead.status)}
+              </span>
+              <ChevronRight size={19} aria-hidden="true" />
+            </button>
+            <div class="mobile-contact-meta">
+              <span>
+                Fit <strong>{lead.fit}</strong>
+              </span>
+              <span>
+                Intent <strong>{lead.engagement}%</strong>
+              </span>
+              <span>{company.industry}</span>
+            </div>
+            <div class="mobile-contact-actions">
+              <button
+                type="button"
+                class="secondary"
+                disabled={emailDisabled}
+                title={emailDisabled
+                  ? contactBlockedReason
+                  : `Email ${fullName}`}
+                aria-label={`Email ${fullName}`}
+                onClick={() => contactWithoutLosingPlace(lead.id, "email")}
+              >
+                <Mail size={18} />Email · 10m
+              </button>
+              <button
+                type="button"
+                class="primary"
+                disabled={callDisabled}
+                title={callDisabled ? contactBlockedReason : `Call ${fullName}`}
+                aria-label={`Call ${fullName}`}
+                onClick={() => contactWithoutLosingPlace(lead.id, "call")}
+              >
+                <Phone size={18} />Call · 20m
+              </button>
+            </div>
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -1753,6 +1862,12 @@ function PipelineWorkspace(props: {
           <div class="quote-list">
             {quotes.map((quote) => {
               const deal = props.game.records.deals[quote.dealId];
+              const lead = deal
+                ? props.game.records.leads[deal.leadId]
+                : undefined;
+              const closeLossChance = lead
+                ? dealCloseLossChance(lead.engagement)
+                : 0;
               const company = deal
                 ? props.game.records.companies[deal.companyId]
                 : undefined;
@@ -1792,7 +1907,9 @@ function PipelineWorkspace(props: {
                         class="primary"
                         disabled={deal?.stage !== "negotiation"}
                         title={deal?.stage === "negotiation"
-                          ? "Accept quote"
+                          ? closeLossChance > 0
+                            ? `${closeLossChance}% chance the prospect walks away at ${lead?.engagement}% intent`
+                            : "Intent is sufficient to close safely"
                           : "Advance deal to negotiation first"}
                         onClick={() =>
                           props.dispatch({
@@ -1800,7 +1917,10 @@ function PipelineWorkspace(props: {
                             quoteId: quote.id,
                           })}
                       >
-                        <Check size={15} />Accept
+                        <Check size={15} />
+                        {closeLossChance > 0
+                          ? `Close · ${closeLossChance}% risk`
+                          : "Close"}
                       </button>
                     )}
                     {(quote.status === "draft" || quote.status === "sent") && (
@@ -2001,6 +2121,9 @@ function PipelineWorkspace(props: {
                 <tbody>
                   {openDeals.map((deal) => {
                     const { lead, company } = detail(deal);
+                    const closeLossChance = lead
+                      ? dealCloseLossChance(lead.engagement)
+                      : 0;
                     return (
                       <tr>
                         <td>
@@ -2034,7 +2157,20 @@ function PipelineWorkspace(props: {
                         <td>
                           {money.format(deal.monthlyValueCents / 100)} MRR
                         </td>
-                        <td>{deal.probability}%</td>
+                        <td>
+                          {deal.probability}%
+                          {deal.stage === "negotiation" && lead && (
+                            <small
+                              class={closeLossChance > 0
+                                ? "close-risk-text"
+                                : "close-risk-text safe"}
+                            >
+                              {closeLossChance > 0
+                                ? `${closeLossChance}% close risk`
+                                : "Intent ready"}
+                            </small>
+                          )}
+                        </td>
                         <td>
                           {relativeGameTime(deal.updatedAt, props.currentMinute)
                             .replace(" overdue", "")}
@@ -2058,13 +2194,20 @@ function PipelineWorkspace(props: {
                             <button
                               type="button"
                               class="secondary pipeline-advance"
+                              title={deal.stage === "negotiation" && lead
+                                ? closeLossChance > 0
+                                  ? `${closeLossChance}% chance the prospect walks away at ${lead.engagement}% intent`
+                                  : "Intent is sufficient to close safely"
+                                : "Advance deal to the next stage"}
                               onClick={() =>
                                 props.dispatch({
                                   type: "advance_deal",
                                   dealId: deal.id,
                                 })}
                             >
-                              Advance <ChevronRight size={15} />
+                              {deal.stage === "negotiation"
+                                ? "Attempt close"
+                                : "Advance"} <ChevronRight size={15} />
                             </button>
                           </div>
                         </td>
@@ -2101,6 +2244,9 @@ function PipelineWorkspace(props: {
                   <div>
                     {stageDeals.map((deal) => {
                       const { lead, company } = detail(deal);
+                      const closeLossChance = lead
+                        ? dealCloseLossChance(lead.engagement)
+                        : 0;
                       return (
                         <article class="pipeline-card">
                           <div>
@@ -2123,6 +2269,16 @@ function PipelineWorkspace(props: {
                                 ?.name ?? "Unknown"
                               : "Founder owned"}
                           </span>
+                          {deal.stage === "negotiation" && lead && (
+                            <span
+                              class={closeLossChance > 0
+                                ? "close-risk-text"
+                                : "close-risk-text safe"}
+                            >
+                              {lead.engagement}% intent ·{" "}
+                              {closeLossChance}% loss risk
+                            </span>
+                          )}
                           <b>
                             {money.format(deal.monthlyValueCents / 100)} MRR
                           </b>
@@ -2158,13 +2314,20 @@ function PipelineWorkspace(props: {
                             <button
                               type="button"
                               class="secondary"
+                              title={deal.stage === "negotiation" && lead
+                                ? closeLossChance > 0
+                                  ? `${closeLossChance}% chance the prospect walks away at ${lead.engagement}% intent`
+                                  : "Intent is sufficient to close safely"
+                                : "Advance deal to the next stage"}
                               onClick={() =>
                                 props.dispatch({
                                   type: "advance_deal",
                                   dealId: deal.id,
                                 })}
                             >
-                              Advance <ChevronRight size={15} />
+                              {deal.stage === "negotiation"
+                                ? "Attempt close"
+                                : "Advance"} <ChevronRight size={15} />
                             </button>
                           </div>
                         </article>
@@ -2209,6 +2372,7 @@ export default function CrmApp(props: CrmAppProps) {
   const showNotifications = useSignal(false);
   const showCompanyMenu = useSignal(false);
   const mobileNav = useSignal(false);
+  const showMobileLeadDetail = useSignal(false);
   const showOffline = useSignal(
     props.loadStatus === "offline" || props.loadStatus === "crisis",
   );
@@ -2260,6 +2424,50 @@ export default function CrmApp(props: CrmAppProps) {
   useEffect(() => {
     soundDesign.current?.setMusicVolume(game.preferences.musicVolume);
   }, [game.preferences.musicVolume]);
+
+  useEffect(() => {
+    if (!mobileNav.value) return;
+
+    const mobileQuery = globalThis.matchMedia("(max-width: 860px)");
+    if (!mobileQuery.matches) {
+      mobileNav.value = false;
+      return;
+    }
+
+    const lockedScrollY = globalThis.scrollY;
+    const body = document.body;
+    const root = document.documentElement;
+    const previousBodyStyle = body.getAttribute("style");
+    const previousRootStyle = root.getAttribute("style");
+
+    body.style.position = "fixed";
+    body.style.insetInline = "0";
+    body.style.top = `-${lockedScrollY}px`;
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+    root.style.overflow = "hidden";
+    root.style.overscrollBehavior = "none";
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") mobileNav.value = false;
+    };
+    const closeOutsideMobile = (event: MediaQueryListEvent) => {
+      if (!event.matches) mobileNav.value = false;
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    mobileQuery.addEventListener("change", closeOutsideMobile);
+
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      mobileQuery.removeEventListener("change", closeOutsideMobile);
+      if (previousBodyStyle === null) body.removeAttribute("style");
+      else body.setAttribute("style", previousBodyStyle);
+      if (previousRootStyle === null) root.removeAttribute("style");
+      else root.setAttribute("style", previousRootStyle);
+      globalThis.scrollTo(0, lockedScrollY);
+    };
+  }, [mobileNav.value]);
+
   const leads = Object.values(game.records.leads).sort((a, b) =>
     b.createdAt - a.createdAt
   );
@@ -2395,6 +2603,7 @@ export default function CrmApp(props: CrmAppProps) {
   const navigate = (next: View) => {
     view.value = next;
     mobileNav.value = false;
+    showMobileLeadDetail.value = false;
     showNotifications.value = false;
     showCompanyMenu.value = false;
   };
@@ -2403,6 +2612,7 @@ export default function CrmApp(props: CrmAppProps) {
     selectedLeadId.value = leadId;
     searchQuery.value = "";
     navigate("leads");
+    showMobileLeadDetail.value = true;
   };
 
   const dispatch = (command: GameCommand) => {
@@ -2518,7 +2728,10 @@ export default function CrmApp(props: CrmAppProps) {
     <div
       class={`crm-app ${game.preferences.reducedMotion ? "reduce-motion" : ""}`}
     >
-      <aside class={`sidebar ${mobileNav.value ? "open" : ""}`}>
+      <aside
+        id="mobile-navigation"
+        class={`sidebar ${mobileNav.value ? "open" : ""}`}
+      >
         <div class="brand">
           <div class="brand-mark">{initials(game.company.name)}</div>
           <div>
@@ -2657,6 +2870,16 @@ export default function CrmApp(props: CrmAppProps) {
         </button>
       </aside>
 
+      {mobileNav.value && (
+        <button
+          type="button"
+          class="mobile-nav-scrim mobile-only"
+          onClick={() => mobileNav.value = false}
+          aria-label="Close navigation"
+          tabIndex={-1}
+        />
+      )}
+
       <main>
         <header class="topbar">
           <button
@@ -2664,6 +2887,8 @@ export default function CrmApp(props: CrmAppProps) {
             class="icon-button mobile-only"
             onClick={() => mobileNav.value = true}
             aria-label="Open navigation"
+            aria-controls="mobile-navigation"
+            aria-expanded={mobileNav.value}
           >
             <Menu size={19} />
           </button>
@@ -2969,7 +3194,7 @@ export default function CrmApp(props: CrmAppProps) {
                   <h1>Lead inbox</h1>
                   <p>Qualify fit, build intent, and convert demand.</p>
                 </div>
-                <div class="view-actions">
+                <div class="view-actions lead-view-actions">
                   <button
                     type="button"
                     class="primary"
@@ -3047,7 +3272,7 @@ export default function CrmApp(props: CrmAppProps) {
                   )}
                 </div>
               )}
-              <div class="record-layout">
+              <div class="record-layout lead-record-layout">
                 <div class="panel table-panel">
                   <div class="table-toolbar">
                     <strong>{filteredLeads.length} leads</strong>
@@ -3055,7 +3280,7 @@ export default function CrmApp(props: CrmAppProps) {
                       {leads.filter((lead) => lead.status === "new").length} new
                     </span>
                   </div>
-                  <div class="table-scroll">
+                  <div class="table-scroll desktop-contact-table">
                     <table>
                       <thead>
                         <tr>
@@ -3113,10 +3338,23 @@ export default function CrmApp(props: CrmAppProps) {
                       />
                     )}
                   </div>
+                  <MobileContactList
+                    leads={filteredLeads}
+                    game={game}
+                    selectedLeadId={selectedLead?.id}
+                    dispatch={dispatch}
+                    emptyTitle="No leads match"
+                    emptyDetail="Choose another status to restore the inbox."
+                    onOpen={(leadId) => {
+                      selectedLeadId.value = leadId;
+                      showMobileLeadDetail.value = true;
+                    }}
+                  />
                 </div>
                 {selectedLead
                   ? (
                     <LeadPanel
+                      className="desktop-lead-detail"
                       lead={selectedLead}
                       game={game}
                       dispatch={dispatch}
@@ -3131,6 +3369,30 @@ export default function CrmApp(props: CrmAppProps) {
                     </div>
                   )}
               </div>
+              {showMobileLeadDetail.value && selectedLead && (
+                <div
+                  class="mobile-lead-dialog"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={`${selectedLead.firstName} ${selectedLead.lastName}`}
+                >
+                  <button
+                    type="button"
+                    class="mobile-lead-dialog-backdrop"
+                    aria-label="Close contact details"
+                    onClick={() => showMobileLeadDetail.value = false}
+                  />
+                  <div class="mobile-lead-sheet">
+                    <LeadPanel
+                      className="mobile-lead-detail"
+                      lead={selectedLead}
+                      game={game}
+                      dispatch={dispatch}
+                      onClose={() => showMobileLeadDetail.value = false}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -3148,7 +3410,7 @@ export default function CrmApp(props: CrmAppProps) {
                   <strong>{leads.length} contacts</strong>
                   <span>All lifecycle stages</span>
                 </div>
-                <div class="table-scroll">
+                <div class="table-scroll desktop-contact-table">
                   <table>
                     <thead>
                       <tr>
@@ -3184,6 +3446,17 @@ export default function CrmApp(props: CrmAppProps) {
                     </tbody>
                   </table>
                 </div>
+                <MobileContactList
+                  leads={leads}
+                  game={game}
+                  selectedLeadId={selectedLead?.id}
+                  dispatch={dispatch}
+                  onOpen={(leadId) => {
+                    selectedLeadId.value = leadId;
+                    navigate("leads");
+                    showMobileLeadDetail.value = true;
+                  }}
+                />
               </div>
             </>
           )}
@@ -4152,25 +4425,24 @@ function TaskRow(
       <time class={overdue ? "overdue" : ""}>
         {relativeGameTime(props.task.dueAt, props.currentMinute)}
       </time>
-      {props.task.kind === "onboarding"
-        ? <span />
-        : (
-          <button
-            type="button"
-            class="icon-button task-cancel"
-            aria-label={`Cancel ${props.task.title}`}
-            title="Cancel task"
-            onClick={props.onCancel}
-          >
-            <X size={16} />
-          </button>
-        )}
+      {props.task.kind === "onboarding" ? <span /> : (
+        <button
+          type="button"
+          class="icon-button task-cancel"
+          aria-label={`Cancel ${props.task.title}`}
+          title="Cancel task"
+          onClick={props.onCancel}
+        >
+          <X size={16} />
+        </button>
+      )}
     </div>
   );
 }
 
 function LeadPanel(
   props: {
+    className?: string;
     lead: Lead;
     game: GameState;
     dispatch: (command: GameCommand) => void;
@@ -4182,7 +4454,7 @@ function LeadPanel(
     entry.leadId === props.lead.id
   );
   return (
-    <aside class="panel record-detail">
+    <aside class={`panel record-detail ${props.className ?? ""}`}>
       <div class="detail-heading">
         <div class="contact-avatar">
           {props.lead.firstName[0]}
@@ -4266,7 +4538,13 @@ function LeadPanel(
         </dl>
       </div>
       {deal
-        ? <DealCard deal={deal} dispatch={props.dispatch} />
+        ? (
+          <DealCard
+            deal={deal}
+            intent={props.lead.engagement}
+            dispatch={props.dispatch}
+          />
+        )
         : (
           <div class="record-footer">
             <button
@@ -4296,9 +4574,15 @@ function LeadPanel(
 }
 
 function DealCard(
-  props: { deal: Deal; dispatch: (command: GameCommand) => void },
+  props: {
+    deal: Deal;
+    intent: number;
+    dispatch: (command: GameCommand) => void;
+  },
 ) {
   const closed = props.deal.stage === "won" || props.deal.stage === "lost";
+  const closing = props.deal.stage === "negotiation";
+  const closeLossChance = dealCloseLossChance(props.intent);
   return (
     <div class="deal-card">
       <div>
@@ -4312,14 +4596,25 @@ function DealCard(
         <span>{statusLabel(props.deal.stage)}</span>
         <b>{props.deal.probability}%</b>
       </div>
+      {closing && (
+        <div class={closeLossChance > 0 ? "close-risk" : "close-risk safe"}>
+          {closeLossChance > 0
+            ? `${props.intent}% intent · ${closeLossChance}% chance the prospect walks away`
+            : `${props.intent}% intent · ready to close`}
+        </div>
+      )}
       {!closed && (
         <button
           type="button"
           class="primary full"
+          title={closing && closeLossChance > 0
+            ? `${closeLossChance}% chance the prospect walks away`
+            : undefined}
           onClick={() =>
             props.dispatch({ type: "advance_deal", dealId: props.deal.id })}
         >
-          Advance deal <ChevronRight size={15} />
+          {closing ? "Attempt close" : "Advance deal"}{" "}
+          <ChevronRight size={15} />
         </button>
       )}
     </div>

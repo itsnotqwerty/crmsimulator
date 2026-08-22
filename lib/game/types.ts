@@ -669,6 +669,8 @@ export interface GameRules {
   maxCampaignRecords: number;
   maxSalesReps: number;
   maxQuoteRecords: number;
+  safeCloseIntent: number;
+  maximumCloseLossChancePercent: number;
   customerSuccessUnlockCustomers: number;
   customerRenewalIntervalMinutes: number;
   customerNeglectGraceMinutes: number;
