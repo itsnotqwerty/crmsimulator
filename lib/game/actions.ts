@@ -2,6 +2,7 @@ import { projectEvents } from "./events.ts";
 import { generateLead } from "./catalog.ts";
 import { randomInteger } from "./rng.ts";
 import { createInitialState, DEFAULT_RULES } from "./state.ts";
+import { applyPlatformCommand } from "./platform.ts";
 import type {
   BillingCycle,
   CampaignAudience,
@@ -13,9 +14,12 @@ import type {
   GameCommand,
   GameRules,
   GameState,
+  IncidentSeverity,
   Lead,
   SalesRepLevel,
   SalesTerritory,
+  TicketChannel,
+  TicketPriority,
 } from "./types.ts";
 
 const SALES_REP_PROFILES: Record<
@@ -25,6 +29,34 @@ const SALES_REP_PROFILES: Record<
   junior: { monthlySalaryCents: 300_000, skill: 45, dealCapacity: 4 },
   mid: { monthlySalaryCents: 600_000, skill: 65, dealCapacity: 6 },
   senior: { monthlySalaryCents: 1_000_000, skill: 82, dealCapacity: 8 },
+};
+
+const SUCCESS_REP_PROFILES: Record<
+  SalesRepLevel,
+  { monthlySalaryCents: number; skill: number; accountCapacity: number }
+> = {
+  junior: { monthlySalaryCents: 350_000, skill: 45, accountCapacity: 8 },
+  mid: { monthlySalaryCents: 650_000, skill: 65, accountCapacity: 12 },
+  senior: { monthlySalaryCents: 950_000, skill: 82, accountCapacity: 16 },
+};
+
+const SUPPORT_REP_PROFILES: Record<
+  SalesRepLevel,
+  { monthlySalaryCents: number; skill: number; ticketCapacity: number }
+> = {
+  junior: { monthlySalaryCents: 320_000, skill: 45, ticketCapacity: 6 },
+  mid: { monthlySalaryCents: 560_000, skill: 65, ticketCapacity: 10 },
+  senior: { monthlySalaryCents: 850_000, skill: 82, ticketCapacity: 14 },
+};
+
+const TICKET_SLA_MINUTES: Record<
+  TicketPriority,
+  { response: number; resolution: number }
+> = {
+  urgent: { response: 60, resolution: 4 * 60 },
+  high: { response: 4 * 60, resolution: 12 * 60 },
+  normal: { response: 8 * 60, resolution: 24 * 60 },
+  low: { response: 24 * 60, resolution: 3 * 24 * 60 },
 };
 
 export function quoteMonthlyValueCents(
@@ -412,13 +444,17 @@ function contactLead(
     return rejected(state, "Not enough founder capacity");
   }
 
-  const engagementGain = randomInteger(state.seed, state.rngCursor, 6, 16);
+  const gameMinute = state.clock.gameMinute;
+  const rapidRepeat = lead.status === "contacted" &&
+    gameMinute - lead.lastActivityAt < 60;
+  const engagementChange = rapidRepeat
+    ? { value: channel === "call" ? -30 : -20, cursor: state.rngCursor }
+    : randomInteger(state.seed, state.rngCursor, 6, 16);
   const taskSequence = state.sequences.task + 1;
   const taskId = `task_${taskSequence}`;
-  const gameMinute = state.clock.gameMinute;
   const nextState: GameState = {
     ...state,
-    rngCursor: engagementGain.cursor,
+    rngCursor: engagementChange.cursor,
     company: {
       ...state.company,
       founderCapacityRemaining: state.company.founderCapacityRemaining -
@@ -432,7 +468,10 @@ function contactLead(
         [lead.id]: {
           ...lead,
           status: "contacted",
-          engagement: Math.min(100, lead.engagement + engagementGain.value),
+          engagement: Math.max(
+            0,
+            Math.min(100, lead.engagement + engagementChange.value),
+          ),
           lastActivityAt: gameMinute,
         },
       },
@@ -459,9 +498,11 @@ function contactLead(
   };
   const events: DomainEvent[] = [{
     kind: "lead_contacted",
-    summary: `${
-      channel === "call" ? "Called" : "Emailed"
-    } ${lead.firstName} ${lead.lastName}`,
+    summary: rapidRepeat
+      ? `Over-contacted ${lead.firstName} ${lead.lastName}; intent fell sharply`
+      : `${
+        channel === "call" ? "Called" : "Emailed"
+      } ${lead.firstName} ${lead.lastName}`,
     relatedId: lead.id,
     gameMinute,
   }, {
@@ -1072,6 +1113,779 @@ function acceptQuote(
   };
 }
 
+function completeCustomerOnboarding(
+  state: GameState,
+  customerId: string,
+  rules: GameRules,
+): CommandResult {
+  const customer = state.records.customers[customerId];
+  if (!customer) return rejected(state, "Customer does not exist");
+  if (customer.lifecycle !== "onboarding") {
+    return rejected(state, "Customer onboarding is already complete");
+  }
+  const task = Object.values(state.records.tasks).find((entry) =>
+    entry.kind === "onboarding" && entry.relatedId === customer.id &&
+    entry.status === "open"
+  );
+  if (!task) return rejected(state, "Customer has no open onboarding task");
+  const gameMinute = state.clock.gameMinute;
+  return accepted({
+    ...state,
+    records: {
+      ...state.records,
+      customers: {
+        ...state.records.customers,
+        [customer.id]: {
+          ...customer,
+          health: Math.min(100, customer.health + 15),
+          adoption: Math.min(100, customer.adoption + 35),
+          lifecycle: "active",
+          lastSuccessAt: gameMinute,
+        },
+      },
+      tasks: {
+        ...state.records.tasks,
+        [task.id]: {
+          ...task,
+          status: "completed",
+          completedAt: gameMinute,
+        },
+      },
+    },
+  }, [{
+    kind: "customer_onboarded",
+    summary: "Customer onboarding completed",
+    relatedId: customer.id,
+    gameMinute,
+  }, {
+    kind: "task_completed",
+    summary: task.title,
+    relatedId: task.id,
+    gameMinute,
+  }], rules);
+}
+
+function customerCheckIn(
+  state: GameState,
+  customerId: string,
+  rules: GameRules,
+): CommandResult {
+  const customer = state.records.customers[customerId];
+  if (!customer) return rejected(state, "Customer does not exist");
+  const capacityCost = 30;
+  if (state.company.founderCapacityRemaining < capacityCost) {
+    return rejected(state, "Not enough founder capacity");
+  }
+  const gameMinute = state.clock.gameMinute;
+  return accepted({
+    ...state,
+    company: {
+      ...state.company,
+      founderCapacityRemaining: state.company.founderCapacityRemaining -
+        capacityCost,
+    },
+    records: {
+      ...state.records,
+      customers: {
+        ...state.records.customers,
+        [customer.id]: {
+          ...customer,
+          health: Math.min(100, customer.health + 12),
+          adoption: Math.min(100, customer.adoption + 8),
+          lifecycle: customer.lifecycle === "onboarding"
+            ? "onboarding"
+            : "active",
+          lastSuccessAt: gameMinute,
+        },
+      },
+    },
+  }, [{
+    kind: "customer_check_in",
+    summary: "Success check-in improved account health",
+    relatedId: customer.id,
+    gameMinute,
+  }], rules);
+}
+
+function renewCustomer(
+  state: GameState,
+  customerId: string,
+  rules: GameRules,
+): CommandResult {
+  const customer = state.records.customers[customerId];
+  if (!customer) return rejected(state, "Customer does not exist");
+  if (customer.renewalAt - state.clock.gameMinute > 7 * 24 * 60) {
+    return rejected(state, "Renewal window has not opened");
+  }
+  if (customer.health < 40) {
+    return rejected(state, "Recover account health before renewal");
+  }
+  let renewalAt = customer.renewalAt;
+  while (renewalAt <= state.clock.gameMinute + 7 * 24 * 60) {
+    renewalAt += rules.customerRenewalIntervalMinutes;
+  }
+  return accepted({
+    ...state,
+    records: {
+      ...state.records,
+      customers: {
+        ...state.records.customers,
+        [customer.id]: {
+          ...customer,
+          renewalAt,
+          health: Math.min(100, customer.health + 5),
+          adoption: Math.min(100, customer.adoption + 3),
+          lifecycle: "active",
+        },
+      },
+    },
+  }, [{
+    kind: "customer_renewed",
+    summary: "Subscription renewed",
+    relatedId: customer.id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function expandCustomer(
+  state: GameState,
+  customerId: string,
+  rules: GameRules,
+): CommandResult {
+  const customer = state.records.customers[customerId];
+  if (!customer) return rejected(state, "Customer does not exist");
+  if (
+    customer.lifecycle !== "active" || customer.health < 70 ||
+    customer.adoption < 70
+  ) {
+    return rejected(state, "Expansion requires 70 health and adoption");
+  }
+  const capacityCost = 45;
+  if (state.company.founderCapacityRemaining < capacityCost) {
+    return rejected(state, "Not enough founder capacity");
+  }
+  const increase = Math.max(
+    5_000,
+    Math.round(customer.monthlyValueCents * 0.2),
+  );
+  const gameMinute = state.clock.gameMinute;
+  const mrrCents = state.company.mrrCents + increase;
+  return accepted({
+    ...state,
+    company: {
+      ...state.company,
+      mrrCents,
+      peakMrrCents: Math.max(state.company.peakMrrCents, mrrCents),
+      founderCapacityRemaining: state.company.founderCapacityRemaining -
+        capacityCost,
+    },
+    records: {
+      ...state.records,
+      customers: {
+        ...state.records.customers,
+        [customer.id]: {
+          ...customer,
+          monthlyValueCents: customer.monthlyValueCents + increase,
+          health: Math.max(0, customer.health - 5),
+          adoption: Math.min(100, customer.adoption + 5),
+          expansions: customer.expansions + 1,
+          lastSuccessAt: gameMinute,
+        },
+      },
+    },
+  }, [{
+    kind: "customer_expanded",
+    summary: `Subscription expanded by $${(increase / 100).toFixed(0)} MRR`,
+    relatedId: customer.id,
+    gameMinute,
+    amountCents: increase,
+  }], rules);
+}
+
+function hireSuccessRep(
+  state: GameState,
+  nameInput: string,
+  level: SalesRepLevel,
+  rules: GameRules,
+): CommandResult {
+  if (!state.unlocks.includes("customer_success")) {
+    return rejected(state, "Unlock Customer Success to hire specialists");
+  }
+  if (Object.keys(state.records.successReps).length >= rules.maxSuccessReps) {
+    return rejected(state, "Customer success team is at capacity");
+  }
+  const name = nameInput.trim().replaceAll(/\s+/g, " ");
+  if (name.length < 2 || name.length > 60) {
+    return rejected(
+      state,
+      "Representative name must contain 2 to 60 characters",
+    );
+  }
+  const profile = SUCCESS_REP_PROFILES[level];
+  const sequence = state.sequences.successRep + 1;
+  const id = `success_rep_${sequence}`;
+  return accepted({
+    ...state,
+    sequences: { ...state.sequences, successRep: sequence },
+    records: {
+      ...state.records,
+      successReps: {
+        ...state.records.successReps,
+        [id]: {
+          id,
+          name,
+          level,
+          ...profile,
+          burnout: 0,
+          hiredAt: state.clock.gameMinute,
+        },
+      },
+    },
+  }, [{
+    kind: "success_rep_hired",
+    summary: `${name} joined customer success`,
+    relatedId: id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function assignCustomer(
+  state: GameState,
+  customerId: string,
+  ownerId: string | undefined,
+  rules: GameRules,
+): CommandResult {
+  const customer = state.records.customers[customerId];
+  if (!customer) return rejected(state, "Customer does not exist");
+  const owner = ownerId ? state.records.successReps[ownerId] : undefined;
+  if (ownerId && !owner) {
+    return rejected(state, "Success representative does not exist");
+  }
+  if (customer.ownerId === ownerId) {
+    return rejected(state, "Account owner is unchanged");
+  }
+  const updated = { ...customer };
+  if (ownerId) updated.ownerId = ownerId;
+  else delete updated.ownerId;
+  return accepted({
+    ...state,
+    records: {
+      ...state.records,
+      customers: { ...state.records.customers, [customer.id]: updated },
+    },
+  }, [{
+    kind: "customer_assigned",
+    summary: owner
+      ? `Account assigned to ${owner.name}`
+      : "Account returned to founder",
+    relatedId: customer.id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function runSuccessPlaybook(
+  state: GameState,
+  customerId: string,
+  playbook: "onboarding" | "adoption" | "recovery",
+  rules: GameRules,
+): CommandResult {
+  const customer = state.records.customers[customerId];
+  if (!customer) return rejected(state, "Customer does not exist");
+  const owner = customer.ownerId
+    ? state.records.successReps[customer.ownerId]
+    : undefined;
+  const capacityCost = owner ? 0 : 35;
+  if (state.company.founderCapacityRemaining < capacityCost) {
+    return rejected(state, "Not enough founder capacity");
+  }
+  const base = {
+    onboarding: { health: 10, adoption: 25 },
+    adoption: { health: 5, adoption: 15 },
+    recovery: { health: 20, adoption: 5 },
+  }[playbook];
+  const skillBonus = owner
+    ? Math.floor((owner.skill - owner.burnout / 2) / 20)
+    : 0;
+  const health = Math.min(100, customer.health + base.health + skillBonus);
+  const adoption = Math.min(
+    100,
+    customer.adoption + base.adoption + skillBonus,
+  );
+  const lifecycle = adoption >= 50 && health >= 45
+    ? "active" as const
+    : customer.lifecycle;
+  return accepted({
+    ...state,
+    company: {
+      ...state.company,
+      founderCapacityRemaining: state.company.founderCapacityRemaining -
+        capacityCost,
+    },
+    records: {
+      ...state.records,
+      customers: {
+        ...state.records.customers,
+        [customer.id]: {
+          ...customer,
+          health,
+          adoption,
+          lifecycle,
+          lastSuccessAt: state.clock.gameMinute,
+        },
+      },
+    },
+  }, [{
+    kind: "success_playbook_run",
+    summary: `${statusLabelForEvent(playbook)} playbook completed`,
+    relatedId: customer.id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function sendNpsSurvey(
+  state: GameState,
+  customerId: string,
+  rules: GameRules,
+): CommandResult {
+  const customer = state.records.customers[customerId];
+  if (!customer) return rejected(state, "Customer does not exist");
+  if (
+    customer.lastSurveyAt !== undefined &&
+    state.clock.gameMinute - customer.lastSurveyAt < 7 * 24 * 60
+  ) {
+    return rejected(
+      state,
+      "Wait seven days before surveying this customer again",
+    );
+  }
+
+  const roll = randomInteger(state.seed, state.rngCursor, -1, 2);
+  const score = Math.max(
+    0,
+    Math.min(
+      10,
+      Math.round((customer.health + customer.adoption) / 20) + roll.value,
+    ),
+  );
+  const feedback = score >= 9
+    ? "The team is seeing strong value and would recommend the product."
+    : score >= 7
+    ? "The product is useful, but the customer still sees room to improve."
+    : "The customer needs a clearer path to value and faster support.";
+  const healthChange = score >= 9 ? 3 : score <= 6 ? -4 : 0;
+
+  return accepted({
+    ...state,
+    rngCursor: roll.cursor,
+    history: {
+      ...state.history,
+      npsResponses: state.history.npsResponses + 1,
+      npsScoreTotal: state.history.npsScoreTotal + score,
+    },
+    records: {
+      ...state.records,
+      customers: {
+        ...state.records.customers,
+        [customer.id]: {
+          ...customer,
+          health: Math.max(0, Math.min(100, customer.health + healthChange)),
+          lastNpsScore: score,
+          lastFeedback: feedback,
+          lastSurveyAt: state.clock.gameMinute,
+        },
+      },
+    },
+  }, [{
+    kind: "customer_feedback_received",
+    summary: `NPS response received: ${score}/10`,
+    relatedId: customer.id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function createTicket(
+  state: GameState,
+  input: {
+    customerId: string;
+    channel: TicketChannel;
+    priority: TicketPriority;
+    title: string;
+  },
+  rules: GameRules,
+): CommandResult {
+  if (!state.unlocks.includes("customer_success")) {
+    return rejected(state, "Unlock Customer Success to manage support");
+  }
+  const customer = state.records.customers[input.customerId];
+  if (!customer) return rejected(state, "Customer does not exist");
+  const tickets = { ...state.records.tickets };
+  const overflow = Object.keys(tickets).length - rules.maxTicketRecords + 1;
+  const archived = Object.values(tickets).filter((ticket) =>
+    ticket.status === "resolved"
+  ).sort((a, b) => (a.resolvedAt ?? 0) - (b.resolvedAt ?? 0)).slice(
+    0,
+    Math.max(0, overflow),
+  );
+  for (const ticket of archived) delete tickets[ticket.id];
+  if (Object.keys(tickets).length >= rules.maxTicketRecords) {
+    return rejected(state, "Resolve existing tickets before adding more");
+  }
+  const title = input.title.trim().replaceAll(/\s+/g, " ");
+  if (title.length < 3 || title.length > 100) {
+    return rejected(state, "Ticket title must contain 3 to 100 characters");
+  }
+  const sequence = state.sequences.ticket + 1;
+  const id = `ticket_${sequence}`;
+  const gameMinute = state.clock.gameMinute;
+  const sla = TICKET_SLA_MINUTES[input.priority];
+  return accepted({
+    ...state,
+    history: {
+      ...state.history,
+      ticketsArchived: state.history.ticketsArchived + archived.length,
+    },
+    sequences: { ...state.sequences, ticket: sequence },
+    records: {
+      ...state.records,
+      tickets: {
+        ...tickets,
+        [id]: {
+          id,
+          customerId: customer.id,
+          channel: input.channel,
+          priority: input.priority,
+          status: "open",
+          title,
+          createdAt: gameMinute,
+          responseDueAt: gameMinute + sla.response,
+          resolutionDueAt: gameMinute + sla.resolution,
+          escalated: false,
+        },
+      },
+    },
+  }, [{
+    kind: "ticket_created",
+    summary: `${input.priority} priority ticket opened: ${title}`,
+    relatedId: id,
+    gameMinute,
+  }], rules);
+}
+
+function assignTicket(
+  state: GameState,
+  ticketId: string,
+  ownerId: string | undefined,
+  rules: GameRules,
+): CommandResult {
+  const ticket = state.records.tickets[ticketId];
+  if (!ticket) return rejected(state, "Ticket does not exist");
+  if (ticket.status === "resolved") {
+    return rejected(state, "Resolved tickets cannot be reassigned");
+  }
+  const owner = ownerId ? state.records.supportReps[ownerId] : undefined;
+  if (ownerId && !owner) {
+    return rejected(state, "Support representative does not exist");
+  }
+  if (ticket.ownerId === ownerId) return rejected(state, "Owner is unchanged");
+  const updated = { ...ticket };
+  if (ownerId) updated.ownerId = ownerId;
+  else delete updated.ownerId;
+  return accepted({
+    ...state,
+    history: {
+      ...state.history,
+      ticketsResolved: state.history.ticketsResolved + 1,
+      ticketResolutionMinutes: state.history.ticketResolutionMinutes +
+        state.clock.gameMinute - ticket.createdAt,
+    },
+    records: {
+      ...state.records,
+      tickets: { ...state.records.tickets, [ticket.id]: updated },
+    },
+  }, [{
+    kind: "ticket_assigned",
+    summary: owner ? `Ticket assigned to ${owner.name}` : "Ticket unassigned",
+    relatedId: ticket.id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function acknowledgeTicket(
+  state: GameState,
+  ticketId: string,
+  rules: GameRules,
+): CommandResult {
+  const ticket = state.records.tickets[ticketId];
+  if (!ticket) return rejected(state, "Ticket does not exist");
+  if (ticket.status !== "open") {
+    return rejected(state, "Only open tickets can be acknowledged");
+  }
+  return accepted({
+    ...state,
+    records: {
+      ...state.records,
+      tickets: {
+        ...state.records.tickets,
+        [ticket.id]: {
+          ...ticket,
+          status: "acknowledged",
+          acknowledgedAt: state.clock.gameMinute,
+        },
+      },
+    },
+  }, [{
+    kind: "ticket_acknowledged",
+    summary: `Support acknowledged: ${ticket.title}`,
+    relatedId: ticket.id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function resolveTicket(
+  state: GameState,
+  ticketId: string,
+  rules: GameRules,
+): CommandResult {
+  const ticket = state.records.tickets[ticketId];
+  if (!ticket) return rejected(state, "Ticket does not exist");
+  if (ticket.status !== "acknowledged") {
+    return rejected(state, "Acknowledge the ticket before resolving it");
+  }
+  const owner = ticket.ownerId
+    ? state.records.supportReps[ticket.ownerId]
+    : undefined;
+  const resolutionQuality = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        (owner ? owner.skill - owner.burnout / 2 : 35) +
+          (ticket.escalated ? 10 : 0) -
+          (ticket.responseBreachedAt === undefined ? 0 : 15) -
+          (ticket.resolutionBreachedAt === undefined ? 0 : 25),
+      ),
+    ),
+  );
+  const customer = state.records.customers[ticket.customerId];
+  const healthChange = resolutionQuality >= 80
+    ? 5
+    : resolutionQuality >= 60
+    ? 2
+    : resolutionQuality < 40
+    ? -10
+    : -4;
+  return accepted({
+    ...state,
+    records: {
+      ...state.records,
+      tickets: {
+        ...state.records.tickets,
+        [ticket.id]: {
+          ...ticket,
+          status: "resolved",
+          resolvedAt: state.clock.gameMinute,
+          resolutionQuality,
+        },
+      },
+      customers: customer
+        ? {
+          ...state.records.customers,
+          [customer.id]: {
+            ...customer,
+            health: Math.max(0, Math.min(100, customer.health + healthChange)),
+          },
+        }
+        : state.records.customers,
+    },
+  }, [{
+    kind: "ticket_resolved",
+    summary:
+      `Support resolved at ${resolutionQuality}% quality: ${ticket.title}`,
+    relatedId: ticket.id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function hireSupportRep(
+  state: GameState,
+  nameInput: string,
+  level: SalesRepLevel,
+  rules: GameRules,
+): CommandResult {
+  if (!state.unlocks.includes("customer_success")) {
+    return rejected(state, "Unlock Customer Success to hire support staff");
+  }
+  if (Object.keys(state.records.supportReps).length >= rules.maxSupportReps) {
+    return rejected(state, "Support team is at capacity");
+  }
+  const name = nameInput.trim().replaceAll(/\s+/g, " ");
+  if (name.length < 2 || name.length > 60) {
+    return rejected(
+      state,
+      "Representative name must contain 2 to 60 characters",
+    );
+  }
+  const sequence = state.sequences.supportRep + 1;
+  const id = `support_rep_${sequence}`;
+  return accepted({
+    ...state,
+    sequences: { ...state.sequences, supportRep: sequence },
+    records: {
+      ...state.records,
+      supportReps: {
+        ...state.records.supportReps,
+        [id]: {
+          id,
+          name,
+          level,
+          ...SUPPORT_REP_PROFILES[level],
+          burnout: 0,
+          hiredAt: state.clock.gameMinute,
+        },
+      },
+    },
+  }, [{
+    kind: "support_rep_hired",
+    summary: `${name} joined customer support`,
+    relatedId: id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function escalateTicket(
+  state: GameState,
+  ticketId: string,
+  rules: GameRules,
+): CommandResult {
+  const ticket = state.records.tickets[ticketId];
+  if (!ticket) return rejected(state, "Ticket does not exist");
+  if (ticket.status === "resolved") {
+    return rejected(state, "Ticket is resolved");
+  }
+  if (ticket.escalated) return rejected(state, "Ticket is already escalated");
+  const gameMinute = state.clock.gameMinute;
+  return accepted({
+    ...state,
+    records: {
+      ...state.records,
+      tickets: {
+        ...state.records.tickets,
+        [ticket.id]: {
+          ...ticket,
+          priority: "urgent",
+          escalated: true,
+          responseDueAt: ticket.status === "open"
+            ? Math.min(ticket.responseDueAt, gameMinute + 60)
+            : ticket.responseDueAt,
+          resolutionDueAt: Math.min(
+            ticket.resolutionDueAt,
+            gameMinute + 4 * 60,
+          ),
+        },
+      },
+    },
+  }, [{
+    kind: "ticket_escalated",
+    summary: `Ticket escalated: ${ticket.title}`,
+    relatedId: ticket.id,
+    gameMinute,
+  }], rules);
+}
+
+function declareIncident(
+  state: GameState,
+  ticketId: string,
+  severity: IncidentSeverity,
+  rules: GameRules,
+): CommandResult {
+  const ticket = state.records.tickets[ticketId];
+  if (!ticket) return rejected(state, "Ticket does not exist");
+  if (!ticket.escalated || ticket.status === "resolved") {
+    return rejected(
+      state,
+      "Escalate an active ticket before declaring an incident",
+    );
+  }
+  if (
+    Object.values(state.records.incidents).some((incident) =>
+      incident.ticketId === ticket.id && incident.status === "investigating"
+    )
+  ) {
+    return rejected(state, "This ticket already has an active incident");
+  }
+  if (Object.keys(state.records.incidents).length >= rules.maxIncidentRecords) {
+    return rejected(state, "Incident history is full");
+  }
+  const sequence = state.sequences.incident + 1;
+  const id = `incident_${sequence}`;
+  return accepted({
+    ...state,
+    sequences: { ...state.sequences, incident: sequence },
+    records: {
+      ...state.records,
+      incidents: {
+        ...state.records.incidents,
+        [id]: {
+          id,
+          ticketId: ticket.id,
+          customerId: ticket.customerId,
+          title: ticket.title,
+          severity,
+          status: "investigating",
+          createdAt: state.clock.gameMinute,
+        },
+      },
+    },
+  }, [{
+    kind: "incident_declared",
+    summary: `${severity} incident declared: ${ticket.title}`,
+    relatedId: id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function resolveIncident(
+  state: GameState,
+  incidentId: string,
+  rules: GameRules,
+): CommandResult {
+  const incident = state.records.incidents[incidentId];
+  if (!incident) return rejected(state, "Incident does not exist");
+  if (incident.status === "resolved") {
+    return rejected(state, "Incident is resolved");
+  }
+  const ticket = state.records.tickets[incident.ticketId];
+  if (ticket?.status !== "resolved") {
+    return rejected(state, "Resolve the linked ticket first");
+  }
+  return accepted({
+    ...state,
+    records: {
+      ...state.records,
+      incidents: {
+        ...state.records.incidents,
+        [incident.id]: {
+          ...incident,
+          status: "resolved",
+          resolvedAt: state.clock.gameMinute,
+        },
+      },
+    },
+  }, [{
+    kind: "incident_resolved",
+    summary: `Incident resolved: ${incident.title}`,
+    relatedId: incident.id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function statusLabelForEvent(value: string): string {
+  return value.replaceAll("_", " ").replace(
+    /^./,
+    (letter) => letter.toUpperCase(),
+  );
+}
+
 function followUpLead(
   state: GameState,
   lead: Lead,
@@ -1274,6 +2088,9 @@ function advanceDeal(
   const mrrCents = state.company.mrrCents + deal.monthlyValueCents;
   const unlockMarketing = customerCount >= rules.marketingUnlockCustomers &&
     !state.unlocks.includes("marketing");
+  const unlockCustomerSuccess =
+    customerCount >= rules.customerSuccessUnlockCustomers &&
+    !state.unlocks.includes("customer_success");
   const events: DomainEvent[] = [{
     kind: "deal_won",
     summary: `Deal won for $${(deal.monthlyValueCents / 100).toFixed(0)} MRR`,
@@ -1289,6 +2106,13 @@ function advanceDeal(
     events.push({
       kind: "unlock_earned",
       summary: "Marketing workspace unlocked",
+      gameMinute,
+    });
+  }
+  if (unlockCustomerSuccess) {
+    events.push({
+      kind: "unlock_earned",
+      summary: "Customer success workspace unlocked",
       gameMinute,
     });
   }
@@ -1330,8 +2154,13 @@ function advanceDeal(
           primaryLeadId: deal.leadId,
           monthlyValueCents: deal.monthlyValueCents,
           health: 80,
+          adoption: 25,
+          lifecycle: "onboarding",
           startedAt: gameMinute,
           nextBillingAt: gameMinute + rules.billingIntervalMinutes,
+          renewalAt: gameMinute + rules.customerRenewalIntervalMinutes,
+          lastSuccessAt: gameMinute,
+          expansions: 0,
         },
       },
       tasks: {
@@ -1347,7 +2176,11 @@ function advanceDeal(
         },
       },
     },
-    unlocks: unlockMarketing ? [...state.unlocks, "marketing"] : state.unlocks,
+    unlocks: [
+      ...state.unlocks,
+      ...(unlockMarketing ? ["marketing" as const] : []),
+      ...(unlockCustomerSuccess ? ["customer_success" as const] : []),
+    ],
     onboarding: { ...state.onboarding, step: "complete" },
   };
 
@@ -1439,6 +2272,48 @@ export function applyCommand(
         [],
         rules,
       );
+    case "set_sound_enabled":
+      if (command.enabled === state.preferences.soundEnabled) {
+        return rejected(state, "Notification sound preference is unchanged");
+      }
+      return accepted(
+        {
+          ...state,
+          preferences: { ...state.preferences, soundEnabled: command.enabled },
+        },
+        [],
+        rules,
+      );
+    case "set_music_enabled":
+      if (command.enabled === state.preferences.musicEnabled) {
+        return rejected(state, "Music preference is unchanged");
+      }
+      return accepted(
+        {
+          ...state,
+          preferences: { ...state.preferences, musicEnabled: command.enabled },
+        },
+        [],
+        rules,
+      );
+    case "set_music_volume":
+      if (
+        !Number.isInteger(command.volume) || command.volume < 0 ||
+        command.volume > 100
+      ) {
+        return rejected(state, "Music volume must be between 0 and 100");
+      }
+      if (command.volume === state.preferences.musicVolume) {
+        return rejected(state, "Music volume is unchanged");
+      }
+      return accepted(
+        {
+          ...state,
+          preferences: { ...state.preferences, musicVolume: command.volume },
+        },
+        [],
+        rules,
+      );
     case "set_pipeline_view":
       if (command.view === state.preferences.pipelineView) {
         return rejected(state, "Pipeline view is unchanged");
@@ -1509,6 +2384,12 @@ export function applyCommand(
       const task = state.records.tasks[command.taskId];
       if (!task) return rejected(state, "Task does not exist");
       if (task.status !== "open") return rejected(state, "Task is not open");
+      if (
+        task.kind === "onboarding" &&
+        state.records.customers[task.relatedId]
+      ) {
+        return completeCustomerOnboarding(state, task.relatedId, rules);
+      }
       const gameMinute = state.clock.gameMinute;
       const nextState: GameState = {
         ...state,
@@ -1531,6 +2412,43 @@ export function applyCommand(
         gameMinute,
       }], rules);
     }
+    case "complete_customer_onboarding":
+      return completeCustomerOnboarding(state, command.customerId, rules);
+    case "customer_check_in":
+      return customerCheckIn(state, command.customerId, rules);
+    case "renew_customer":
+      return renewCustomer(state, command.customerId, rules);
+    case "expand_customer":
+      return expandCustomer(state, command.customerId, rules);
+    case "hire_success_rep":
+      return hireSuccessRep(state, command.name, command.level, rules);
+    case "assign_customer":
+      return assignCustomer(state, command.customerId, command.ownerId, rules);
+    case "run_success_playbook":
+      return runSuccessPlaybook(
+        state,
+        command.customerId,
+        command.playbook,
+        rules,
+      );
+    case "send_nps_survey":
+      return sendNpsSurvey(state, command.customerId, rules);
+    case "create_ticket":
+      return createTicket(state, command, rules);
+    case "assign_ticket":
+      return assignTicket(state, command.ticketId, command.ownerId, rules);
+    case "acknowledge_ticket":
+      return acknowledgeTicket(state, command.ticketId, rules);
+    case "resolve_ticket":
+      return resolveTicket(state, command.ticketId, rules);
+    case "hire_support_rep":
+      return hireSupportRep(state, command.name, command.level, rules);
+    case "escalate_ticket":
+      return escalateTicket(state, command.ticketId, rules);
+    case "declare_incident":
+      return declareIncident(state, command.ticketId, command.severity, rules);
+    case "resolve_incident":
+      return resolveIncident(state, command.incidentId, rules);
     case "resume_crisis":
       if (state.clock.status !== "crisis") {
         return rejected(state, "The company is not in a financial crisis");
@@ -1543,5 +2461,8 @@ export function applyCommand(
         [],
         rules,
       );
+    default:
+      return applyPlatformCommand(state, command, rules) ??
+        rejected(state, "Unsupported command");
   }
 }

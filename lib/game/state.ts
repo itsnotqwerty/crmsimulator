@@ -24,6 +24,13 @@ export const DEFAULT_RULES: GameRules = {
   maxCampaignRecords: 40,
   maxSalesReps: 8,
   maxQuoteRecords: 60,
+  customerSuccessUnlockCustomers: 5,
+  customerRenewalIntervalMinutes: 30 * 24 * 60,
+  customerNeglectGraceMinutes: 7 * 24 * 60,
+  maxSuccessReps: 8,
+  maxTicketRecords: 80,
+  maxSupportReps: 12,
+  maxIncidentRecords: 30,
 };
 
 export interface InitialStateOptions {
@@ -68,6 +75,10 @@ export function createInitialState(options: InitialStateOptions): GameState {
       campaign: 0,
       salesRep: 0,
       quote: 0,
+      successRep: 0,
+      ticket: 0,
+      supportRep: 0,
+      incident: 0,
     },
     records: {
       companies: { [generated.company.id]: generated.company },
@@ -89,6 +100,10 @@ export function createInitialState(options: InitialStateOptions): GameState {
       campaigns: {},
       salesReps: {},
       quotes: {},
+      successReps: {},
+      tickets: {},
+      supportReps: {},
+      incidents: {},
     },
     recentActivities: [{
       id: "activity_1",
@@ -109,13 +124,46 @@ export function createInitialState(options: InitialStateOptions): GameState {
       campaignsArchived: 0,
       campaignSpendArchivedCents: 0,
       campaignLeadsArchived: 0,
+      customersRenewed: 0,
+      renewalMrrCents: 0,
+      churnedMrrCents: 0,
+      expansionMrrCents: 0,
+      npsResponses: 0,
+      npsScoreTotal: 0,
+      ticketsResolved: 0,
+      ticketsBreached: 0,
+      ticketResolutionMinutes: 0,
+      ticketsArchived: 0,
     },
     unlocks: [],
     onboarding: { step: "inspect_lead", dismissed: false },
     preferences: {
       reducedMotion: false,
-      soundEnabled: true,
+      soundEnabled: false,
+      musicEnabled: false,
+      musicVolume: 35,
       pipelineView: "list",
+    },
+    platform: {
+      sequences: [],
+      workflows: [],
+      integrations: [],
+      customFields: [],
+      savedViews: [],
+      dashboardWidgets: ["cash", "mrr", "pipeline", "retention"],
+      duplicateReviews: 0,
+      duplicatesMerged: 0,
+      automationRunsArchived: 0,
+      automationErrorsArchived: 0,
+      departments: [],
+      approvalThresholdCents: 100_000,
+      auditEntriesArchived: 0,
+      quarter: 1,
+      growthTargetCents: 500_000,
+      efficiencyTargetPercent: 70,
+      retentionTargetPercent: 90,
+      resilienceLevel: 0,
+      endlessGoal: 1,
     },
   };
 }
@@ -181,6 +229,16 @@ export function validateGameState(state: GameState): ValidationResult {
   }
   if (state.recentActivities.length > DEFAULT_RULES.maxRecentActivities) {
     issue(issues, "recentActivities", "Recent activity limit exceeded");
+  }
+  if (
+    state.platform.sequences.length > 12 ||
+    state.platform.workflows.length > 20 ||
+    state.platform.integrations.length > 8 ||
+    state.platform.departments.length > 8 ||
+    state.platform.customFields.length > 20 ||
+    state.platform.savedViews.length > 12
+  ) {
+    issue(issues, "platform", "Platform collection limit exceeded");
   }
   if (
     Object.keys(state.records.campaigns).length >
@@ -269,6 +327,132 @@ export function validateGameState(state: GameState): ValidationResult {
         issues,
         `records.customers.${customer.id}`,
         "Customer references missing records",
+      );
+    }
+    if (
+      customer.health < 0 || customer.health > 100 || customer.adoption < 0 ||
+      customer.adoption > 100 || customer.renewalAt < customer.startedAt ||
+      customer.lastSuccessAt < customer.startedAt || customer.expansions < 0
+    ) {
+      issue(
+        issues,
+        `records.customers.${customer.id}`,
+        "Invalid customer lifecycle state",
+      );
+    }
+    if (
+      customer.lastNpsScore !== undefined &&
+      (customer.lastNpsScore < 0 || customer.lastNpsScore > 10)
+    ) {
+      issue(
+        issues,
+        `records.customers.${customer.id}.lastNpsScore`,
+        "NPS score must be between 0 and 10",
+      );
+    }
+    if (customer.ownerId && !state.records.successReps[customer.ownerId]) {
+      issue(
+        issues,
+        `records.customers.${customer.id}.ownerId`,
+        "Customer success owner does not exist",
+      );
+    }
+  }
+  if (
+    Object.keys(state.records.successReps).length >
+      DEFAULT_RULES.maxSuccessReps
+  ) {
+    issue(
+      issues,
+      "records.successReps",
+      "Success representative limit exceeded",
+    );
+  }
+  for (const rep of Object.values(state.records.successReps)) {
+    if (
+      rep.name.trim().length < 2 || rep.name.length > 60 || rep.skill < 1 ||
+      rep.skill > 100 || rep.accountCapacity < 1 || rep.burnout < 0 ||
+      rep.burnout > 100 || rep.monthlySalaryCents < 1
+    ) {
+      issue(
+        issues,
+        `records.successReps.${rep.id}`,
+        "Invalid success representative",
+      );
+    }
+  }
+  if (
+    Object.keys(state.records.tickets).length > DEFAULT_RULES.maxTicketRecords
+  ) {
+    issue(issues, "records.tickets", "Ticket record limit exceeded");
+  }
+  for (const ticket of Object.values(state.records.tickets)) {
+    if (!state.records.customers[ticket.customerId]) {
+      issue(
+        issues,
+        `records.tickets.${ticket.id}.customerId`,
+        "Ticket customer does not exist",
+      );
+    }
+    if (ticket.ownerId && !state.records.supportReps[ticket.ownerId]) {
+      issue(
+        issues,
+        `records.tickets.${ticket.id}.ownerId`,
+        "Ticket support owner does not exist",
+      );
+    }
+    if (
+      ticket.title.trim().length < 3 || ticket.title.length > 100 ||
+      ticket.responseDueAt < ticket.createdAt ||
+      ticket.resolutionDueAt < ticket.responseDueAt ||
+      (ticket.acknowledgedAt !== undefined &&
+        ticket.acknowledgedAt < ticket.createdAt) ||
+      (ticket.resolvedAt !== undefined &&
+        ticket.resolvedAt < ticket.createdAt) ||
+      (ticket.resolutionQuality !== undefined &&
+        (ticket.resolutionQuality < 0 || ticket.resolutionQuality > 100))
+    ) {
+      issue(issues, `records.tickets.${ticket.id}`, "Invalid ticket state");
+    }
+  }
+  if (
+    Object.keys(state.records.supportReps).length > DEFAULT_RULES.maxSupportReps
+  ) {
+    issue(
+      issues,
+      "records.supportReps",
+      "Support representative limit exceeded",
+    );
+  }
+  for (const rep of Object.values(state.records.supportReps)) {
+    if (
+      rep.name.trim().length < 2 || rep.name.length > 60 || rep.skill < 1 ||
+      rep.skill > 100 || rep.ticketCapacity < 1 || rep.burnout < 0 ||
+      rep.burnout > 100 || rep.monthlySalaryCents < 1
+    ) {
+      issue(
+        issues,
+        `records.supportReps.${rep.id}`,
+        "Invalid support representative",
+      );
+    }
+  }
+  if (
+    Object.keys(state.records.incidents).length >
+      DEFAULT_RULES.maxIncidentRecords
+  ) {
+    issue(issues, "records.incidents", "Incident record limit exceeded");
+  }
+  for (const incident of Object.values(state.records.incidents)) {
+    if (
+      !state.records.tickets[incident.ticketId] ||
+      !state.records.customers[incident.customerId] ||
+      (incident.status === "resolved" && incident.resolvedAt === undefined)
+    ) {
+      issue(
+        issues,
+        `records.incidents.${incident.id}`,
+        "Invalid incident state",
       );
     }
   }

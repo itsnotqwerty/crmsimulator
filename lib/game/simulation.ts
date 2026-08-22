@@ -1,6 +1,7 @@
 import { generateLead } from "./catalog.ts";
 import { projectEvents } from "./events.ts";
 import { DEFAULT_RULES } from "./state.ts";
+import { advancePlatform } from "./platform.ts";
 import type {
   AdvanceResult,
   AdvanceSummary,
@@ -79,6 +80,12 @@ function processStep(
   );
   const payrollCents = accruedBetween(
     Object.values(state.records.salesReps).reduce(
+      (total, rep) => total + rep.monthlySalaryCents,
+      0,
+    ) + Object.values(state.records.successReps).reduce(
+      (total, rep) => total + rep.monthlySalaryCents,
+      0,
+    ) + Object.values(state.records.supportReps).reduce(
       (total, rep) => total + rep.monthlySalaryCents,
       0,
     ),
@@ -340,6 +347,8 @@ function processStep(
   const elapsedHours = Math.floor(endMinute / 60) -
     Math.floor(startMinute / 60);
   const salesReps = { ...nextState.records.salesReps };
+  const successReps = { ...nextState.records.successReps };
+  const supportReps = { ...nextState.records.supportReps };
   if (elapsedHours > 0) {
     for (const rep of Object.values(salesReps)) {
       const leadLoad = Object.values(leads).filter((lead) =>
@@ -355,6 +364,38 @@ function processStep(
         burnout: Math.max(
           0,
           Math.min(100, rep.burnout + elapsedHours * (overloaded ? 2 : -1)),
+        ),
+      };
+    }
+    for (const rep of Object.values(successReps)) {
+      const accountLoad = Object.values(nextState.records.customers).filter(
+        (customer) => customer.ownerId === rep.id,
+      ).length;
+      successReps[rep.id] = {
+        ...rep,
+        burnout: Math.max(
+          0,
+          Math.min(
+            100,
+            rep.burnout + elapsedHours *
+                (accountLoad > rep.accountCapacity ? 2 : -1),
+          ),
+        ),
+      };
+    }
+    for (const rep of Object.values(supportReps)) {
+      const ticketLoad = Object.values(nextState.records.tickets).filter(
+        (ticket) => ticket.ownerId === rep.id && ticket.status !== "resolved",
+      ).length;
+      supportReps[rep.id] = {
+        ...rep,
+        burnout: Math.max(
+          0,
+          Math.min(
+            100,
+            rep.burnout + elapsedHours *
+                (ticketLoad > rep.ticketCapacity ? 2 : -1),
+          ),
         ),
       };
     }
@@ -380,10 +421,154 @@ function processStep(
     }
   }
 
-  nextState = {
-    ...nextState,
-    records: { ...nextState.records, leads, quotes, salesReps },
-  };
+  const tickets = { ...nextState.records.tickets };
+  const customers = { ...nextState.records.customers };
+  for (const ticket of Object.values(tickets)) {
+    let updated = { ...ticket };
+    let healthPenalty = 0;
+    if (
+      ticket.status === "open" && ticket.responseBreachedAt === undefined &&
+      startMinute < ticket.responseDueAt && ticket.responseDueAt <= endMinute
+    ) {
+      updated = { ...updated, responseBreachedAt: ticket.responseDueAt };
+      healthPenalty += ticket.priority === "urgent" ? 8 : 4;
+      events.push({
+        kind: "ticket_sla_breached",
+        summary: `Response SLA breached: ${ticket.title}`,
+        relatedId: ticket.id,
+        gameMinute: ticket.responseDueAt,
+      });
+    }
+    if (
+      ticket.status !== "resolved" &&
+      ticket.resolutionBreachedAt === undefined &&
+      startMinute < ticket.resolutionDueAt &&
+      ticket.resolutionDueAt <= endMinute
+    ) {
+      updated = { ...updated, resolutionBreachedAt: ticket.resolutionDueAt };
+      healthPenalty += ticket.priority === "urgent" ? 15 : 8;
+      events.push({
+        kind: "ticket_sla_breached",
+        summary: `Resolution SLA breached: ${ticket.title}`,
+        relatedId: ticket.id,
+        gameMinute: ticket.resolutionDueAt,
+      });
+    }
+    tickets[ticket.id] = updated;
+    const customer = customers[ticket.customerId];
+    if (customer && healthPenalty > 0) {
+      customers[customer.id] = {
+        ...customer,
+        health: Math.max(0, customer.health - healthPenalty),
+      };
+    }
+  }
+  const elapsedDays = Math.floor(endMinute / (24 * 60)) -
+    Math.floor(startMinute / (24 * 60));
+  if (elapsedDays > 0) {
+    for (const incident of Object.values(nextState.records.incidents)) {
+      if (incident.status === "resolved") continue;
+      const customer = customers[incident.customerId];
+      if (!customer) continue;
+      const dailyPenalty = incident.severity === "critical"
+        ? 8
+        : incident.severity === "major"
+        ? 4
+        : 2;
+      customers[customer.id] = {
+        ...customer,
+        health: Math.max(0, customer.health - dailyPenalty * elapsedDays),
+      };
+    }
+  }
+
+  let churnedMrrCents = 0;
+  let customersLost = 0;
+  for (const customer of Object.values(customers)) {
+    const neglectAt = customer.lastSuccessAt +
+      rules.customerNeglectGraceMinutes;
+    const decayStart = Math.max(startMinute, neglectAt);
+    const neglectedDays = endMinute > neglectAt
+      ? Math.floor(endMinute / (24 * 60)) -
+        Math.floor(decayStart / (24 * 60))
+      : 0;
+    const adoptionDays = customer.lifecycle === "active"
+      ? Math.floor(endMinute / (24 * 60)) -
+        Math.floor(startMinute / (24 * 60))
+      : 0;
+    let updated = {
+      ...customer,
+      health: Math.max(
+        0,
+        customer.health - neglectedDays *
+            (customer.lifecycle === "onboarding" ? 4 : 2),
+      ),
+      adoption: Math.min(100, customer.adoption + adoptionDays),
+    };
+    if (updated.health < 45 && updated.lifecycle !== "at_risk") {
+      updated = { ...updated, lifecycle: "at_risk" };
+      events.push({
+        kind: "customer_at_risk",
+        summary: "Account health entered the at-risk range",
+        relatedId: customer.id,
+        gameMinute: endMinute,
+      });
+    }
+    if (startMinute < updated.renewalAt && updated.renewalAt <= endMinute) {
+      if (updated.health < 35) {
+        delete customers[customer.id];
+        churnedMrrCents += updated.monthlyValueCents;
+        customersLost += 1;
+        events.push({
+          kind: "customer_churned",
+          summary: "Customer churned at renewal",
+          relatedId: customer.id,
+          gameMinute: updated.renewalAt,
+          amountCents: updated.monthlyValueCents,
+        });
+        continue;
+      }
+      updated = {
+        ...updated,
+        health: Math.max(0, updated.health - 5),
+        renewalAt: updated.renewalAt + rules.customerRenewalIntervalMinutes,
+      };
+      events.push({
+        kind: "customer_renewed",
+        summary: "Subscription auto-renewed",
+        relatedId: customer.id,
+        gameMinute: customer.renewalAt,
+        amountCents: customer.monthlyValueCents,
+      });
+    }
+    customers[customer.id] = updated;
+  }
+
+  nextState = advancePlatform(
+    {
+      ...nextState,
+      company: {
+        ...nextState.company,
+        mrrCents: Math.max(0, nextState.company.mrrCents - churnedMrrCents),
+        customerCount: Math.max(
+          0,
+          nextState.company.customerCount - customersLost,
+        ),
+      },
+      records: {
+        ...nextState.records,
+        leads,
+        quotes,
+        salesReps,
+        successReps,
+        supportReps,
+        customers,
+        tickets,
+      },
+    },
+    startMinute,
+    endMinute,
+  );
 
   if (nextCashCents < nextState.company.bankruptcyThresholdCents) {
     const bankruptcyEvent: DomainEvent = {

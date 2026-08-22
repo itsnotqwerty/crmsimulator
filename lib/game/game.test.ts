@@ -3,6 +3,7 @@ import {
   assertEquals,
   assertNotStrictEquals,
   assertStrictEquals,
+  assertStringIncludes,
 } from "$std/assert/mod.ts";
 import { applyCommand } from "./actions.ts";
 import { randomAt } from "./rng.ts";
@@ -16,6 +17,7 @@ import {
   DEFAULT_RULES,
   validateGameState,
 } from "./state.ts";
+import type { GameState } from "./types.ts";
 
 Deno.test("initial state is deterministic and valid", () => {
   const first = createInitialState({ seed: 42, now: 1_000 });
@@ -81,6 +83,481 @@ Deno.test("lead commands create a customer and recurring revenue", () => {
   assertEquals(state.company.customerCount, 1);
   assert(state.company.mrrCents > 0);
   assertNotStrictEquals(state, qualified.state);
+});
+
+Deno.test("rapid repeated contact sharply reduces lead intent", () => {
+  const initial = createInitialState({ seed: 5, now: 1_000 });
+  const firstContact = applyCommand(initial, {
+    type: "contact_lead",
+    leadId: "lead_1",
+    channel: "email",
+  });
+  assert(firstContact.accepted);
+  const initialIntent = firstContact.state.records.leads.lead_1.engagement;
+
+  const secondContact = applyCommand(firstContact.state, {
+    type: "contact_lead",
+    leadId: "lead_1",
+    channel: "email",
+  });
+  assert(secondContact.accepted);
+  const thirdContact = applyCommand(secondContact.state, {
+    type: "contact_lead",
+    leadId: "lead_1",
+    channel: "call",
+  });
+  assert(thirdContact.accepted);
+
+  assertEquals(
+    secondContact.state.records.leads.lead_1.engagement,
+    Math.max(0, initialIntent - 20),
+  );
+  assertEquals(
+    thirdContact.state.records.leads.lead_1.engagement,
+    Math.max(0, initialIntent - 50),
+  );
+  assertStringIncludes(
+    thirdContact.events[0].summary,
+    "intent fell sharply",
+  );
+});
+
+Deno.test("customer onboarding and expansion grow account value", () => {
+  let state = createInitialState({ seed: 48, now: 1_000 });
+  state = applyCommand(state, {
+    type: "contact_lead",
+    leadId: "lead_1",
+    channel: "email",
+  }).state;
+  state = applyCommand(state, {
+    type: "qualify_lead",
+    leadId: "lead_1",
+  }).state;
+  for (let step = 0; step < 4; step += 1) {
+    state = applyCommand(state, {
+      type: "advance_deal",
+      dealId: "deal_1",
+    }).state;
+  }
+  const customer = state.records.customers.customer_1;
+  assertEquals(customer.lifecycle, "onboarding");
+  assertEquals(customer.adoption, 25);
+
+  state = applyCommand(state, {
+    type: "complete_customer_onboarding",
+    customerId: customer.id,
+  }).state;
+  state = applyCommand(state, {
+    type: "customer_check_in",
+    customerId: customer.id,
+  }).state;
+  assertEquals(state.records.customers.customer_1.lifecycle, "active");
+  assertEquals(state.records.customers.customer_1.adoption, 68);
+
+  state = advanceGame(state, 2 * 24 * 60).state;
+  const beforeExpansionMrr = state.company.mrrCents;
+  const expanded = applyCommand(state, {
+    type: "expand_customer",
+    customerId: customer.id,
+  });
+  assert(expanded.accepted);
+  assert(expanded.state.company.mrrCents > beforeExpansionMrr);
+  assertEquals(expanded.state.records.customers.customer_1.expansions, 1);
+});
+
+Deno.test("unhealthy customers churn at renewal", () => {
+  const initial = createInitialState({ seed: 49, now: 1_000 });
+  const state = {
+    ...initial,
+    company: { ...initial.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...initial.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 20,
+          adoption: 20,
+          lifecycle: "at_risk" as const,
+          startedAt: 0,
+          nextBillingAt: 60,
+          renewalAt: 60,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+
+  const advanced = advanceGame(state, 60).state;
+  assertEquals(advanced.records.customers, {});
+  assertEquals(advanced.company.customerCount, 0);
+  assertEquals(advanced.company.mrrCents, 0);
+  assertEquals(advanced.history.customersLost, 1);
+});
+
+Deno.test("success representatives own accounts and improve playbooks", () => {
+  let state = createInitialState({ seed: 50, now: 1_000 });
+  state = {
+    ...state,
+    unlocks: ["customer_success"],
+    company: { ...state.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...state.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 40,
+          adoption: 35,
+          lifecycle: "at_risk" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+  state = applyCommand(state, {
+    type: "hire_success_rep",
+    name: "Morgan Lee",
+    level: "senior",
+  }).state;
+  state = applyCommand(state, {
+    type: "assign_customer",
+    customerId: "customer_1",
+    ownerId: "success_rep_1",
+  }).state;
+  const played = applyCommand(state, {
+    type: "run_success_playbook",
+    customerId: "customer_1",
+    playbook: "recovery",
+  });
+
+  assert(played.accepted);
+  assertEquals(
+    played.state.records.customers.customer_1.ownerId,
+    "success_rep_1",
+  );
+  assert(played.state.records.customers.customer_1.health > 60);
+  assertEquals(
+    played.state.company.founderCapacityRemaining,
+    state.company.founderCapacityRemaining,
+  );
+});
+
+Deno.test("NPS surveys produce deterministic bounded feedback", () => {
+  const initial = createInitialState({ seed: 54, now: 1_000 });
+  const state = {
+    ...initial,
+    company: { ...initial.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...initial.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 70,
+          adoption: 65,
+          lifecycle: "active" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+
+  const first = applyCommand(state, {
+    type: "send_nps_survey",
+    customerId: "customer_1",
+  });
+  const replay = applyCommand(state, {
+    type: "send_nps_survey",
+    customerId: "customer_1",
+  });
+
+  assert(first.accepted);
+  assertEquals(first, replay);
+  assert(first.state.records.customers.customer_1.lastNpsScore !== undefined);
+  assert(first.state.records.customers.customer_1.lastFeedback);
+  assertEquals(first.state.records.customers.customer_1.lastSurveyAt, 0);
+  const repeated = applyCommand(first.state, {
+    type: "send_nps_survey",
+    customerId: "customer_1",
+  });
+  assertEquals(repeated.accepted, false);
+  assertStrictEquals(repeated.state, first.state);
+  assertEquals(first.state.history.npsResponses, 1);
+});
+
+Deno.test("automation and simulated integrations replay deterministically", () => {
+  let state = createInitialState({ seed: 55, now: 1_000 });
+  state = applyCommand(state, {
+    type: "create_sequence",
+    name: "Founder follow-up",
+    audience: "leads",
+  }).state;
+  state = applyCommand(state, {
+    type: "create_workflow",
+    name: "Route hot leads",
+    trigger: "lead_created",
+    condition: "high_value",
+    action: "assign_owner",
+  }).state;
+  state = applyCommand(state, {
+    type: "connect_integration",
+    name: "Ledger sync",
+    mapping: "company -> account",
+  }).state;
+  const first = advanceGame(state, 24 * 60).state;
+  const replay = advanceGame(state, 24 * 60).state;
+  assertEquals(first, replay);
+  assertEquals(first.platform.automationRunsArchived, 1);
+  assertEquals(first.platform.sequences[0].enrolled, 1);
+  assert(
+    ["connected", "failed"].includes(first.platform.integrations[0].status),
+  );
+});
+
+Deno.test("mature operations enforce plans and escalating goals", () => {
+  let state = createInitialState({ seed: 56, now: 1_000 });
+  state = {
+    ...state,
+    company: { ...state.company, cashCents: 5_000_000, mrrCents: 1_000_000 },
+  };
+  state = applyCommand(state, {
+    type: "create_department",
+    name: "Revenue Operations",
+    manager: "Taylor Morgan",
+    monthlyBudgetCents: 500_000,
+    headcountPlan: 3,
+  }).state;
+  state = applyCommand(state, {
+    type: "hire_department_staff",
+    departmentId: "department_1",
+  }).state;
+  const goal = applyCommand(state, { type: "advance_endless_goal" });
+  assert(goal.accepted);
+  assertEquals(goal.state.platform.departments[0].headcount, 2);
+  assertEquals(goal.state.platform.endlessGoal, 2);
+});
+
+Deno.test("support tickets follow an assigned SLA lifecycle", () => {
+  let state = createInitialState({ seed: 51, now: 1_000 });
+  state = {
+    ...state,
+    unlocks: ["customer_success"],
+    company: { ...state.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...state.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 70,
+          adoption: 65,
+          lifecycle: "active" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+  state = applyCommand(state, {
+    type: "hire_support_rep",
+    name: "Jordan Bell",
+    level: "mid",
+  }).state;
+  const created = applyCommand(state, {
+    type: "create_ticket",
+    customerId: "customer_1",
+    channel: "chat",
+    priority: "urgent",
+    title: "Unable to publish reports",
+  });
+
+  assert(created.accepted);
+  assertEquals(created.state.records.tickets.ticket_1.responseDueAt, 60);
+  assertEquals(created.state.records.tickets.ticket_1.resolutionDueAt, 240);
+  assertEquals(
+    applyCommand(created.state, {
+      type: "resolve_ticket",
+      ticketId: "ticket_1",
+    }).accepted,
+    false,
+  );
+
+  state = applyCommand(created.state, {
+    type: "assign_ticket",
+    ticketId: "ticket_1",
+    ownerId: "support_rep_1",
+  }).state;
+  state = applyCommand(state, {
+    type: "acknowledge_ticket",
+    ticketId: "ticket_1",
+  }).state;
+  const resolved = applyCommand(state, {
+    type: "resolve_ticket",
+    ticketId: "ticket_1",
+  });
+
+  assert(resolved.accepted);
+  assertEquals(resolved.state.records.tickets.ticket_1.status, "resolved");
+  assertEquals(
+    resolved.state.records.tickets.ticket_1.ownerId,
+    "support_rep_1",
+  );
+});
+
+Deno.test("missed ticket SLAs fire once and damage account health", () => {
+  const initial = createInitialState({ seed: 52, now: 1_000 });
+  const state = {
+    ...initial,
+    unlocks: ["customer_success" as const],
+    company: { ...initial.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...initial.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 70,
+          adoption: 65,
+          lifecycle: "active" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+  const created = applyCommand(state, {
+    type: "create_ticket",
+    customerId: "customer_1",
+    channel: "phone",
+    priority: "urgent",
+    title: "Service unavailable",
+  }).state;
+
+  const responseMissed = advanceGame(created, 60);
+  assertEquals(
+    responseMissed.events.filter((event) =>
+      event.kind === "ticket_sla_breached"
+    ).length,
+    1,
+  );
+  assertEquals(responseMissed.state.records.customers.customer_1.health, 62);
+  const resolutionMissed = advanceGame(responseMissed.state, 180);
+  assertEquals(
+    resolutionMissed.events.filter((event) =>
+      event.kind === "ticket_sla_breached"
+    ).length,
+    1,
+  );
+  assertEquals(resolutionMissed.state.records.customers.customer_1.health, 47);
+  assertEquals(
+    advanceGame(resolutionMissed.state, 60).events.filter((event) =>
+      event.kind === "ticket_sla_breached"
+    ).length,
+    0,
+  );
+});
+
+Deno.test("escalated incidents resolve with staffed service quality", () => {
+  const initial = createInitialState({ seed: 53, now: 1_000 });
+  let state: GameState = {
+    ...initial,
+    unlocks: ["customer_success" as const],
+    company: { ...initial.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...initial.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 70,
+          adoption: 65,
+          lifecycle: "active" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+  state = applyCommand(state, {
+    type: "hire_support_rep",
+    name: "Alex Rivera",
+    level: "senior",
+  }).state;
+  state = applyCommand(state, {
+    type: "create_ticket",
+    customerId: "customer_1",
+    channel: "phone",
+    priority: "high",
+    title: "All users are locked out",
+  }).state;
+  state = applyCommand(state, {
+    type: "assign_ticket",
+    ticketId: "ticket_1",
+    ownerId: "support_rep_1",
+  }).state;
+  state = applyCommand(state, {
+    type: "escalate_ticket",
+    ticketId: "ticket_1",
+  }).state;
+  state = applyCommand(state, {
+    type: "declare_incident",
+    ticketId: "ticket_1",
+    severity: "critical",
+  }).state;
+  const incidentDamage = advanceGame(state, 24 * 60).state;
+  assert(
+    incidentDamage.records.customers.customer_1.health <
+      state.records.customers.customer_1.health,
+  );
+  state = applyCommand(incidentDamage, {
+    type: "acknowledge_ticket",
+    ticketId: "ticket_1",
+  }).state;
+  state = applyCommand(state, {
+    type: "resolve_ticket",
+    ticketId: "ticket_1",
+  }).state;
+  const resolved = applyCommand(state, {
+    type: "resolve_incident",
+    incidentId: "incident_1",
+  });
+
+  assert(resolved.accepted);
+  assertEquals(resolved.state.records.incidents.incident_1.status, "resolved");
+  assert(
+    (resolved.state.records.tickets.ticket_1.resolutionQuality ?? 0) > 50,
+  );
 });
 
 Deno.test("pipeline unlock requires sustained MRR and open deal volume", () => {
@@ -735,6 +1212,41 @@ Deno.test("reduced motion preference updates immutably", () => {
   assert(updated.accepted);
   assertEquals(updated.state.preferences.reducedMotion, true);
   assertEquals(initial.preferences.reducedMotion, false);
+});
+
+Deno.test("sound preferences are independent and reject no-op updates", () => {
+  const initial = createInitialState({ seed: 64, now: 1_000 });
+  const pings = applyCommand(initial, {
+    type: "set_sound_enabled",
+    enabled: true,
+  });
+  const music = applyCommand(pings.state, {
+    type: "set_music_enabled",
+    enabled: true,
+  });
+
+  assert(pings.accepted);
+  assert(music.accepted);
+  assertEquals(music.state.preferences.soundEnabled, true);
+  assertEquals(music.state.preferences.musicEnabled, true);
+  assertEquals(initial.preferences.musicEnabled, false);
+  assertStrictEquals(
+    applyCommand(music.state, { type: "set_music_enabled", enabled: true })
+      .state,
+    music.state,
+  );
+
+  const quieter = applyCommand(music.state, {
+    type: "set_music_volume",
+    volume: 20,
+  });
+  assert(quieter.accepted);
+  assertEquals(quieter.state.preferences.musicVolume, 20);
+  assertStrictEquals(
+    applyCommand(quieter.state, { type: "set_music_volume", volume: 101 })
+      .state,
+    quieter.state,
+  );
 });
 
 Deno.test("new company command restarts a bankrupt run", () => {

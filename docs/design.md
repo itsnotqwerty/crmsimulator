@@ -55,6 +55,18 @@ acceptance applies its commercial terms to the deal, then uses the canonical
 deal-win transaction to create the customer, subscription MRR, and onboarding
 work without duplicating revenue state transitions.
 
+Schema versions 9 and 10 add customer lifecycle fields and a bounded customer
+success roster. Health, adoption, renewals, expansion, ownership, payroll, and
+playbook outcomes remain canonical simulation state; older customers migrate as
+active accounts so an upgrade cannot create surprise churn.
+
+Schema version 11 adds bounded support tickets with channel, priority,
+ownership, lifecycle timestamps, response and resolution deadlines, and one-time
+SLA breach tracking.
+
+Schema version 12 separates support ownership into a bounded specialist roster
+and adds escalation, incident records, workload burnout, and resolution quality.
+
 Each operation returns JSON except export. The client identifies the action in
 the request body, not in a query path. Requests must use
 `Content-Type: application/json` except a bounded multipart import if later

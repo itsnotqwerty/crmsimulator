@@ -239,8 +239,13 @@ Unlocked at $1,000 MRR and three open deals:
 Unlocked through active-customer and renewal volume:
 
 - customer health and success workspaces;
-- onboarding, renewals, expansion, and churn risk;
-- support inbox, tickets, SLAs, and service staffing;
+- onboarding, adoption, check-ins, renewals, expansion, and churn risk driven by
+  account health and neglect;
+- support inbox with priority- and channel-based tickets, ownership, response
+  and resolution SLAs, and account-health penalties for missed deadlines;
+- dedicated service staffing with payroll, skill, capacity, and burnout;
+- escalations and incidents with ongoing account impact and measured resolution
+  quality;
 - NPS and retention reporting.
 
 ### Tier 4: Automation and analytics

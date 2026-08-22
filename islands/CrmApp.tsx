@@ -23,6 +23,7 @@ import {
   Mail,
   Menu,
   MoreHorizontal,
+  Music2,
   Pencil,
   Phone,
   RefreshCw,
@@ -33,11 +34,15 @@ import {
   Target,
   Upload,
   Users,
+  Volume2,
   X,
 } from "lucide-preact";
 import type { JSX } from "preact";
+import { useEffect, useRef } from "preact/hooks";
+import { notificationToneFor, SoundDesign } from "../lib/client/audio.ts";
 import { useGameStore } from "../lib/client/gameStore.ts";
 import { campaignSaturation } from "../lib/game/simulation.ts";
+import { analyticsReport, retentionReport } from "../lib/game/reports.ts";
 import type {
   AdvanceSummary,
   BillingCycle,
@@ -52,6 +57,8 @@ import type {
   SalesRepLevel,
   SalesTerritory,
   Task,
+  TicketChannel,
+  TicketPriority,
 } from "../lib/game/types.ts";
 import { DEFAULT_RULES } from "../lib/game/state.ts";
 import type { LoadStatus } from "../lib/server/root.ts";
@@ -64,6 +71,10 @@ type View =
   | "tasks"
   | "marketing"
   | "pipeline"
+  | "customers"
+  | "automation"
+  | "analytics"
+  | "operations"
   | "settings";
 
 export interface CrmAppProps {
@@ -146,6 +157,1134 @@ const PIPELINE_STAGES = [
   "evaluation",
   "negotiation",
 ] as const;
+
+function CustomerSuccessWorkspace(props: {
+  game: GameState;
+  currentMinute: number;
+  dispatch: (command: GameCommand) => void;
+}) {
+  const repName = useSignal("");
+  const repLevel = useSignal<SalesRepLevel>("junior");
+  const ticketCustomerId = useSignal("");
+  const ticketChannel = useSignal<TicketChannel>("email");
+  const ticketPriority = useSignal<TicketPriority>("normal");
+  const ticketTitle = useSignal("");
+  const supportRepName = useSignal("");
+  const supportRepLevel = useSignal<SalesRepLevel>("junior");
+  const customers = Object.values(props.game.records.customers).sort((a, b) =>
+    a.renewalAt - b.renewalAt
+  );
+  const successReps = Object.values(props.game.records.successReps).sort((
+    a,
+    b,
+  ) => a.hiredAt - b.hiredAt);
+  const supportReps = Object.values(props.game.records.supportReps).sort((
+    a,
+    b,
+  ) => a.hiredAt - b.hiredAt);
+  const incidents = Object.values(props.game.records.incidents).sort((a, b) =>
+    b.createdAt - a.createdAt
+  );
+  const tickets = Object.values(props.game.records.tickets).sort((a, b) => {
+    if (a.status === "resolved" && b.status !== "resolved") return 1;
+    if (a.status !== "resolved" && b.status === "resolved") return -1;
+    return a.resolutionDueAt - b.resolutionDueAt;
+  });
+  const openTickets = tickets.filter((ticket) => ticket.status !== "resolved");
+  const breachedTickets = openTickets.filter((ticket) =>
+    ticket.responseBreachedAt !== undefined ||
+    ticket.resolutionBreachedAt !== undefined
+  );
+  const unassignedTickets = openTickets.filter((ticket) => !ticket.ownerId);
+  const atRisk =
+    customers.filter((customer) => customer.lifecycle === "at_risk").length;
+  const averageHealth = customers.length
+    ? Math.round(
+      customers.reduce((total, customer) => total + customer.health, 0) /
+        customers.length,
+    )
+    : 0;
+  const renewalWindow =
+    customers.filter((customer) =>
+      customer.renewalAt <= props.currentMinute + 7 * 24 * 60
+    ).length;
+  const monthlyPayrollCents = successReps.reduce(
+    (total, rep) => total + rep.monthlySalaryCents,
+    0,
+  );
+  const retention = retentionReport(props.game);
+  const hireSuccessRep = (event: SubmitEvent) => {
+    event.preventDefault();
+    props.dispatch({
+      type: "hire_success_rep",
+      name: repName.value,
+      level: repLevel.value,
+    });
+    repName.value = "";
+  };
+  const createTicket = (event: SubmitEvent) => {
+    event.preventDefault();
+    props.dispatch({
+      type: "create_ticket",
+      customerId: ticketCustomerId.value,
+      channel: ticketChannel.value,
+      priority: ticketPriority.value,
+      title: ticketTitle.value,
+    });
+    ticketTitle.value = "";
+  };
+  const hireSupportRep = (event: SubmitEvent) => {
+    event.preventDefault();
+    props.dispatch({
+      type: "hire_support_rep",
+      name: supportRepName.value,
+      level: supportRepLevel.value,
+    });
+    supportRepName.value = "";
+  };
+
+  return (
+    <>
+      <div class="page-heading">
+        <div>
+          <span>Retention operations</span>
+          <h1>Customer success</h1>
+          <p>Guide adoption, protect renewals, and expand healthy accounts.</p>
+        </div>
+      </div>
+      <div class="pipeline-summary" aria-label="Customer health summary">
+        <div>
+          <span>Active customers</span>
+          <strong>{customers.length}</strong>
+        </div>
+        <div>
+          <span>Average health</span>
+          <strong>{averageHealth}%</strong>
+        </div>
+        <div>
+          <span>At risk</span>
+          <strong>{atRisk}</strong>
+        </div>
+        <div>
+          <span>Net retention</span>
+          <strong>{retention.netRetentionPercent}%</strong>
+        </div>
+      </div>
+      <div class="pipeline-summary" aria-label="Retention report">
+        <div>
+          <span>Gross retention</span>
+          <strong>{retention.grossRetentionPercent}%</strong>
+        </div>
+        <div>
+          <span>Average NPS</span>
+          <strong>{retention.averageNps ?? "--"}</strong>
+        </div>
+        <div>
+          <span>SLA attainment</span>
+          <strong>{retention.slaAttainmentPercent}%</strong>
+        </div>
+        <div>
+          <span>Renewing in 7 days</span>
+          <strong>{renewalWindow}</strong>
+        </div>
+      </div>
+      <section class="panel success-team-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Success team</h2>
+            <span>
+              {successReps.length} specialists ·{" "}
+              {money.format(monthlyPayrollCents / 100)} monthly payroll
+            </span>
+          </div>
+        </div>
+        <form class="success-hire-form" onSubmit={hireSuccessRep}>
+          <label>
+            <span>Specialist name</span>
+            <input
+              required
+              minLength={2}
+              maxLength={60}
+              placeholder="e.g. Morgan Lee"
+              value={repName.value}
+              onInput={(event) => repName.value = event.currentTarget.value}
+            />
+          </label>
+          <label>
+            <span>Experience</span>
+            <select
+              value={repLevel.value}
+              onChange={(event) =>
+                repLevel.value = event.currentTarget.value as SalesRepLevel}
+            >
+              <option value="junior">Junior · $3,500/mo · 8 accounts</option>
+              <option value="mid">Mid-level · $6,500/mo · 12 accounts</option>
+              <option value="senior">Senior · $9,500/mo · 16 accounts</option>
+            </select>
+          </label>
+          <button
+            type="submit"
+            class="primary"
+            disabled={successReps.length >= DEFAULT_RULES.maxSuccessReps}
+          >
+            <Users size={16} />Hire specialist
+          </button>
+        </form>
+        {successReps.length > 0 && (
+          <div class="success-team-list">
+            {successReps.map((rep) => {
+              const accountLoad = customers.filter((customer) =>
+                customer.ownerId === rep.id
+              ).length;
+              return (
+                <div>
+                  <span class="rep-avatar">{initials(rep.name)}</span>
+                  <span>
+                    <strong>{rep.name}</strong>
+                    <small>{statusLabel(rep.level)} specialist</small>
+                  </span>
+                  <span>{accountLoad}/{rep.accountCapacity} accounts</span>
+                  <span class={rep.burnout >= 60 ? "overloaded" : ""}>
+                    {rep.burnout}% burnout
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+      <section class="panel support-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Support inbox</h2>
+            <span>
+              {supportReps.length}{" "}
+              agents · Respond before SLAs expire to protect account health
+            </span>
+          </div>
+        </div>
+        <form class="support-hire-form" onSubmit={hireSupportRep}>
+          <label>
+            <span>Agent name</span>
+            <input
+              required
+              minLength={2}
+              maxLength={60}
+              placeholder="e.g. Alex Rivera"
+              value={supportRepName.value}
+              onInput={(event) =>
+                supportRepName.value = event.currentTarget.value}
+            />
+          </label>
+          <label>
+            <span>Experience</span>
+            <select
+              value={supportRepLevel.value}
+              onChange={(event) =>
+                supportRepLevel.value = event.currentTarget
+                  .value as SalesRepLevel}
+            >
+              <option value="junior">Junior · $3,200/mo · 6 tickets</option>
+              <option value="mid">Mid-level · $5,600/mo · 10 tickets</option>
+              <option value="senior">Senior · $8,500/mo · 14 tickets</option>
+            </select>
+          </label>
+          <button
+            type="submit"
+            class="primary"
+            disabled={supportReps.length >= DEFAULT_RULES.maxSupportReps}
+          >
+            <Users size={16} />Hire agent
+          </button>
+        </form>
+        {supportReps.length > 0 && (
+          <div class="support-team-list">
+            {supportReps.map((rep) => {
+              const ticketLoad = openTickets.filter((ticket) =>
+                ticket.ownerId === rep.id
+              ).length;
+              return (
+                <div>
+                  <span class="rep-avatar">{initials(rep.name)}</span>
+                  <span>
+                    <strong>{rep.name}</strong>
+                    <small>{statusLabel(rep.level)} support</small>
+                  </span>
+                  <span>{ticketLoad}/{rep.ticketCapacity} tickets</span>
+                  <span class={rep.burnout >= 60 ? "overloaded" : ""}>
+                    {rep.burnout}% burnout
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div class="support-summary" aria-label="Support queue summary">
+          <div>
+            <span>Open</span>
+            <strong>{openTickets.length}</strong>
+          </div>
+          <div>
+            <span>Unassigned</span>
+            <strong>{unassignedTickets.length}</strong>
+          </div>
+          <div>
+            <span>SLA breached</span>
+            <strong>{breachedTickets.length}</strong>
+          </div>
+          <div>
+            <span>Resolved</span>
+            <strong>{tickets.length - openTickets.length}</strong>
+          </div>
+        </div>
+        <form class="ticket-create-form" onSubmit={createTicket}>
+          <label>
+            <span>Account</span>
+            <select
+              required
+              value={ticketCustomerId.value}
+              onChange={(event) =>
+                ticketCustomerId.value = event.currentTarget.value}
+            >
+              <option value="">Select account</option>
+              {customers.map((customer) => (
+                <option value={customer.id}>
+                  {props.game.records.companies[customer.companyId]?.name ??
+                    "Unknown company"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Channel</span>
+            <select
+              value={ticketChannel.value}
+              onChange={(event) =>
+                ticketChannel.value = event.currentTarget
+                  .value as TicketChannel}
+            >
+              <option value="email">Email</option>
+              <option value="chat">Chat</option>
+              <option value="phone">Phone</option>
+            </select>
+          </label>
+          <label>
+            <span>Priority</span>
+            <select
+              value={ticketPriority.value}
+              onChange={(event) =>
+                ticketPriority.value = event.currentTarget
+                  .value as TicketPriority}
+            >
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </label>
+          <label class="ticket-title-field">
+            <span>Issue</span>
+            <input
+              required
+              minLength={3}
+              maxLength={100}
+              placeholder="Describe the customer issue"
+              value={ticketTitle.value}
+              onInput={(event) => ticketTitle.value = event.currentTarget.value}
+            />
+          </label>
+          <button type="submit" class="primary" disabled={!customers.length}>
+            <Inbox size={16} />Create ticket
+          </button>
+        </form>
+        {tickets.length === 0
+          ? (
+            <EmptyState
+              title="Support queue is clear"
+              detail="New customer issues will appear here for triage."
+            />
+          )
+          : (
+            <div class="table-scroll">
+              <table class="support-table">
+                <thead>
+                  <tr>
+                    <th>Issue</th>
+                    <th>Account</th>
+                    <th>Priority</th>
+                    <th>Channel</th>
+                    <th>Status</th>
+                    <th>SLA</th>
+                    <th>Owner</th>
+                    <th aria-label="Actions"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tickets.map((ticket) => {
+                    const customer =
+                      props.game.records.customers[ticket.customerId];
+                    const company = customer
+                      ? props.game.records.companies[customer.companyId]
+                      : undefined;
+                    const breached = ticket.responseBreachedAt !== undefined ||
+                      ticket.resolutionBreachedAt !== undefined;
+                    const dueAt = ticket.status === "open"
+                      ? ticket.responseDueAt
+                      : ticket.resolutionDueAt;
+                    return (
+                      <tr>
+                        <td>
+                          <strong>{ticket.title}</strong>
+                          <small>{ticket.id}</small>
+                        </td>
+                        <td>{company?.name ?? "Unknown company"}</td>
+                        <td>
+                          <span class={`ticket-priority ${ticket.priority}`}>
+                            {statusLabel(ticket.priority)}
+                          </span>
+                        </td>
+                        <td>{statusLabel(ticket.channel)}</td>
+                        <td>
+                          <span class={`status ${ticket.status}`}>
+                            {statusLabel(ticket.status)}
+                          </span>
+                        </td>
+                        <td class={breached ? "sla-breached" : ""}>
+                          {ticket.status === "resolved"
+                            ? "Met"
+                            : breached
+                            ? "Breached"
+                            : relativeGameTime(dueAt, props.currentMinute)}
+                        </td>
+                        <td>
+                          <select
+                            aria-label={`Owner for ${ticket.title}`}
+                            disabled={ticket.status === "resolved"}
+                            value={ticket.ownerId ?? ""}
+                            onChange={(event) =>
+                              props.dispatch({
+                                type: "assign_ticket",
+                                ticketId: ticket.id,
+                                ownerId: event.currentTarget.value || undefined,
+                              })}
+                          >
+                            <option value="">Unassigned</option>
+                            {supportReps.map((rep) => (
+                              <option value={rep.id}>{rep.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <div class="ticket-actions">
+                            {ticket.status === "open" && (
+                              <button
+                                type="button"
+                                class="secondary"
+                                onClick={() =>
+                                  props.dispatch({
+                                    type: "acknowledge_ticket",
+                                    ticketId: ticket.id,
+                                  })}
+                              >
+                                <Check size={15} />Acknowledge
+                              </button>
+                            )}
+                            {ticket.status === "acknowledged" && (
+                              <button
+                                type="button"
+                                class="primary"
+                                onClick={() =>
+                                  props.dispatch({
+                                    type: "resolve_ticket",
+                                    ticketId: ticket.id,
+                                  })}
+                              >
+                                <Check size={15} />Resolve
+                              </button>
+                            )}
+                            {ticket.status !== "resolved" &&
+                              !ticket.escalated && (
+                              <button
+                                type="button"
+                                class="secondary"
+                                onClick={() =>
+                                  props.dispatch({
+                                    type: "escalate_ticket",
+                                    ticketId: ticket.id,
+                                  })}
+                              >
+                                <ArrowUpDown size={15} />Escalate
+                              </button>
+                            )}
+                            {ticket.escalated && ticket.status !== "resolved" &&
+                              !incidents.some((incident) =>
+                                incident.ticketId === ticket.id &&
+                                incident.status === "investigating"
+                              ) && (
+                              <button
+                                type="button"
+                                class="secondary"
+                                onClick={() =>
+                                  props.dispatch({
+                                    type: "declare_incident",
+                                    ticketId: ticket.id,
+                                    severity: "major",
+                                  })}
+                              >
+                                <Bell size={15} />Incident
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        {incidents.length > 0 && (
+          <div class="incident-list">
+            <div class="table-toolbar">
+              <strong>Incidents</strong>
+              <span>
+                Unresolved incidents continuously reduce account health
+              </span>
+            </div>
+            {incidents.map((incident) => {
+              const linkedTicket =
+                props.game.records.tickets[incident.ticketId];
+              return (
+                <div>
+                  <span>
+                    <strong>{incident.title}</strong>
+                    <small>
+                      {statusLabel(incident.severity)} · {incident.id}
+                    </small>
+                  </span>
+                  <span class={`status ${incident.status}`}>
+                    {statusLabel(incident.status)}
+                  </span>
+                  <span>
+                    {linkedTicket?.resolutionQuality === undefined
+                      ? "Quality pending"
+                      : `${linkedTicket.resolutionQuality}% resolution quality`}
+                  </span>
+                  {incident.status === "investigating" && (
+                    <button
+                      type="button"
+                      class="secondary"
+                      disabled={linkedTicket?.status !== "resolved"}
+                      onClick={() =>
+                        props.dispatch({
+                          type: "resolve_incident",
+                          incidentId: incident.id,
+                        })}
+                    >
+                      <Check size={15} />Close incident
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+      <section class="panel table-panel">
+        <div class="table-toolbar">
+          <strong>Account portfolio</strong>
+          <span>Health declines after seven days without a success touch</span>
+        </div>
+        {customers.length === 0
+          ? (
+            <EmptyState
+              title="No retained customers"
+              detail="Won deals appear here as onboarding accounts."
+            />
+          )
+          : (
+            <div class="table-scroll">
+              <table class="customer-table">
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Lifecycle</th>
+                    <th>Health</th>
+                    <th>Adoption</th>
+                    <th>MRR</th>
+                    <th>Owner</th>
+                    <th>Renewal</th>
+                    <th>NPS</th>
+                    <th aria-label="Actions"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customers.map((customer) => {
+                    const company =
+                      props.game.records.companies[customer.companyId];
+                    const renewalOpen = customer.renewalAt -
+                        props.currentMinute <= 7 * 24 * 60;
+                    const expansionReady = customer.lifecycle === "active" &&
+                      customer.health >= 70 && customer.adoption >= 70;
+                    return (
+                      <tr>
+                        <td>
+                          <strong>{company?.name ?? "Unknown company"}</strong>
+                          <small>{customer.expansions} expansions</small>
+                        </td>
+                        <td>
+                          <span class={`status ${customer.lifecycle}`}>
+                            {statusLabel(customer.lifecycle)}
+                          </span>
+                        </td>
+                        <td>
+                          <div class="health-meter">
+                            <span style={{ width: `${customer.health}%` }} />
+                          </div>
+                          <small>{customer.health}%</small>
+                        </td>
+                        <td>{customer.adoption}%</td>
+                        <td>
+                          {money.format(customer.monthlyValueCents / 100)}
+                        </td>
+                        <td>
+                          <select
+                            aria-label={`Owner for ${
+                              company?.name ?? "account"
+                            }`}
+                            value={customer.ownerId ?? ""}
+                            onChange={(event) =>
+                              props.dispatch({
+                                type: "assign_customer",
+                                customerId: customer.id,
+                                ownerId: event.currentTarget.value || undefined,
+                              })}
+                          >
+                            <option value="">Founder</option>
+                            {successReps.map((rep) => (
+                              <option value={rep.id}>{rep.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          {relativeGameTime(
+                            customer.renewalAt,
+                            props.currentMinute,
+                          )}
+                        </td>
+                        <td>
+                          <strong>{customer.lastNpsScore ?? "--"}</strong>
+                          <small>
+                            {customer.lastFeedback ?? "No feedback yet"}
+                          </small>
+                        </td>
+                        <td>
+                          <div class="customer-actions">
+                            {customer.lifecycle === "onboarding" && (
+                              <button
+                                type="button"
+                                class="primary"
+                                onClick={() =>
+                                  props.dispatch({
+                                    type: "complete_customer_onboarding",
+                                    customerId: customer.id,
+                                  })}
+                              >
+                                <Check size={15} />Onboard
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              class="secondary"
+                              disabled={customer.lastSurveyAt !== undefined &&
+                                props.currentMinute - customer.lastSurveyAt <
+                                  7 * 24 * 60}
+                              onClick={() =>
+                                props.dispatch({
+                                  type: "send_nps_survey",
+                                  customerId: customer.id,
+                                })}
+                            >
+                              <Send size={15} />Survey
+                            </button>
+                            <button
+                              type="button"
+                              class="secondary"
+                              onClick={() =>
+                                props.dispatch({
+                                  type: "customer_check_in",
+                                  customerId: customer.id,
+                                })}
+                            >
+                              <Activity size={15} />Check in
+                            </button>
+                            <button
+                              type="button"
+                              class="secondary"
+                              onClick={() =>
+                                props.dispatch({
+                                  type: "run_success_playbook",
+                                  customerId: customer.id,
+                                  playbook: customer.lifecycle === "at_risk"
+                                    ? "recovery"
+                                    : "adoption",
+                                })}
+                            >
+                              <SlidersHorizontal size={15} />
+                              {customer.lifecycle === "at_risk"
+                                ? "Recover"
+                                : "Adopt"}
+                            </button>
+                            <button
+                              type="button"
+                              class="secondary"
+                              disabled={!renewalOpen || customer.health < 40}
+                              onClick={() =>
+                                props.dispatch({
+                                  type: "renew_customer",
+                                  customerId: customer.id,
+                                })}
+                            >
+                              <RefreshCw size={15} />Renew
+                            </button>
+                            <button
+                              type="button"
+                              class="secondary"
+                              disabled={!expansionReady}
+                              onClick={() =>
+                                props.dispatch({
+                                  type: "expand_customer",
+                                  customerId: customer.id,
+                                })}
+                            >
+                              <CircleDollarSign size={15} />Expand
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </section>
+    </>
+  );
+}
+
+function PlatformWorkspace(props: {
+  game: GameState;
+  mode: "automation" | "analytics" | "operations";
+  dispatch: (command: GameCommand) => void;
+}) {
+  const name = useSignal("");
+  const secondary = useSignal("");
+  const trigger = useSignal<"lead_created" | "deal_won" | "customer_at_risk">(
+    "lead_created",
+  );
+  const action = useSignal<"create_task" | "send_outreach" | "assign_owner">(
+    "create_task",
+  );
+  const report = analyticsReport(props.game);
+  const platform = props.game.platform;
+  if (props.mode === "analytics") {
+    const metrics = [
+      ["Lead qualification", `${report.qualificationPercent}%`],
+      ["Win rate", `${report.winRatePercent}%`],
+      ["Cohort retention", `${report.activeCohortRetentionPercent}%`],
+      [
+        "Multi-touch revenue",
+        money.format(report.weightedAttributionCents / 100),
+      ],
+      ["Forecast variance", money.format(report.forecastVarianceCents / 100)],
+      ["Automation errors", `${report.automationErrorPercent}%`],
+    ];
+    return (
+      <>
+        <div class="page-heading">
+          <div>
+            <span>Decision support</span>
+            <h1>Analytics</h1>
+            <p>Funnel, cohort, attribution, and forecast performance.</p>
+          </div>
+        </div>
+        <div class="pipeline-summary advanced-summary">
+          {metrics.map(([label, value]) => (
+            <div key={label}>
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </div>
+          ))}
+        </div>
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Dashboard composition</h2>
+              <span>{platform.dashboardWidgets.join(" · ")}</span>
+            </div>
+          </div>
+          <div class="tag-list">
+            {platform.savedViews.map((view) => <span key={view}>{view}</span>)}
+          </div>
+        </section>
+      </>
+    );
+  }
+  if (props.mode === "operations") {
+    return (
+      <>
+        <div class="page-heading">
+          <div>
+            <span>Company operating system</span>
+            <h1>Operations</h1>
+            <p>Headcount, budgets, controls, and quarterly targets.</p>
+          </div>
+        </div>
+        <div class="pipeline-summary">
+          <div>
+            <span>Quarter</span>
+            <strong>Q{platform.quarter}</strong>
+          </div>
+          <div>
+            <span>Resilience</span>
+            <strong>{platform.resilienceLevel}</strong>
+          </div>
+          <div>
+            <span>Audit entries</span>
+            <strong>{platform.auditEntriesArchived}</strong>
+          </div>
+          <div>
+            <span>Endless goal</span>
+            <strong>{money.format(platform.endlessGoal * 10_000)}</strong>
+          </div>
+        </div>
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Departments</h2>
+              <span>{platform.departments.length} operating teams</span>
+            </div>
+          </div>
+          <form
+            class="support-hire-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              props.dispatch({
+                type: "create_department",
+                name: name.value,
+                manager: secondary.value,
+                monthlyBudgetCents: 500_000,
+                headcountPlan: 5,
+              });
+              name.value = "";
+              secondary.value = "";
+            }}
+          >
+            <label>
+              <span>Department</span>
+              <input
+                required
+                minLength={2}
+                value={name.value}
+                onInput={(event) => name.value = event.currentTarget.value}
+              />
+            </label>
+            <label>
+              <span>Manager</span>
+              <input
+                required
+                minLength={2}
+                value={secondary.value}
+                onInput={(event) => secondary.value = event.currentTarget.value}
+              />
+            </label>
+            <button class="primary" type="submit">
+              <Building2 size={16} />Open department
+            </button>
+          </form>
+          <div class="success-team-list">
+            {platform.departments.map((department) => (
+              <div key={department.id}>
+                <span class="rep-avatar">{initials(department.name)}</span>
+                <span>
+                  <strong>{department.name}</strong>
+                  <small>{department.manager}</small>
+                </span>
+                <span>
+                  {department.headcount}/{department.headcountPlan} staff
+                </span>
+                <button
+                  class="secondary"
+                  type="button"
+                  disabled={department.headcount >= department.headcountPlan}
+                  onClick={() =>
+                    props.dispatch({
+                      type: "hire_department_staff",
+                      departmentId: department.id,
+                    })}
+                >
+                  <Users size={15} />Hire
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Planning and controls</h2>
+              <span>
+                Approvals above{" "}
+                {money.format(platform.approvalThresholdCents / 100)}
+              </span>
+            </div>
+          </div>
+          <div class="customer-actions">
+            <button
+              class="secondary"
+              type="button"
+              onClick={() =>
+                props.dispatch({
+                  type: "set_quarterly_plan",
+                  growthTargetCents: platform.growthTargetCents + 250_000,
+                  efficiencyTargetPercent: platform.efficiencyTargetPercent,
+                  retentionTargetPercent: platform.retentionTargetPercent,
+                })}
+            >
+              <Target size={15} />Approve next quarter
+            </button>
+            <button
+              class="secondary"
+              type="button"
+              onClick={() => props.dispatch({ type: "invest_resilience" })}
+            >
+              <Gauge size={15} />Invest in resilience
+            </button>
+            <button
+              class="primary"
+              type="button"
+              onClick={() => props.dispatch({ type: "advance_endless_goal" })}
+            >
+              <ChevronRight size={15} />Claim goal
+            </button>
+          </div>
+        </section>
+      </>
+    );
+  }
+  return (
+    <>
+      <div class="page-heading">
+        <div>
+          <span>Systems at scale</span>
+          <h1>Automation</h1>
+          <p>Sequences, workflows, integrations, and data quality.</p>
+        </div>
+      </div>
+      <div class="pipeline-summary">
+        <div>
+          <span>Sequences</span>
+          <strong>{platform.sequences.length}</strong>
+        </div>
+        <div>
+          <span>Workflow runs</span>
+          <strong>{platform.automationRunsArchived}</strong>
+        </div>
+        <div>
+          <span>Errors</span>
+          <strong>{platform.automationErrorsArchived}</strong>
+        </div>
+        <div>
+          <span>Duplicates</span>
+          <strong>{platform.duplicateReviews}</strong>
+        </div>
+      </div>
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Sequences</h2>
+            <span>Repeatable outreach</span>
+          </div>
+        </div>
+        <form
+          class="support-hire-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            props.dispatch({
+              type: "create_sequence",
+              name: name.value,
+              audience: "leads",
+            });
+            name.value = "";
+          }}
+        >
+          <label>
+            <span>Name</span>
+            <input
+              required
+              minLength={2}
+              value={name.value}
+              onInput={(event) => name.value = event.currentTarget.value}
+            />
+          </label>
+          <button class="primary" type="submit">
+            <Send size={16} />Create sequence
+          </button>
+        </form>
+        <div class="tag-list">
+          {platform.sequences.map((sequence) => (
+            <button
+              key={sequence.id}
+              type="button"
+              class="secondary"
+              onClick={() =>
+                props.dispatch({
+                  type: "toggle_sequence",
+                  sequenceId: sequence.id,
+                })}
+            >
+              {sequence.name} · {sequence.enabled ? "Active" : "Paused"} ·{" "}
+              {sequence.completed}/{sequence.enrolled}
+            </button>
+          ))}
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Workflow builder</h2>
+            <span>Trigger → condition → action</span>
+          </div>
+        </div>
+        <form
+          class="support-hire-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            props.dispatch({
+              type: "create_workflow",
+              name: secondary.value,
+              trigger: trigger.value,
+              condition: "all",
+              action: action.value,
+            });
+            secondary.value = "";
+          }}
+        >
+          <label>
+            <span>Name</span>
+            <input
+              required
+              minLength={2}
+              value={secondary.value}
+              onInput={(event) => secondary.value = event.currentTarget.value}
+            />
+          </label>
+          <label>
+            <span>Trigger</span>
+            <select
+              value={trigger.value}
+              onChange={(event) =>
+                trigger.value = event.currentTarget
+                  .value as typeof trigger.value}
+            >
+              <option value="lead_created">Lead created</option>
+              <option value="deal_won">Deal won</option>
+              <option value="customer_at_risk">Customer at risk</option>
+            </select>
+          </label>
+          <label>
+            <span>Action</span>
+            <select
+              value={action.value}
+              onChange={(event) =>
+                action.value = event.currentTarget.value as typeof action.value}
+            >
+              <option value="create_task">Create task</option>
+              <option value="send_outreach">Send outreach</option>
+              <option value="assign_owner">Assign owner</option>
+            </select>
+          </label>
+          <button class="primary" type="submit">
+            <Activity size={16} />Publish
+          </button>
+        </form>
+        <div class="tag-list">
+          {platform.workflows.map((workflow) => (
+            <button
+              key={workflow.id}
+              type="button"
+              class="secondary"
+              onClick={() =>
+                props.dispatch({
+                  type: "toggle_workflow",
+                  workflowId: workflow.id,
+                })}
+            >
+              {workflow.name} · {workflow.runs} runs · {workflow.errors} errors
+            </button>
+          ))}
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Data and integrations</h2>
+            <span>
+              {platform.integrations.length} simulated connections ·{" "}
+              {platform.customFields.length} custom fields
+            </span>
+          </div>
+        </div>
+        <div class="customer-actions">
+          <button
+            class="secondary"
+            type="button"
+            disabled={platform.integrations.length >= 8}
+            onClick={() =>
+              props.dispatch({
+                type: "connect_integration",
+                name: `Warehouse ${platform.integrations.length + 1}`,
+                mapping: "company → account",
+              })}
+          >
+            <RefreshCw size={15} />Add simulated sync
+          </button>
+          <button
+            class="secondary"
+            type="button"
+            onClick={() =>
+              props.dispatch({
+                type: "add_custom_field",
+                name: `Lifecycle field ${platform.customFields.length + 1}`,
+              })}
+          >
+            <SlidersHorizontal size={15} />Add custom field
+          </button>
+          <button
+            class="secondary"
+            type="button"
+            onClick={() =>
+              props.dispatch({
+                type: "save_view",
+                name: `Operations view ${platform.savedViews.length + 1}`,
+              })}
+          >
+            <Columns3 size={15} />Save view
+          </button>
+          <button
+            class="primary"
+            type="button"
+            disabled={!platform.duplicateReviews}
+            onClick={() => props.dispatch({ type: "merge_duplicates" })}
+          >
+            <Check size={15} />Merge duplicates
+          </button>
+        </div>
+      </section>
+    </>
+  );
+}
 
 function PipelineWorkspace(props: {
   game: GameState;
@@ -1033,6 +2172,51 @@ export default function CrmApp(props: CrmAppProps) {
   const showCorrupt = useSignal(props.loadStatus === "corrupt");
   const confirmReset = useSignal(false);
   const game = store.game.value;
+  const soundDesign = useRef<SoundDesign | undefined>(undefined);
+  const previousActivityId = useRef(
+    game.recentActivities.at(-1)?.id,
+  );
+  if (!soundDesign.current) soundDesign.current = new SoundDesign();
+
+  useEffect(() => {
+    const audio = soundDesign.current!;
+    const handleVisibility = () =>
+      void audio.setPageVisible(document.visibilityState === "visible");
+    const activateMusic = () => {
+      if (store.game.value.preferences.musicEnabled) {
+        void audio.setMusic(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    document.addEventListener("pointerdown", activateMusic, { once: true });
+    document.addEventListener("keydown", activateMusic, { once: true });
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      document.removeEventListener("pointerdown", activateMusic);
+      document.removeEventListener("keydown", activateMusic);
+      audio.destroy();
+    };
+  }, []);
+
+  useEffect(() => {
+    const latest = game.recentActivities.at(-1);
+    if (!latest || latest.id === previousActivityId.current) return;
+    previousActivityId.current = latest.id;
+    const tone = notificationToneFor(latest.kind);
+    if (tone && game.preferences.soundEnabled) {
+      void soundDesign.current?.ping(tone);
+    }
+  }, [game.recentActivities, game.preferences.soundEnabled]);
+
+  useEffect(() => {
+    if (!game.preferences.musicEnabled) {
+      void soundDesign.current?.setMusic(false);
+    }
+  }, [game.preferences.musicEnabled]);
+
+  useEffect(() => {
+    soundDesign.current?.setMusicVolume(game.preferences.musicVolume);
+  }, [game.preferences.musicVolume]);
   const leads = Object.values(game.records.leads).sort((a, b) =>
     b.createdAt - a.createdAt
   );
@@ -1071,6 +2255,11 @@ export default function CrmApp(props: CrmAppProps) {
   });
   const marketingUnlocked = game.unlocks.includes("marketing");
   const pipelineUnlocked = game.unlocks.includes("pipeline");
+  const customerSuccessUnlocked = game.unlocks.includes("customer_success");
+  const automationUnlocked = customerSuccessUnlocked &&
+    game.company.customerCount >= 8;
+  const operationsUnlocked = game.company.mrrCents >= 1_000_000 ||
+    game.platform.departments.length > 0;
   const referralLeads = leads.filter((lead) => lead.source === "referral");
   const allCampaigns = Object.values(game.records.campaigns).sort((a, b) =>
     b.createdAt - a.createdAt
@@ -1334,10 +2523,61 @@ export default function CrmApp(props: CrmAppProps) {
               ? <ChevronRight size={14} />
               : <LockKeyhole size={13} />}
           </button>
-          <button type="button" class="locked" disabled>
+          <button
+            type="button"
+            class={`${customerSuccessUnlocked ? "" : "locked"} ${
+              view.value === "customers" ? "active" : ""
+            }`}
+            disabled={!customerSuccessUnlocked}
+            onClick={() => navigate("customers")}
+          >
             <Activity size={17} />
             <span>Customer success</span>
-            <LockKeyhole size={13} />
+            {customerSuccessUnlocked
+              ? <ChevronRight size={14} />
+              : <LockKeyhole size={13} />}
+          </button>
+          <button
+            type="button"
+            class={`${automationUnlocked ? "" : "locked"} ${
+              view.value === "automation" ? "active" : ""
+            }`}
+            disabled={!automationUnlocked}
+            onClick={() => navigate("automation")}
+          >
+            <Activity size={17} />
+            <span>Automation</span>
+            {automationUnlocked
+              ? <ChevronRight size={14} />
+              : <LockKeyhole size={13} />}
+          </button>
+          <button
+            type="button"
+            class={`${automationUnlocked ? "" : "locked"} ${
+              view.value === "analytics" ? "active" : ""
+            }`}
+            disabled={!automationUnlocked}
+            onClick={() => navigate("analytics")}
+          >
+            <BarChart3 size={17} />
+            <span>Analytics</span>
+            {automationUnlocked
+              ? <ChevronRight size={14} />
+              : <LockKeyhole size={13} />}
+          </button>
+          <button
+            type="button"
+            class={`${operationsUnlocked ? "" : "locked"} ${
+              view.value === "operations" ? "active" : ""
+            }`}
+            disabled={!operationsUnlocked}
+            onClick={() => navigate("operations")}
+          >
+            <Building2 size={17} />
+            <span>Operations</span>
+            {operationsUnlocked
+              ? <ChevronRight size={14} />
+              : <LockKeyhole size={13} />}
           </button>
         </nav>
         <div class={`unlock-note ${pipelineUnlocked ? "unlocked" : ""}`}>
@@ -2377,6 +3617,14 @@ export default function CrmApp(props: CrmAppProps) {
             </>
           )}
 
+          {view.value === "customers" && customerSuccessUnlocked && (
+            <CustomerSuccessWorkspace
+              game={game}
+              currentMinute={effectiveMinute}
+              dispatch={dispatch}
+            />
+          )}
+
           {view.value === "pipeline" && pipelineUnlocked && (
             <PipelineWorkspace
               game={game}
@@ -2384,6 +3632,22 @@ export default function CrmApp(props: CrmAppProps) {
               mode={game.preferences.pipelineView}
               onModeChange={(view) =>
                 dispatch({ type: "set_pipeline_view", view })}
+              dispatch={dispatch}
+            />
+          )}
+
+          {(view.value === "automation" || view.value === "analytics") &&
+            automationUnlocked && (
+            <PlatformWorkspace
+              game={game}
+              mode={view.value}
+              dispatch={dispatch}
+            />
+          )}
+          {view.value === "operations" && operationsUnlocked && (
+            <PlatformWorkspace
+              game={game}
+              mode="operations"
               dispatch={dispatch}
             />
           )}
@@ -2458,6 +3722,72 @@ export default function CrmApp(props: CrmAppProps) {
                           type: "set_reduced_motion",
                           enabled: event.currentTarget.checked,
                         })}
+                    />
+                  </label>
+                </div>
+                <div class="panel settings-panel sound-panel">
+                  <h2>Sound</h2>
+                  <p>
+                    Optional audio stays local to this browser and can be
+                    changed independently.
+                  </p>
+                  <label class="toggle-row">
+                    <span>
+                      <strong>
+                        <Volume2 size={17} />Notification pings
+                      </strong>
+                      <small>
+                        Hear important arrivals, wins, and warnings.
+                      </small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={game.preferences.soundEnabled}
+                      onChange={(event) => {
+                        const enabled = event.currentTarget.checked;
+                        if (enabled) {
+                          void soundDesign.current?.ping("neutral");
+                        }
+                        dispatch({ type: "set_sound_enabled", enabled });
+                      }}
+                    />
+                  </label>
+                  <label class="toggle-row">
+                    <span>
+                      <strong>
+                        <Music2 size={17} />Lounge music
+                      </strong>
+                      <small>Play the original procedural focus mix.</small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={game.preferences.musicEnabled}
+                      onChange={(event) => {
+                        const enabled = event.currentTarget.checked;
+                        void soundDesign.current?.setMusic(enabled);
+                        dispatch({ type: "set_music_enabled", enabled });
+                      }}
+                    />
+                  </label>
+                  <label class="sound-volume">
+                    <span>
+                      <strong>Music volume</strong>
+                      <output for="music-volume">
+                        {game.preferences.musicVolume}%
+                      </output>
+                    </span>
+                    <input
+                      id="music-volume"
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={game.preferences.musicVolume}
+                      onInput={(event) => {
+                        const volume = Number(event.currentTarget.value);
+                        soundDesign.current?.setMusicVolume(volume);
+                        dispatch({ type: "set_music_volume", volume });
+                      }}
                     />
                   </label>
                 </div>

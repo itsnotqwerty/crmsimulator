@@ -22,6 +22,11 @@ sudo ./deploy/install.sh \
   --env .env
 ```
 
+The referenced environment file must define a stable, high-entropy
+`COOKIE_SECRET`. Use HTTPS for production; otherwise browsers will not receive
+the save cookies with the required `Secure` attribute. Keep the same secret
+across deployments or existing saves will become unreadable.
+
 Example for another project:
 
 ```bash

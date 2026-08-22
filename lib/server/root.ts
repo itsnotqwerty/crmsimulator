@@ -40,6 +40,20 @@ type RootAction =
   | { type: "export" }
   | { type: "import"; data: unknown };
 
+function requestProtocol(request: Request): string {
+  return request.headers.get("x-forwarded-proto")
+    ?.split(",", 1)[0].trim().toLowerCase() || new URL(request.url).protocol;
+}
+
+function requestOrigin(request: Request): string {
+  const url = new URL(request.url);
+  const protocol = requestProtocol(request);
+  if (protocol === "http" || protocol === "https") {
+    url.protocol = `${protocol}:`;
+  }
+  return url.origin;
+}
+
 export function getRootConfig(request: Request): RootConfig {
   const configuredSecret = Deno.env.get("COOKIE_SECRET");
   if (!configuredSecret && Deno.env.get("DENO_DEPLOYMENT_ID")) {
@@ -50,7 +64,8 @@ export function getRootConfig(request: Request): RootConfig {
     secret: configuredSecret ?? DEV_COOKIE_SECRET,
     now: Date.now(),
     seed: crypto.getRandomValues(new Uint32Array(1))[0],
-    secure: new URL(request.url).protocol === "https:",
+    secure: requestProtocol(request) === "https" ||
+      new URL(request.url).protocol === "https:",
   };
 }
 
@@ -157,7 +172,7 @@ export async function loadRoot(
 
 function sameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) return false;
+  if (origin && origin !== requestOrigin(request)) return false;
   return request.headers.get("sec-fetch-site") !== "cross-site";
 }
 

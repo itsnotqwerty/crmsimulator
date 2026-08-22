@@ -42,6 +42,12 @@ const SALES_TERRITORIES = new Set([
 ]);
 const BILLING_CYCLES = new Set(["monthly", "annual"]);
 const QUOTE_STATUSES = new Set(["draft", "sent", "accepted", "expired"]);
+const CUSTOMER_LIFECYCLES = new Set(["onboarding", "active", "at_risk"]);
+const TICKET_CHANNELS = new Set(["email", "chat", "phone"]);
+const TICKET_PRIORITIES = new Set(["low", "normal", "high", "urgent"]);
+const TICKET_STATUSES = new Set(["open", "acknowledged", "resolved"]);
+const INCIDENT_SEVERITIES = new Set(["minor", "major", "critical"]);
+const INCIDENT_STATUSES = new Set(["investigating", "resolved"]);
 const TASK_KINDS = new Set(["call", "email", "follow_up", "onboarding"]);
 const TASK_STATUSES = new Set(["open", "completed", "cancelled"]);
 const CAMPAIGN_CHANNELS = new Set(["email", "paid_social", "events"]);
@@ -160,6 +166,24 @@ function validSalesRep(entry: Record<string, unknown>): boolean {
     isInteger(entry.hiredAt);
 }
 
+function validSuccessRep(entry: Record<string, unknown>): boolean {
+  return hasStrings(entry, ["id", "name", "level"]) &&
+    SALES_REP_LEVELS.has(String(entry.level)) &&
+    isInteger(entry.monthlySalaryCents, 1) && isInteger(entry.skill, 1) &&
+    Number(entry.skill) <= 100 && isInteger(entry.accountCapacity, 1) &&
+    isInteger(entry.burnout) && Number(entry.burnout) <= 100 &&
+    isInteger(entry.hiredAt);
+}
+
+function validSupportRep(entry: Record<string, unknown>): boolean {
+  return hasStrings(entry, ["id", "name", "level"]) &&
+    SALES_REP_LEVELS.has(String(entry.level)) &&
+    isInteger(entry.monthlySalaryCents, 1) && isInteger(entry.skill, 1) &&
+    Number(entry.skill) <= 100 && isInteger(entry.ticketCapacity, 1) &&
+    isInteger(entry.burnout) && Number(entry.burnout) <= 100 &&
+    isInteger(entry.hiredAt);
+}
+
 function validQuote(entry: Record<string, unknown>): boolean {
   return hasStrings(entry, [
     "id",
@@ -177,9 +201,21 @@ function validQuote(entry: Record<string, unknown>): boolean {
 }
 
 function validCustomer(entry: Record<string, unknown>): boolean {
-  return hasStrings(entry, ["id", "companyId", "primaryLeadId"]) &&
+  return hasStrings(entry, [
+    "id",
+    "companyId",
+    "primaryLeadId",
+    "lifecycle",
+  ]) && CUSTOMER_LIFECYCLES.has(String(entry.lifecycle)) &&
     isInteger(entry.monthlyValueCents) && isInteger(entry.health) &&
-    isInteger(entry.startedAt) && isInteger(entry.nextBillingAt);
+    Number(entry.health) <= 100 && isInteger(entry.adoption) &&
+    Number(entry.adoption) <= 100 && isInteger(entry.startedAt) &&
+    isInteger(entry.nextBillingAt) && isInteger(entry.renewalAt) &&
+    isInteger(entry.lastSuccessAt) && isInteger(entry.expansions) &&
+    (entry.lastNpsScore === undefined ||
+      (isInteger(entry.lastNpsScore) && Number(entry.lastNpsScore) <= 10)) &&
+    (entry.lastFeedback === undefined || isString(entry.lastFeedback)) &&
+    (entry.lastSurveyAt === undefined || isInteger(entry.lastSurveyAt));
 }
 
 function validTask(entry: Record<string, unknown>): boolean {
@@ -188,6 +224,74 @@ function validTask(entry: Record<string, unknown>): boolean {
     TASK_STATUSES.has(String(entry.status)) &&
     isInteger(entry.dueAt) && isInteger(entry.createdAt) &&
     (entry.completedAt === undefined || isInteger(entry.completedAt));
+}
+
+function validTicket(entry: Record<string, unknown>): boolean {
+  return hasStrings(entry, [
+    "id",
+    "customerId",
+    "channel",
+    "priority",
+    "status",
+    "title",
+  ]) && TICKET_CHANNELS.has(String(entry.channel)) &&
+    TICKET_PRIORITIES.has(String(entry.priority)) &&
+    TICKET_STATUSES.has(String(entry.status)) &&
+    typeof entry.escalated === "boolean" && isInteger(entry.createdAt) &&
+    isInteger(entry.responseDueAt) && isInteger(entry.resolutionDueAt) &&
+    (entry.ownerId === undefined || isString(entry.ownerId)) &&
+    (entry.acknowledgedAt === undefined || isInteger(entry.acknowledgedAt)) &&
+    (entry.resolvedAt === undefined || isInteger(entry.resolvedAt)) &&
+    (entry.responseBreachedAt === undefined ||
+      isInteger(entry.responseBreachedAt)) &&
+    (entry.resolutionBreachedAt === undefined ||
+      isInteger(entry.resolutionBreachedAt)) &&
+    (entry.resolutionQuality === undefined ||
+      isInteger(entry.resolutionQuality));
+}
+
+function validIncident(entry: Record<string, unknown>): boolean {
+  return hasStrings(entry, [
+    "id",
+    "ticketId",
+    "customerId",
+    "title",
+    "severity",
+    "status",
+  ]) && INCIDENT_SEVERITIES.has(String(entry.severity)) &&
+    INCIDENT_STATUSES.has(String(entry.status)) && isInteger(entry.createdAt) &&
+    (entry.resolvedAt === undefined || isInteger(entry.resolvedAt));
+}
+
+function validPlatform(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const arrays = [
+    "sequences",
+    "workflows",
+    "integrations",
+    "customFields",
+    "savedViews",
+    "dashboardWidgets",
+    "departments",
+  ];
+  const integers = [
+    "duplicateReviews",
+    "duplicatesMerged",
+    "automationRunsArchived",
+    "automationErrorsArchived",
+    "approvalThresholdCents",
+    "auditEntriesArchived",
+    "quarter",
+    "growthTargetCents",
+    "efficiencyTargetPercent",
+    "retentionTargetPercent",
+    "resilienceLevel",
+    "endlessGoal",
+  ];
+  return arrays.every((key) =>
+    Array.isArray(value[key]) && (value[key] as unknown[]).length <= 20
+  ) &&
+    integers.every((key) => isInteger(value[key]));
 }
 
 export function parseGameState(value: unknown): GameState {
@@ -261,6 +365,10 @@ export function parseGameState(value: unknown): GameState {
       "campaign",
       "salesRep",
       "quote",
+      "successRep",
+      "ticket",
+      "supportRep",
+      "incident",
     ].every((key) => isInteger(sequences[key]))
   ) {
     issues.push({ path: "sequences", message: "Invalid entity sequences" });
@@ -296,6 +404,24 @@ export function parseGameState(value: unknown): GameState {
     if (!validEntityMap(value.records.quotes, validQuote)) {
       issues.push({ path: "records.quotes", message: "Invalid quotes" });
     }
+    if (!validEntityMap(value.records.successReps, validSuccessRep)) {
+      issues.push({
+        path: "records.successReps",
+        message: "Invalid customer success representatives",
+      });
+    }
+    if (!validEntityMap(value.records.tickets, validTicket)) {
+      issues.push({ path: "records.tickets", message: "Invalid tickets" });
+    }
+    if (!validEntityMap(value.records.supportReps, validSupportRep)) {
+      issues.push({
+        path: "records.supportReps",
+        message: "Invalid support representatives",
+      });
+    }
+    if (!validEntityMap(value.records.incidents, validIncident)) {
+      issues.push({ path: "records.incidents", message: "Invalid incidents" });
+    }
   }
 
   if (
@@ -327,6 +453,16 @@ export function parseGameState(value: unknown): GameState {
       "campaignsArchived",
       "campaignSpendArchivedCents",
       "campaignLeadsArchived",
+      "customersRenewed",
+      "renewalMrrCents",
+      "churnedMrrCents",
+      "expansionMrrCents",
+      "npsResponses",
+      "npsScoreTotal",
+      "ticketsResolved",
+      "ticketsBreached",
+      "ticketResolutionMinutes",
+      "ticketsArchived",
     ].every((key) => isInteger(history[key]))
   ) {
     issues.push({ path: "history", message: "Invalid aggregate history" });
@@ -347,9 +483,18 @@ export function parseGameState(value: unknown): GameState {
     !isRecord(value.preferences) ||
     typeof value.preferences.reducedMotion !== "boolean" ||
     typeof value.preferences.soundEnabled !== "boolean" ||
+    typeof value.preferences.musicEnabled !== "boolean" ||
+    !isInteger(value.preferences.musicVolume) ||
+    Number(value.preferences.musicVolume) > 100 ||
     !["list", "board"].includes(String(value.preferences.pipelineView))
   ) {
     issues.push({ path: "preferences", message: "Invalid preferences" });
+  }
+  if (!validPlatform(value.platform)) {
+    issues.push({
+      path: "platform",
+      message: "Invalid automation and operations state",
+    });
   }
 
   if (issues.length > 0) throw new SaveValidationError(issues);

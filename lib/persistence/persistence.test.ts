@@ -109,7 +109,7 @@ Deno.test("version 1 saves migrate with empty campaign state", () => {
   delete (legacy.history as Record<string, unknown>).campaignLeadsArchived;
 
   const migrated = migrateGameState(legacy);
-  assertEquals(migrated.schemaVersion, 8);
+  assertEquals(migrated.schemaVersion, 16);
   assertEquals(migrated.sequences.campaign, 0);
   assertEquals(migrated.records.campaigns, {});
   assertEquals(migrated.history.campaignsArchived, 0);
@@ -117,6 +117,12 @@ Deno.test("version 1 saves migrate with empty campaign state", () => {
   assertEquals(migrated.records.salesReps, {});
   assertEquals(migrated.sequences.quote, 0);
   assertEquals(migrated.records.quotes, {});
+  assertEquals(migrated.sequences.ticket, 0);
+  assertEquals(migrated.records.tickets, {});
+  assertEquals(migrated.sequences.supportRep, 0);
+  assertEquals(migrated.records.supportReps, {});
+  assertEquals(migrated.sequences.incident, 0);
+  assertEquals(migrated.records.incidents, {});
 });
 
 Deno.test("version 3 deals migrate with an inferred product", () => {
@@ -141,7 +147,7 @@ Deno.test("version 3 deals migrate with an inferred product", () => {
 
   const migrated = migrateGameState(legacy);
 
-  assertEquals(migrated.schemaVersion, 8);
+  assertEquals(migrated.schemaVersion, 16);
   assertEquals(migrated.records.deals.deal_1.product, expectedProduct);
   assertEquals(migrated.records.salesReps, {});
   assertEquals(migrated.records.quotes, {});
@@ -178,6 +184,136 @@ Deno.test("codec preserves populated quote records", async () => {
   }).state;
 
   assertEquals(await decodeGameState(await encodeGameState(state)), state);
+});
+
+Deno.test("version 8 customers migrate into active lifecycle records", () => {
+  const current = createInitialState({ seed: 28, now: 1_000 });
+  const legacy = {
+    ...current,
+    schemaVersion: 8,
+    company: { ...current.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...current.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 80,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+        },
+      },
+    },
+  };
+
+  const migrated = migrateGameState(legacy);
+  assertEquals(migrated.schemaVersion, 16);
+  assertEquals(migrated.records.customers.customer_1.lifecycle, "active");
+  assertEquals(migrated.records.customers.customer_1.adoption, 65);
+  assertEquals(migrated.records.customers.customer_1.renewalAt, 43_200);
+});
+
+Deno.test("version 11 tickets migrate to dedicated support ownership", () => {
+  const current = createInitialState({ seed: 32, now: 1_000 });
+  const legacy = structuredClone(current) as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 11;
+  const sequences = legacy.sequences as Record<string, unknown>;
+  delete sequences.supportRep;
+  delete sequences.incident;
+  const records = legacy.records as Record<string, unknown>;
+  delete records.supportReps;
+  delete records.incidents;
+  records.tickets = {
+    ticket_1: {
+      id: "ticket_1",
+      customerId: "customer_1",
+      channel: "email",
+      priority: "normal",
+      status: "open",
+      title: "Legacy issue",
+      createdAt: 0,
+      responseDueAt: 480,
+      resolutionDueAt: 1_440,
+      ownerId: "success_rep_1",
+    },
+  };
+  records.customers = {
+    customer_1: {
+      id: "customer_1",
+      companyId: "company_1",
+      primaryLeadId: "lead_1",
+      monthlyValueCents: 50_000,
+      health: 80,
+      adoption: 70,
+      lifecycle: "active",
+      startedAt: 0,
+      nextBillingAt: 43_200,
+      renewalAt: 43_200,
+      lastSuccessAt: 0,
+      expansions: 0,
+    },
+  };
+
+  const migrated = migrateGameState(legacy);
+
+  assertEquals(migrated.schemaVersion, 16);
+  assertEquals(migrated.records.tickets.ticket_1.ownerId, undefined);
+  assertEquals(migrated.records.tickets.ticket_1.escalated, false);
+  assertEquals(migrated.records.supportReps, {});
+  assertEquals(migrated.records.incidents, {});
+});
+
+Deno.test("codec preserves success representatives and account ownership", async () => {
+  const initial = createInitialState({ seed: 29, now: 1_000 });
+  const state = applyCommand(
+    { ...initial, unlocks: ["customer_success"] },
+    { type: "hire_success_rep", name: "Morgan Lee", level: "mid" },
+  ).state;
+
+  assertEquals(await decodeGameState(await encodeGameState(state)), state);
+  assertEquals(state.records.successReps.success_rep_1.accountCapacity, 12);
+});
+
+Deno.test("codec preserves support tickets and SLA deadlines", async () => {
+  const initial = createInitialState({ seed: 31, now: 1_000 });
+  const withCustomer = {
+    ...initial,
+    unlocks: ["customer_success" as const],
+    company: { ...initial.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...initial.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 80,
+          adoption: 70,
+          lifecycle: "active" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+  const state = applyCommand(withCustomer, {
+    type: "create_ticket",
+    customerId: "customer_1",
+    channel: "email",
+    priority: "high",
+    title: "Dashboard export is unavailable",
+  }).state;
+
+  const decoded = await decodeGameState(await encodeGameState(state));
+
+  assertEquals(decoded, state);
+  assertEquals(decoded.records.tickets.ticket_1.resolutionDueAt, 12 * 60);
 });
 
 Deno.test("modified cookie payload is rejected", async () => {

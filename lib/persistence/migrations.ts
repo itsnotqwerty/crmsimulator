@@ -95,6 +95,135 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       pipelineView: "list",
     },
   }),
+  9: (save) => {
+    const records = save.records as Record<string, unknown>;
+    const customers = records.customers as Record<
+      string,
+      Record<string, unknown>
+    >;
+    return {
+      ...save,
+      records: {
+        ...records,
+        customers: Object.fromEntries(
+          Object.entries(customers).map(([id, customer]) => [
+            id,
+            {
+              ...customer,
+              adoption: 65,
+              lifecycle: Number(customer.health) < 45 ? "at_risk" : "active",
+              renewalAt: customer.nextBillingAt,
+              lastSuccessAt: customer.startedAt,
+              expansions: 0,
+            },
+          ]),
+        ),
+      },
+    };
+  },
+  10: (save) => ({
+    ...save,
+    sequences: {
+      ...(save.sequences as Record<string, unknown>),
+      successRep: 0,
+    },
+    records: {
+      ...(save.records as Record<string, unknown>),
+      successReps: {},
+    },
+  }),
+  11: (save) => ({
+    ...save,
+    sequences: {
+      ...(save.sequences as Record<string, unknown>),
+      ticket: 0,
+    },
+    records: {
+      ...(save.records as Record<string, unknown>),
+      tickets: {},
+    },
+  }),
+  12: (save) => {
+    const records = save.records as Record<string, unknown>;
+    const tickets = records.tickets as Record<
+      string,
+      Record<string, unknown>
+    >;
+    return {
+      ...save,
+      sequences: {
+        ...(save.sequences as Record<string, unknown>),
+        supportRep: 0,
+        incident: 0,
+      },
+      records: {
+        ...records,
+        tickets: Object.fromEntries(
+          Object.entries(tickets).map(([id, ticket]) => {
+            const { ownerId: _ownerId, ...unassigned } = ticket;
+            return [id, { ...unassigned, escalated: false }];
+          }),
+        ),
+        supportReps: {},
+        incidents: {},
+      },
+    };
+  },
+  13: (save) => ({
+    ...save,
+    history: {
+      ...(save.history as Record<string, unknown>),
+      customersRenewed: 0,
+      renewalMrrCents: 0,
+      churnedMrrCents: 0,
+      expansionMrrCents: 0,
+      npsResponses: 0,
+      npsScoreTotal: 0,
+      ticketsResolved: 0,
+      ticketsBreached: 0,
+      ticketResolutionMinutes: 0,
+      ticketsArchived: 0,
+    },
+  }),
+  14: (save) => ({
+    ...save,
+    platform: {
+      sequences: [],
+      workflows: [],
+      integrations: [],
+      customFields: [],
+      savedViews: [],
+      dashboardWidgets: ["cash", "mrr", "pipeline", "retention"],
+      duplicateReviews: 0,
+      duplicatesMerged: 0,
+      automationRunsArchived: 0,
+      automationErrorsArchived: 0,
+      departments: [],
+      approvalThresholdCents: 100_000,
+      auditEntriesArchived: 0,
+      quarter: 1,
+      growthTargetCents: 500_000,
+      efficiencyTargetPercent: 70,
+      retentionTargetPercent: 90,
+      resilienceLevel: 0,
+      endlessGoal: 1,
+    },
+  }),
+  15: (save) => ({
+    ...save,
+    preferences: {
+      ...(save.preferences as Record<string, unknown>),
+      soundEnabled: false,
+      musicEnabled: false,
+    },
+  }),
+  16: (save) => ({
+    ...save,
+    preferences: {
+      ...(save.preferences as Record<string, unknown>),
+      musicVolume: 35,
+    },
+  }),
 };
 
 export function migrateGameState(value: unknown): GameState {

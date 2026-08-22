@@ -41,6 +41,29 @@ rep burnout and lowers deal progression, while paid training improves skill and
 relieves burnout. Pipeline list and board preferences persist with the save, and
 list selection supports bulk ownership and stage advancement.
 
+Release 5 begins with a Customer Success workspace unlocked at five retained
+customers. Account health and adoption respond to onboarding, check-ins, and
+neglect; renewal outcomes can retain or churn MRR, while healthy adopted
+accounts can expand. Customer-success specialists add recurring payroll, account
+ownership, capacity and burnout, while adoption and recovery playbooks turn the
+account portfolio into a prioritized work queue. The Support Inbox adds
+persistent priority- and channel-based tickets, assignment, acknowledgement and
+resolution workflows, and visible SLA timers. Missed response or resolution
+deadlines reduce account health. Dedicated support agents add payroll, skill,
+ticket capacity, and burnout. Escalated tickets can become incidents whose
+recovery quality and duration directly affect customer health.
+
+Releases 5 through 7 are complete. NPS, retention and support reporting feed a
+bounded history model. Automation adds sequences, trigger-condition-action
+workflows, simulated integrations, custom fields, saved views, and duplicate
+review. Analytics derives funnel, cohort, attribution, retention, and forecast
+variance from canonical state. Mature operations adds departments, headcount
+plans, approval controls, quarterly targets, resilience investment, audit
+summaries, and escalating goals without introducing a final victory state.
+Optional notification pings and an original procedurally synthesized lounge loop
+are available in Settings. Both are disabled by default and use the Web Audio
+API, so no licensed recordings or external media requests are involved.
+
 ## Core rules
 
 - One real minute equals one game hour.

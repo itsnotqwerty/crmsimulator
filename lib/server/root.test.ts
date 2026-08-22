@@ -1,7 +1,12 @@
 import { assert, assertEquals, assertStringIncludes } from "$std/assert/mod.ts";
 import { createInitialState } from "../game/state.ts";
 import { createSetCookieHeaders } from "../persistence/cookies.ts";
-import { handleRootPost, loadRoot, type RootConfig } from "./root.ts";
+import {
+  getRootConfig,
+  handleRootPost,
+  loadRoot,
+  type RootConfig,
+} from "./root.ts";
 
 const SECRET = "root-adapter-test-secret";
 const URL = "https://crm.example/";
@@ -63,6 +68,14 @@ Deno.test("root GET initializes a signed cookie save", async () => {
   assert(loaded.setCookies.every((cookie) => cookie.includes("Secure")));
 });
 
+Deno.test("forwarded HTTPS marks proxy-served cookies secure", () => {
+  const request = new Request("http://127.0.0.1:8000/", {
+    headers: { "x-forwarded-proto": "https" },
+  });
+
+  assertEquals(getRootConfig(request).secure, true);
+});
+
 Deno.test("root GET loads cookies and advances offline time", async () => {
   const initial = createInitialState({ seed: 72, now: 1_000 });
   const cookies = await createSetCookieHeaders(initial, SECRET, {
@@ -118,6 +131,23 @@ Deno.test("root POST rejects cross-origin actions", async () => {
   );
 
   assertEquals(response.status, 403);
+});
+
+Deno.test("root POST accepts same-origin actions through an HTTPS proxy", async () => {
+  const request = new Request("http://crm.example/", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: "https://crm.example",
+      "sec-fetch-site": "same-origin",
+      "x-forwarded-proto": "https",
+    },
+    body: JSON.stringify({ type: "reset" }),
+  });
+
+  const response = await handleRootPost(request, config(1_000));
+
+  assertEquals(response.status, 200);
 });
 
 Deno.test("root export, import, and reset preserve cookie contract", async () => {

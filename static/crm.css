@@ -1358,6 +1358,17 @@ td small {
   background: var(--surface);
 }
 
+.advanced-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 20px 20px;
+}
+
 .pipeline-summary span {
   color: var(--muted);
   font-size: 14px;
@@ -1443,6 +1454,214 @@ td small {
 
 .bulk-actions select {
   min-width: 140px;
+}
+
+.customer-table {
+  min-width: 1160px;
+}
+
+.customer-table td:first-child span,
+.customer-table td:first-child small {
+  display: block;
+}
+
+.health-meter {
+  width: 92px;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.health-meter span {
+  display: block;
+  height: 100%;
+  background: var(--green);
+}
+
+.status.at_risk {
+  color: var(--coral);
+  background: var(--coral-soft);
+}
+
+.customer-actions {
+  display: flex;
+  min-width: max-content;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.success-hire-form,
+.support-hire-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(240px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 15px 17px;
+}
+
+.success-hire-form label,
+.support-hire-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.success-hire-form input,
+.success-hire-form select,
+.support-hire-form input,
+.support-hire-form select {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  background: white;
+  font: inherit;
+}
+
+.success-team-list,
+.support-team-list {
+  display: grid;
+  margin: 0 17px;
+  border-top: 1px solid var(--line);
+}
+
+.success-team-list > div,
+.support-team-list > div {
+  display: grid;
+  grid-template-columns: 42px minmax(150px, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.success-team-list > div > span:nth-child(2),
+.support-team-list > div > span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+}
+
+.success-team-list small,
+.support-team-list small {
+  color: var(--muted);
+}
+
+.success-team-list .overloaded,
+.support-team-list .overloaded {
+  color: var(--coral);
+  font-weight: 700;
+}
+
+.support-panel {
+  margin-bottom: 16px;
+}
+
+.support-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  border-block: 1px solid var(--line);
+  background: var(--line);
+}
+
+.support-summary > div {
+  display: grid;
+  gap: 3px;
+  padding: 12px 17px;
+  background: var(--surface);
+}
+
+.support-summary span,
+.support-table small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.support-summary strong {
+  font-size: 20px;
+}
+
+.ticket-create-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 120px 120px minmax(220px, 2fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 15px 17px;
+}
+
+.ticket-create-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ticket-create-form input,
+.ticket-create-form select {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  background: white;
+  font: inherit;
+}
+
+.support-table {
+  min-width: 1080px;
+}
+
+.support-table td:first-child strong,
+.support-table td:first-child small {
+  display: block;
+}
+
+.ticket-priority {
+  font-weight: 800;
+}
+
+.ticket-priority.high,
+.ticket-priority.urgent,
+.sla-breached {
+  color: var(--coral);
+}
+
+.ticket-actions {
+  display: flex;
+  min-width: max-content;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.incident-list {
+  border-top: 1px solid var(--line);
+}
+
+.incident-list > div:not(.table-toolbar) {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(150px, auto) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 17px;
+  border-top: 1px solid var(--line);
+}
+
+.incident-list > div > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.incident-list small {
+  color: var(--muted);
 }
 
 .hire-rep-form label {
@@ -1974,7 +2193,48 @@ td small {
 }
 
 .toggle-row strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 17px;
+}
+
+.sound-panel .toggle-row + .toggle-row {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.sound-volume {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.sound-volume > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sound-volume strong,
+.sound-volume output {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.sound-volume output {
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+
+.sound-volume input {
+  width: 100%;
+  accent-color: var(--green);
+  cursor: pointer;
 }
 
 .toggle-row small {
@@ -2287,6 +2547,9 @@ table,
 }
 
 @media (max-width: 860px) {
+  .advanced-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .mobile-only {
     display: inline-grid;
   }
@@ -2334,6 +2597,25 @@ table,
 
   .hire-rep-form {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .success-hire-form,
+  .support-hire-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ticket-create-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ticket-title-field {
+    grid-column: 1 / -1;
+  }
+
+  .success-hire-form button,
+  .support-hire-form button {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
   .quote-form {
@@ -2505,6 +2787,36 @@ table,
 
   .hire-rep-form {
     grid-template-columns: 1fr;
+  }
+
+  .success-hire-form,
+  .support-hire-form,
+  .success-team-list > div,
+  .support-team-list > div,
+  .incident-list > div:not(.table-toolbar) {
+    grid-template-columns: 1fr;
+  }
+
+  .support-summary,
+  .ticket-create-form {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-title-field {
+    grid-column: auto;
+  }
+
+  .ticket-create-form button {
+    width: 100%;
+  }
+
+  .success-hire-form button {
+    width: 100%;
+  }
+
+  .success-team-list .rep-avatar,
+  .support-team-list .rep-avatar {
+    display: none;
   }
 
   .quote-form,

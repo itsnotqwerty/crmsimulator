@@ -228,17 +228,17 @@ follow-up cannot absorb.
 **Outcome:** Growth depends on retaining and supporting customers, not only
 acquiring them.
 
-- [ ] Add account health, onboarding, adoption, renewal, expansion, and churn
+- [x] Add account health, onboarding, adoption, renewal, expansion, and churn
       risk.
-- [ ] Add customer-success staff, ownership, playbooks, and work queues.
-- [ ] Add Support Inbox, tickets, priority, channel, status, assignment, and SLA
+- [x] Add customer-success staff, ownership, playbooks, and work queues.
+- [x] Add Support Inbox, tickets, priority, channel, status, assignment, and SLA
       timers.
-- [ ] Add support staffing, escalation, incidents, and resolution quality.
-- [ ] Add NPS and customer feedback workflows.
-- [ ] Add gross retention, net retention, churn, expansion, SLA, and workload
+- [x] Add support staffing, escalation, incidents, and resolution quality.
+- [x] Add NPS and customer feedback workflows.
+- [x] Add gross retention, net retention, churn, expansion, SLA, and workload
       reports.
-- [ ] Model neglected accounts, service overload, recovery, and customer loss.
-- [ ] Aggregate closed ticket and historical health detail.
+- [x] Model neglected accounts, service overload, recovery, and customer loss.
+- [x] Aggregate closed ticket and historical health detail.
 
 **Acceptance checks**
 
@@ -254,16 +254,16 @@ management capacity.
 
 **Outcome:** The player designs systems that operate the CRM at scale.
 
-- [ ] Add sequences for repeatable sales and success outreach.
-- [ ] Add a visual trigger-condition-action workflow builder.
-- [ ] Execute automations through bounded deterministic commands and events.
-- [ ] Add loop detection, per-interval limits, errors, and execution history
+- [x] Add sequences for repeatable sales and success outreach.
+- [x] Add a visual trigger-condition-action workflow builder.
+- [x] Execute automations through bounded deterministic commands and events.
+- [x] Add loop detection, per-interval limits, errors, and execution history
       summaries.
-- [ ] Add funnel, cohort, retention, attribution, and forecast-variance reports.
-- [ ] Add weighted multi-touch attribution.
-- [ ] Add custom fields, filters, saved views, and dashboard composition.
-- [ ] Add simulated integrations with sync status, mappings, and failures.
-- [ ] Add data-quality and duplicate-management workflows.
+- [x] Add funnel, cohort, retention, attribution, and forecast-variance reports.
+- [x] Add weighted multi-touch attribution.
+- [x] Add custom fields, filters, saved views, and dashboard composition.
+- [x] Add simulated integrations with sync status, mappings, and failures.
+- [x] Add data-quality and duplicate-management workflows.
 
 **Acceptance checks**
 
@@ -281,20 +281,20 @@ structure.
 **Outcome:** The CRM becomes a full company operating system with no final
 victory state.
 
-- [ ] Add departments, managers, budgets, headcount plans, and cross-team
+- [x] Add departments, managers, budgets, headcount plans, and cross-team
       capacity.
-- [ ] Add hiring pipelines, training, compensation pressure, burnout, and
+- [x] Add hiring pipelines, training, compensation pressure, burnout, and
       attrition.
-- [ ] Add larger customer segments with longer cycles, larger contracts, and
+- [x] Add larger customer segments with longer cycles, larger contracts, and
       stricter service demands.
-- [ ] Add recurring operational incidents and resilience investments.
-- [ ] Add simulated roles, permissions, and approval workflows without real
+- [x] Add recurring operational incidents and resilience investments.
+- [x] Add simulated roles, permissions, and approval workflows without real
       auth.
-- [ ] Add quarterly planning and efficiency targets.
-- [ ] Add advanced data hygiene, audit summaries, and archive controls.
-- [ ] Add escalating endless goals for growth, efficiency, retention, and
+- [x] Add quarterly planning and efficiency targets.
+- [x] Add advanced data hygiene, audit summaries, and archive controls.
+- [x] Add escalating endless goals for growth, efficiency, retention, and
       resilience.
-- [ ] Consider an optional prestige-like voluntary company restart only after
+- [x] Consider an optional prestige-like voluntary company restart only after
       the endless loop is balanced; it is not part of the base promise.
 
 **Acceptance checks**
@@ -326,7 +326,7 @@ Every release must:
 The repository began from a prior Fresh project scaffold. These items are not
 gameplay work but must be completed before production release:
 
-- verify deployment instructions against the final cookie secret and HTTPS
-  requirements;
-- review repository metadata, deploy workflow, and license text for stale
-  project references.
+- [x] Verify deployment instructions against the final cookie secret and HTTPS
+      requirements;
+- [x] Review repository metadata, deploy workflow, and license text for stale
+      project references.

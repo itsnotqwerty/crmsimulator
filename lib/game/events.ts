@@ -34,6 +34,20 @@ export function projectEvents(
       case "deal_lost":
         history.dealsLost += 1;
         break;
+      case "customer_churned":
+        history.customersLost += 1;
+        history.churnedMrrCents += event.amountCents ?? 0;
+        break;
+      case "customer_renewed":
+        history.customersRenewed += 1;
+        history.renewalMrrCents += event.amountCents ?? 0;
+        break;
+      case "customer_expanded":
+        history.expansionMrrCents += event.amountCents ?? 0;
+        break;
+      case "ticket_sla_breached":
+        history.ticketsBreached += 1;
+        break;
       case "revenue_accrued":
         history.revenueAccruedCents += event.amountCents ?? 0;
         break;

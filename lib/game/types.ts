@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 8 as const;
+export const SAVE_SCHEMA_VERSION = 16 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -22,6 +22,12 @@ export type DealStage =
 export type DealProduct = "starter" | "growth" | "scale";
 export type BillingCycle = "monthly" | "annual";
 export type QuoteStatus = "draft" | "sent" | "accepted" | "expired";
+export type CustomerLifecycle = "onboarding" | "active" | "at_risk";
+export type TicketChannel = "email" | "chat" | "phone";
+export type TicketPriority = "low" | "normal" | "high" | "urgent";
+export type TicketStatus = "open" | "acknowledged" | "resolved";
+export type IncidentSeverity = "minor" | "major" | "critical";
+export type IncidentStatus = "investigating" | "resolved";
 export type SalesRepLevel = "junior" | "mid" | "senior";
 export type SalesTerritory =
   | "all"
@@ -55,6 +61,25 @@ export type ActivityKind =
   | "quote_sent"
   | "quote_accepted"
   | "quote_expired"
+  | "customer_onboarded"
+  | "customer_check_in"
+  | "customer_renewed"
+  | "customer_expanded"
+  | "customer_at_risk"
+  | "customer_churned"
+  | "success_rep_hired"
+  | "customer_assigned"
+  | "success_playbook_run"
+  | "ticket_created"
+  | "ticket_assigned"
+  | "ticket_acknowledged"
+  | "ticket_resolved"
+  | "ticket_sla_breached"
+  | "support_rep_hired"
+  | "ticket_escalated"
+  | "incident_declared"
+  | "incident_resolved"
+  | "customer_feedback_received"
   | "task_created"
   | "task_completed"
   | "task_overdue"
@@ -70,6 +95,73 @@ export type ActivityKind =
   | "campaign_resumed"
   | "campaign_completed"
   | "campaign_archived";
+export type AutomationTrigger =
+  | "lead_created"
+  | "deal_won"
+  | "customer_at_risk";
+export type AutomationAction = "create_task" | "send_outreach" | "assign_owner";
+
+export interface SequenceAutomation {
+  id: EntityId;
+  name: string;
+  audience: "leads" | "customers";
+  enabled: boolean;
+  enrolled: number;
+  completed: number;
+}
+
+export interface WorkflowAutomation {
+  id: EntityId;
+  name: string;
+  trigger: AutomationTrigger;
+  condition: "all" | "high_value" | "unassigned";
+  action: AutomationAction;
+  enabled: boolean;
+  runs: number;
+  errors: number;
+  lastRunAt?: GameMinute;
+}
+
+export interface SimulatedIntegration {
+  id: EntityId;
+  name: string;
+  mapping: string;
+  status: "connected" | "syncing" | "failed";
+  recordsSynced: number;
+  failures: number;
+}
+
+export interface Department {
+  id: EntityId;
+  name: string;
+  manager: string;
+  monthlyBudgetCents: number;
+  headcountPlan: number;
+  headcount: number;
+  burnout: number;
+}
+
+export interface PlatformState {
+  sequences: SequenceAutomation[];
+  workflows: WorkflowAutomation[];
+  integrations: SimulatedIntegration[];
+  customFields: string[];
+  savedViews: string[];
+  dashboardWidgets: string[];
+  duplicateReviews: number;
+  duplicatesMerged: number;
+  automationRunsArchived: number;
+  automationErrorsArchived: number;
+  departments: Department[];
+  approvalThresholdCents: number;
+  auditEntriesArchived: number;
+  quarter: number;
+  growthTargetCents: number;
+  efficiencyTargetPercent: number;
+  retentionTargetPercent: number;
+  resilienceLevel: number;
+  endlessGoal: number;
+}
 export type CampaignChannel = "email" | "paid_social" | "events";
 export type CampaignAudience = "small_business" | "mid_market" | "enterprise";
 export type CampaignStatus = "active" | "paused" | "completed" | "archived";
@@ -182,8 +274,69 @@ export interface Customer {
   primaryLeadId: EntityId;
   monthlyValueCents: number;
   health: number;
+  adoption: number;
+  lifecycle: CustomerLifecycle;
   startedAt: GameMinute;
   nextBillingAt: GameMinute;
+  renewalAt: GameMinute;
+  lastSuccessAt: GameMinute;
+  expansions: number;
+  ownerId?: EntityId;
+  lastNpsScore?: number;
+  lastFeedback?: string;
+  lastSurveyAt?: GameMinute;
+}
+
+export interface SuccessRep {
+  id: EntityId;
+  name: string;
+  level: SalesRepLevel;
+  monthlySalaryCents: number;
+  skill: number;
+  accountCapacity: number;
+  burnout: number;
+  hiredAt: GameMinute;
+}
+
+export interface Ticket {
+  id: EntityId;
+  customerId: EntityId;
+  channel: TicketChannel;
+  priority: TicketPriority;
+  status: TicketStatus;
+  title: string;
+  createdAt: GameMinute;
+  responseDueAt: GameMinute;
+  resolutionDueAt: GameMinute;
+  ownerId?: EntityId;
+  acknowledgedAt?: GameMinute;
+  resolvedAt?: GameMinute;
+  responseBreachedAt?: GameMinute;
+  resolutionBreachedAt?: GameMinute;
+  escalated: boolean;
+  resolutionQuality?: number;
+}
+
+export interface SupportRep {
+  id: EntityId;
+  name: string;
+  level: SalesRepLevel;
+  monthlySalaryCents: number;
+  skill: number;
+  ticketCapacity: number;
+  burnout: number;
+  hiredAt: GameMinute;
+}
+
+export interface Incident {
+  id: EntityId;
+  ticketId: EntityId;
+  customerId: EntityId;
+  title: string;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  createdAt: GameMinute;
+  resolvedAt?: GameMinute;
 }
 
 export interface Task {
@@ -217,6 +370,16 @@ export interface AggregateHistory {
   campaignsArchived: number;
   campaignSpendArchivedCents: number;
   campaignLeadsArchived: number;
+  customersRenewed: number;
+  renewalMrrCents: number;
+  churnedMrrCents: number;
+  expansionMrrCents: number;
+  npsResponses: number;
+  npsScoreTotal: number;
+  ticketsResolved: number;
+  ticketsBreached: number;
+  ticketResolutionMinutes: number;
+  ticketsArchived: number;
 }
 
 export interface SequenceState {
@@ -229,6 +392,10 @@ export interface SequenceState {
   campaign: number;
   salesRep: number;
   quote: number;
+  successRep: number;
+  ticket: number;
+  supportRep: number;
+  incident: number;
 }
 
 export interface RecordState {
@@ -240,6 +407,10 @@ export interface RecordState {
   campaigns: Record<EntityId, Campaign>;
   salesReps: Record<EntityId, SalesRep>;
   quotes: Record<EntityId, Quote>;
+  successReps: Record<EntityId, SuccessRep>;
+  tickets: Record<EntityId, Ticket>;
+  supportReps: Record<EntityId, SupportRep>;
+  incidents: Record<EntityId, Incident>;
 }
 
 export interface OnboardingState {
@@ -255,6 +426,8 @@ export interface OnboardingState {
 export interface PreferenceState {
   reducedMotion: boolean;
   soundEnabled: boolean;
+  musicEnabled: boolean;
+  musicVolume: number;
   pipelineView: "list" | "board";
 }
 
@@ -276,6 +449,7 @@ export interface GameState {
   unlocks: UnlockId[];
   onboarding: OnboardingState;
   preferences: PreferenceState;
+  platform: PlatformState;
 }
 
 export type GameCommand =
@@ -355,6 +529,9 @@ export type GameCommand =
   | { type: "archive_campaign"; campaignId: EntityId }
   | { type: "rename_company"; name: string }
   | { type: "set_reduced_motion"; enabled: boolean }
+  | { type: "set_sound_enabled"; enabled: boolean }
+  | { type: "set_music_enabled"; enabled: boolean }
+  | { type: "set_music_volume"; volume: number }
   | { type: "set_pipeline_view"; view: "list" | "board" }
   | { type: "bulk_advance_deals"; dealIds: EntityId[] }
   | {
@@ -363,6 +540,72 @@ export type GameCommand =
     ownerId?: EntityId;
   }
   | { type: "complete_task"; taskId: EntityId }
+  | { type: "complete_customer_onboarding"; customerId: EntityId }
+  | { type: "customer_check_in"; customerId: EntityId }
+  | { type: "renew_customer"; customerId: EntityId }
+  | { type: "expand_customer"; customerId: EntityId }
+  | { type: "hire_success_rep"; name: string; level: SalesRepLevel }
+  | {
+    type: "assign_customer";
+    customerId: EntityId;
+    ownerId?: EntityId;
+  }
+  | {
+    type: "run_success_playbook";
+    customerId: EntityId;
+    playbook: "onboarding" | "adoption" | "recovery";
+  }
+  | {
+    type: "create_ticket";
+    customerId: EntityId;
+    channel: TicketChannel;
+    priority: TicketPriority;
+    title: string;
+  }
+  | { type: "assign_ticket"; ticketId: EntityId; ownerId?: EntityId }
+  | { type: "acknowledge_ticket"; ticketId: EntityId }
+  | { type: "resolve_ticket"; ticketId: EntityId }
+  | { type: "hire_support_rep"; name: string; level: SalesRepLevel }
+  | { type: "escalate_ticket"; ticketId: EntityId }
+  | {
+    type: "declare_incident";
+    ticketId: EntityId;
+    severity: IncidentSeverity;
+  }
+  | { type: "resolve_incident"; incidentId: EntityId }
+  | { type: "send_nps_survey"; customerId: EntityId }
+  | { type: "create_sequence"; name: string; audience: "leads" | "customers" }
+  | { type: "toggle_sequence"; sequenceId: EntityId }
+  | {
+    type: "create_workflow";
+    name: string;
+    trigger: AutomationTrigger;
+    condition: "all" | "high_value" | "unassigned";
+    action: AutomationAction;
+  }
+  | { type: "toggle_workflow"; workflowId: EntityId }
+  | { type: "connect_integration"; name: string; mapping: string }
+  | { type: "retry_integration"; integrationId: EntityId }
+  | { type: "add_custom_field"; name: string }
+  | { type: "save_view"; name: string }
+  | { type: "merge_duplicates" }
+  | {
+    type: "create_department";
+    name: string;
+    manager: string;
+    monthlyBudgetCents: number;
+    headcountPlan: number;
+  }
+  | { type: "hire_department_staff"; departmentId: EntityId }
+  | { type: "set_approval_threshold"; amountCents: number }
+  | {
+    type: "set_quarterly_plan";
+    growthTargetCents: number;
+    efficiencyTargetPercent: number;
+    retentionTargetPercent: number;
+  }
+  | { type: "invest_resilience" }
+  | { type: "advance_endless_goal" }
   | { type: "resume_crisis" }
   | { type: "new_company"; seed: number; now: number; companyName?: string };
 
@@ -413,6 +656,13 @@ export interface GameRules {
   maxCampaignRecords: number;
   maxSalesReps: number;
   maxQuoteRecords: number;
+  customerSuccessUnlockCustomers: number;
+  customerRenewalIntervalMinutes: number;
+  customerNeglectGraceMinutes: number;
+  maxSuccessReps: number;
+  maxTicketRecords: number;
+  maxSupportReps: number;
+  maxIncidentRecords: number;
 }
 
 export interface ValidationIssue {
