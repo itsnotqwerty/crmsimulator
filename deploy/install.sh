@@ -75,6 +75,7 @@ systemd_dir="/etc/systemd/system"
 dry_run="false"
 cert_was_set="false"
 key_was_set="false"
+deno_install_root="${DENO_INSTALL_ROOT:-/usr/local}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -212,8 +213,8 @@ start_executable="${start_command%% *}"
 install_deno="false"
 if [[ ! -x "$start_executable" ]]; then
   if [[ "$(basename "$start_executable")" == "deno" ]]; then
-    start_command="/usr/local/bin/deno${start_command#"$start_executable"}"
-    start_executable="/usr/local/bin/deno"
+    start_command="${deno_install_root%/}/bin/deno${start_command#"$start_executable"}"
+    start_executable="${deno_install_root%/}/bin/deno"
     if [[ ! -x "$start_executable" ]]; then
       install_deno="true"
     fi
@@ -348,7 +349,7 @@ fi
 
 if [[ "$dry_run" == "true" ]]; then
   if [[ "$install_deno" == "true" ]]; then
-    printf '%s\n' "--- install Deno -> /usr/local/bin/deno"
+    printf '%s\n' "--- install Deno -> ${start_executable}"
   fi
   printf '%s\n' "--- ${service_dest}"
   cat "$rendered_service"
@@ -378,7 +379,7 @@ if [[ "$install_deno" == "true" ]]; then
   deno_installer="${work_dir}/install-deno.sh"
   curl --proto '=https' --tlsv1.2 -fsSL \
     https://deno.land/install.sh -o "$deno_installer"
-  DENO_INSTALL=/usr/local sh "$deno_installer"
+  DENO_INSTALL="$deno_install_root" sh "$deno_installer"
 fi
 if [[ ! -x "$start_executable" ]]; then
   echo "Start executable does not exist or is not executable: $start_executable" >&2

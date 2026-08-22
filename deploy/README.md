@@ -41,10 +41,10 @@ sudo ./deploy/install.sh \
 ```
 
 Use `--dry-run` without root to inspect rendered systemd and nginx files. Use
-`--skip-nginx` when another reverse proxy or load balancer owns ingress.
-Dry-run output reports when Deno would be installed. Before writing the systemd
-unit, a real installation verifies that the service user can execute the chosen
-runtime, preventing a delayed `203/EXEC` service failure.
+`--skip-nginx` when another reverse proxy or load balancer owns ingress. Dry-run
+output reports when Deno would be installed. Before writing the systemd unit, a
+real installation verifies that the service user can execute the chosen runtime,
+preventing a delayed `203/EXEC` service failure.
 
 ## TLS
 
