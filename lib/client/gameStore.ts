@@ -3,6 +3,7 @@ import { useEffect, useRef } from "preact/hooks";
 import { applyCommand } from "../game/actions.ts";
 import { advanceGame } from "../game/simulation.ts";
 import { DEFAULT_RULES } from "../game/state.ts";
+import { NARRATIVE_CHAPTERS } from "../game/narrative.ts";
 import type { GameCommand, GameState } from "../game/types.ts";
 
 export type SaveStatus = "saved" | "unsaved" | "saving" | "error";
@@ -78,6 +79,7 @@ export function useGameStore(initial: GameState) {
       (elapsedGameMinutes % DEFAULT_RULES.simulationStepMinutes);
     if (processableMinutes < DEFAULT_RULES.simulationStepMinutes) return;
 
+    const previousChapter = game.value.narrative.chapter;
     const result = advanceGame(game.value, processableMinutes);
     game.value = {
       ...result.state,
@@ -85,11 +87,17 @@ export function useGameStore(initial: GameState) {
         processableMinutes * DEFAULT_RULES.realMillisecondsPerGameMinute /
           timeScale,
     };
+    if (game.value.narrative.chapter > previousChapter) {
+      notice.value = `Chapter complete — next: ${
+        NARRATIVE_CHAPTERS[game.value.narrative.chapter].title
+      }`;
+    }
     queueSave();
   };
 
   const dispatch = (command: GameCommand): boolean => {
     catchUp();
+    const previousChapter = game.value.narrative.chapter;
     const result = applyCommand(game.value, command);
     if (!result.accepted) {
       notice.value = result.reason;
@@ -102,7 +110,11 @@ export function useGameStore(initial: GameState) {
     } else {
       game.value = result.state;
     }
-    notice.value = result.events.at(-1)?.summary;
+    notice.value = result.state.narrative.chapter > previousChapter
+      ? `Chapter complete — next: ${
+        NARRATIVE_CHAPTERS[result.state.narrative.chapter].title
+      }`
+      : result.events.at(-1)?.summary;
     queueSave();
     return true;
   };

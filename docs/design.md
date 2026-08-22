@@ -71,6 +71,12 @@ Schema version 17 persists the 1x/2x/4x simulation scale. Existing saves migrate
 to the faster 2x default and repair ticket-resolution counts that older builds
 incorrectly incremented during assignment.
 
+Schema version 18 adds persistent campaign-chapter progress, pending narrative
+briefings, and the campaign completion timestamp. Chapter requirements remain
+derived from canonical CRM, workforce, customer-health, support, and automation
+state; the narrative record stores only irreversible campaign progress and
+whether the current briefing has been acknowledged.
+
 Each operation returns JSON except export. The client identifies the action in
 the request body, not in a query path. Requests must use
 `Content-Type: application/json` except a bounded multipart import if later

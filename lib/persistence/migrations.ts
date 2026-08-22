@@ -1,5 +1,6 @@
 import { type GameState, SAVE_SCHEMA_VERSION } from "../game/types.ts";
 import { parseGameState, SaveValidationError } from "./schema.ts";
+import { syncNarrative } from "../game/narrative.ts";
 
 type Migration = (save: Record<string, unknown>) => Record<string, unknown>;
 
@@ -247,6 +248,13 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       },
     };
   },
+  18: (save) => ({
+    ...save,
+    narrative: {
+      chapter: 0,
+      pendingBriefing: true,
+    },
+  }),
 };
 
 export function migrateGameState(value: unknown): GameState {
@@ -285,5 +293,5 @@ export function migrateGameState(value: unknown): GameState {
     current.schemaVersion = version + 1;
   }
 
-  return parseGameState(current);
+  return syncNarrative(parseGameState(current));
 }

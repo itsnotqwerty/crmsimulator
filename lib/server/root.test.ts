@@ -42,6 +42,22 @@ function post(
   });
 }
 
+function formPost(
+  body: URLSearchParams,
+  cookies: readonly string[] = [],
+): Request {
+  return new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      cookie: cookieHeader(cookies),
+      origin: "https://crm.example",
+      "sec-fetch-site": "same-origin",
+    },
+    body,
+  });
+}
+
 function responseCookies(response: Response): string[] {
   return response.headers.getSetCookie();
 }
@@ -183,8 +199,35 @@ Deno.test("root export, import, and reset preserve cookie contract", async () =>
     config(4_000, 76),
   );
   assertEquals(reset.status, 200);
-  assertEquals((await reset.json()).game.seed, 76);
+  const resetGame = (await reset.json()).game;
+  assertEquals(resetGame.seed, 76);
+  assertEquals(resetGame.narrative, {
+    chapter: 0,
+    pendingBriefing: true,
+  });
   assert(responseCookies(reset).some((cookie) => cookie.includes("Max-Age=0")));
+});
+
+Deno.test("prologue form begins the company and redirects into the CRM", async () => {
+  const initial = createInitialState({ seed: 78, now: 1_000 });
+  const cookies = await createSetCookieHeaders(initial, SECRET, {
+    secure: true,
+  });
+  const response = await handleRootPost(
+    formPost(new URLSearchParams({ type: "begin" }), cookies),
+    config(2_000),
+  );
+
+  assertEquals(response.status, 303);
+  assertEquals(response.headers.get("location"), "/");
+  const loaded = await loadRoot(
+    requestWithCookies(responseCookies(response)),
+    config(2_000),
+  );
+  assertEquals(loaded.data.game.narrative, {
+    chapter: 0,
+    pendingBriefing: false,
+  });
 });
 
 Deno.test("ordinary save cannot replace corrupt cookies but import can", async () => {

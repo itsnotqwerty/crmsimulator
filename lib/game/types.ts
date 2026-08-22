@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 17 as const;
+export const SAVE_SCHEMA_VERSION = 18 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -428,6 +428,12 @@ export interface OnboardingState {
   dismissed: boolean;
 }
 
+export interface NarrativeState {
+  chapter: number;
+  pendingBriefing: boolean;
+  completedAt?: GameMinute;
+}
+
 export interface PreferenceState {
   reducedMotion: boolean;
   soundEnabled: boolean;
@@ -454,6 +460,7 @@ export interface GameState {
   history: AggregateHistory;
   unlocks: UnlockId[];
   onboarding: OnboardingState;
+  narrative: NarrativeState;
   preferences: PreferenceState;
   platform: PlatformState;
 }
@@ -618,6 +625,7 @@ export type GameCommand =
   }
   | { type: "invest_resilience" }
   | { type: "advance_endless_goal" }
+  | { type: "acknowledge_narrative" }
   | { type: "resume_crisis" }
   | { type: "new_company"; seed: number; now: number; companyName?: string };
 
@@ -669,8 +677,6 @@ export interface GameRules {
   maxCampaignRecords: number;
   maxSalesReps: number;
   maxQuoteRecords: number;
-  safeCloseIntent: number;
-  maximumCloseLossChancePercent: number;
   customerSuccessUnlockCustomers: number;
   customerRenewalIntervalMinutes: number;
   customerNeglectGraceMinutes: number;

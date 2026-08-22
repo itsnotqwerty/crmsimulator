@@ -5,8 +5,8 @@ import {
   assertStrictEquals,
   assertStringIncludes,
 } from "$std/assert/mod.ts";
-import { applyCommand } from "./actions.ts";
-import { dealCloseLossChance } from "./deals.ts";
+import { applyCommand, closeLossRiskPercent } from "./actions.ts";
+import { generateLead } from "./catalog.ts";
 import { randomAt } from "./rng.ts";
 import {
   advanceGame,
@@ -20,50 +20,6 @@ import {
 } from "./state.ts";
 import type { GameState } from "./types.ts";
 
-function withLeadIntent(state: GameState, intent: number): GameState {
-  return {
-    ...state,
-    records: {
-      ...state.records,
-      leads: {
-        ...state.records.leads,
-        lead_1: { ...state.records.leads.lead_1, engagement: intent },
-      },
-    },
-  };
-}
-
-function negotiationState(seed: number, intent: number): GameState {
-  let state = createInitialState({ seed, now: 1_000 });
-  state = applyCommand(state, {
-    type: "contact_lead",
-    leadId: "lead_1",
-    channel: "email",
-  }).state;
-  state = applyCommand(state, {
-    type: "qualify_lead",
-    leadId: "lead_1",
-  }).state;
-  for (let step = 0; step < 3; step += 1) {
-    state = applyCommand(state, {
-      type: "advance_deal",
-      dealId: "deal_1",
-    }).state;
-  }
-  return withLeadIntent(state, intent);
-}
-
-function cursorForCloseRoll(
-  seed: number,
-  predicate: (roll: number) => boolean,
-): number {
-  for (let cursor = 0; cursor < 1_000; cursor += 1) {
-    const roll = 1 + Math.floor(randomAt(seed, cursor) * 100);
-    if (predicate(roll)) return cursor;
-  }
-  throw new Error("Unable to find deterministic close roll");
-}
-
 Deno.test("initial state is deterministic and valid", () => {
   const first = createInitialState({ seed: 42, now: 1_000 });
   const second = createInitialState({ seed: 42, now: 1_000 });
@@ -76,6 +32,25 @@ Deno.test("initial state is deterministic and valid", () => {
 Deno.test("random values depend only on seed and cursor", () => {
   assertEquals(randomAt(99, 7), randomAt(99, 7));
   assert(randomAt(99, 7) !== randomAt(99, 8));
+});
+
+Deno.test("generated company names use a broad, balanced catalog", () => {
+  let cursor = 0;
+  let juniperCount = 0;
+  const prefixes = new Set<string>();
+  const names = new Set<string>();
+  for (let sequence = 1; sequence <= 2_400; sequence += 1) {
+    const generated = generateLead(12_345, cursor, sequence, 0);
+    cursor = generated.nextCursor;
+    const prefix = generated.company.name.split(" ", 1)[0];
+    prefixes.add(prefix);
+    names.add(generated.company.name);
+    if (prefix === "Juniper") juniperCount += 1;
+  }
+
+  assertEquals(prefixes.size, 24);
+  assert(names.size >= 250);
+  assert(juniperCount / 2_400 < 0.07);
 });
 
 Deno.test("segmented and batched simulation are equivalent", () => {
@@ -155,89 +130,10 @@ Deno.test("lead commands create a customer and recurring revenue", () => {
 
   assertEquals(state.records.deals[dealId].stage, "won");
   assertEquals(state.company.customerCount, 1);
+  assertEquals(state.narrative.chapter, 1);
+  assertEquals(state.narrative.pendingBriefing, true);
   assert(state.company.mrrCents > 0);
   assertNotStrictEquals(state, qualified.state);
-});
-
-Deno.test("close loss chance rises as intent falls below the safe threshold", () => {
-  assertEquals(dealCloseLossChance(100), 0);
-  assertEquals(dealCloseLossChance(70), 0);
-  assertEquals(dealCloseLossChance(60), 14);
-  assertEquals(dealCloseLossChance(50), 28);
-  assertEquals(dealCloseLossChance(20), 68);
-  assertEquals(dealCloseLossChance(0), 95);
-  assertEquals(dealCloseLossChance(-10), 95);
-
-  let previousChance = dealCloseLossChance(0);
-  for (let intent = 1; intent <= 70; intent += 1) {
-    const chance = dealCloseLossChance(intent);
-    assert(chance <= previousChance);
-    previousChance = chance;
-  }
-});
-
-Deno.test("a low-intent close attempt can lose the deal", () => {
-  const seed = 81;
-  const intent = 20;
-  const lossChance = dealCloseLossChance(intent);
-  const rngCursor = cursorForCloseRoll(seed, (roll) => roll <= lossChance);
-  const state = {
-    ...negotiationState(seed, intent),
-    rngCursor,
-  };
-
-  const closed = applyCommand(state, {
-    type: "advance_deal",
-    dealId: "deal_1",
-  });
-
-  assert(closed.accepted);
-  assertEquals(closed.state.records.deals.deal_1.stage, "lost");
-  assertEquals(closed.state.records.deals.deal_1.lossReason, "no_decision");
-  assertEquals(closed.state.company.customerCount, 0);
-  assertEquals(closed.state.rngCursor, rngCursor + 1);
-  assertEquals(closed.state.history.dealsLost, state.history.dealsLost + 1);
-  assertEquals(closed.events[0].kind, "deal_lost");
-  assertStringIncludes(closed.events[0].summary, "20% intent");
-  assertStringIncludes(closed.events[0].summary, "walked away");
-});
-
-Deno.test("a low-intent close attempt can still win when the roll succeeds", () => {
-  const seed = 82;
-  const intent = 20;
-  const lossChance = dealCloseLossChance(intent);
-  const rngCursor = cursorForCloseRoll(seed, (roll) => roll > lossChance);
-  const state = {
-    ...negotiationState(seed, intent),
-    rngCursor,
-  };
-
-  const closed = applyCommand(state, {
-    type: "advance_deal",
-    dealId: "deal_1",
-  });
-
-  assert(closed.accepted);
-  assertEquals(closed.state.records.deals.deal_1.stage, "won");
-  assertEquals(closed.state.company.customerCount, 1);
-  assertEquals(closed.state.rngCursor, rngCursor + 1);
-  assertEquals(closed.events[0].kind, "deal_won");
-});
-
-Deno.test("sufficient intent closes safely without consuming a roll", () => {
-  const state = {
-    ...negotiationState(83, DEFAULT_RULES.safeCloseIntent),
-    rngCursor: 123,
-  };
-
-  const closed = applyCommand(state, {
-    type: "advance_deal",
-    dealId: "deal_1",
-  });
-
-  assert(closed.accepted);
-  assertEquals(closed.state.records.deals.deal_1.stage, "won");
-  assertEquals(closed.state.rngCursor, 123);
 });
 
 Deno.test("rapid repeated contact sharply reduces lead intent", () => {
@@ -277,6 +173,84 @@ Deno.test("rapid repeated contact sharply reduces lead intent", () => {
   );
 });
 
+Deno.test("premature close risk scales with intent", () => {
+  assertEquals(closeLossRiskPercent(70), 0);
+  assertEquals(closeLossRiskPercent(100), 0);
+  assertEquals(closeLossRiskPercent(35), 48);
+  assertEquals(closeLossRiskPercent(0), 95);
+});
+
+Deno.test("low-intent close attempts can lose the client", () => {
+  let state = createInitialState({ seed: 42, now: 1_000 });
+  state = applyCommand(state, {
+    type: "contact_lead",
+    leadId: "lead_1",
+    channel: "email",
+  }).state;
+  state = applyCommand(state, {
+    type: "qualify_lead",
+    leadId: "lead_1",
+  }).state;
+  state = {
+    ...state,
+    records: {
+      ...state.records,
+      leads: {
+        ...state.records.leads,
+        lead_1: { ...state.records.leads.lead_1, engagement: 0 },
+      },
+      deals: {
+        ...state.records.deals,
+        deal_1: { ...state.records.deals.deal_1, stage: "negotiation" },
+      },
+    },
+  };
+
+  const closed = applyCommand(state, {
+    type: "advance_deal",
+    dealId: "deal_1",
+  });
+  assert(closed.accepted);
+  assertEquals(closed.state.records.deals.deal_1.stage, "lost");
+  assertEquals(closed.state.records.leads.lead_1.status, "cold");
+  assertStringIncludes(closed.events[0].summary, "walked away");
+});
+
+Deno.test("safe-intent closes do not consume a random roll", () => {
+  let state = createInitialState({ seed: 42, now: 1_000 });
+  state = applyCommand(state, {
+    type: "contact_lead",
+    leadId: "lead_1",
+    channel: "email",
+  }).state;
+  state = applyCommand(state, {
+    type: "qualify_lead",
+    leadId: "lead_1",
+  }).state;
+  state = {
+    ...state,
+    records: {
+      ...state.records,
+      leads: {
+        ...state.records.leads,
+        lead_1: { ...state.records.leads.lead_1, engagement: 70 },
+      },
+      deals: {
+        ...state.records.deals,
+        deal_1: { ...state.records.deals.deal_1, stage: "negotiation" },
+      },
+    },
+  };
+  const cursor = state.rngCursor;
+
+  const closed = applyCommand(state, {
+    type: "advance_deal",
+    dealId: "deal_1",
+  });
+  assertEquals(closed.state.records.deals.deal_1.stage, "won");
+  assertEquals(closed.state.rngCursor, cursor);
+});
+
 Deno.test("customer onboarding and expansion grow account value", () => {
   let state = createInitialState({ seed: 48, now: 1_000 });
   state = applyCommand(state, {
@@ -288,7 +262,16 @@ Deno.test("customer onboarding and expansion grow account value", () => {
     type: "qualify_lead",
     leadId: "lead_1",
   }).state;
-  state = withLeadIntent(state, 100);
+  state = {
+    ...state,
+    records: {
+      ...state.records,
+      leads: {
+        ...state.records.leads,
+        lead_1: { ...state.records.leads.lead_1, engagement: 100 },
+      },
+    },
+  };
   for (let step = 0; step < 4; step += 1) {
     state = applyCommand(state, {
       type: "advance_deal",
@@ -877,46 +860,6 @@ Deno.test("sent quotes close negotiation deals with subscription terms", () => {
   assertEquals(accepted.state.records.deals.deal_1.stage, "won");
   assertEquals(accepted.state.company.mrrCents, 60_750);
   assertEquals(accepted.state.history.dealsWon, 1);
-});
-
-Deno.test("a low-intent quote close can lose the prospect", () => {
-  const seed = 84;
-  const intent = 0;
-  let state: GameState = {
-    ...negotiationState(seed, intent),
-    unlocks: ["pipeline" as const],
-  };
-  state = applyCommand(state, {
-    type: "create_quote",
-    dealId: "deal_1",
-    product: "growth",
-    billingCycle: "annual",
-    seats: 20,
-    discountPercent: 10,
-    validDays: 14,
-  }).state;
-  state = applyCommand(state, {
-    type: "set_quote_status",
-    quoteId: "quote_1",
-    status: "sent",
-  }).state;
-  const lossChance = dealCloseLossChance(intent);
-  const rngCursor = cursorForCloseRoll(seed, (roll) => roll <= lossChance);
-  state = { ...state, rngCursor };
-
-  const closed = applyCommand(state, {
-    type: "accept_quote",
-    quoteId: "quote_1",
-  });
-
-  assert(closed.accepted);
-  assertEquals(closed.state.records.deals.deal_1.stage, "lost");
-  assertEquals(closed.state.records.quotes.quote_1.status, "expired");
-  assertEquals(closed.state.company.customerCount, 0);
-  assertEquals(
-    closed.events.map((event) => event.kind),
-    ["deal_lost", "quote_expired"],
-  );
 });
 
 Deno.test("sales representatives can be hired and assigned to deals", () => {

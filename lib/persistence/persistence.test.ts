@@ -113,7 +113,7 @@ Deno.test("version 1 saves migrate with empty campaign state", () => {
   delete (legacy.history as Record<string, unknown>).campaignLeadsArchived;
 
   const migrated = migrateGameState(legacy);
-  assertEquals(migrated.schemaVersion, 17);
+  assertEquals(migrated.schemaVersion, 18);
   assertEquals(migrated.sequences.campaign, 0);
   assertEquals(migrated.records.campaigns, {});
   assertEquals(migrated.history.campaignsArchived, 0);
@@ -152,7 +152,7 @@ Deno.test("version 3 deals migrate with an inferred product", () => {
 
   const migrated = migrateGameState(legacy);
 
-  assertEquals(migrated.schemaVersion, 17);
+  assertEquals(migrated.schemaVersion, 18);
   assertEquals(migrated.records.deals.deal_1.product, expectedProduct);
   assertEquals(migrated.records.salesReps, {});
   assertEquals(migrated.records.quotes, {});
@@ -214,7 +214,7 @@ Deno.test("version 8 customers migrate into active lifecycle records", () => {
   };
 
   const migrated = migrateGameState(legacy);
-  assertEquals(migrated.schemaVersion, 17);
+  assertEquals(migrated.schemaVersion, 18);
   assertEquals(migrated.records.customers.customer_1.lifecycle, "active");
   assertEquals(migrated.records.customers.customer_1.adoption, 65);
   assertEquals(migrated.records.customers.customer_1.renewalAt, 43_200);
@@ -263,7 +263,7 @@ Deno.test("version 11 tickets migrate to dedicated support ownership", () => {
 
   const migrated = migrateGameState(legacy);
 
-  assertEquals(migrated.schemaVersion, 17);
+  assertEquals(migrated.schemaVersion, 18);
   assertEquals(migrated.records.tickets.ticket_1.ownerId, undefined);
   assertEquals(migrated.records.tickets.ticket_1.escalated, false);
   assertEquals(migrated.records.supportReps, {});
@@ -281,7 +281,7 @@ Deno.test("version 16 migration repairs assignment-inflated ticket history", () 
 
   const migrated = migrateGameState(legacy);
 
-  assertEquals(migrated.schemaVersion, 17);
+  assertEquals(migrated.schemaVersion, 18);
   assertEquals(migrated.history.ticketsResolved, 0);
   assertEquals(migrated.history.ticketResolutionMinutes, 0);
   assertEquals(migrated.preferences.timeScale, 2);

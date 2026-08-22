@@ -25,8 +25,6 @@ export const DEFAULT_RULES: GameRules = {
   maxCampaignRecords: 40,
   maxSalesReps: 8,
   maxQuoteRecords: 60,
-  safeCloseIntent: 70,
-  maximumCloseLossChancePercent: 95,
   customerSuccessUnlockCustomers: 5,
   customerRenewalIntervalMinutes: 30 * 24 * 60,
   customerNeglectGraceMinutes: 7 * 24 * 60,
@@ -140,6 +138,7 @@ export function createInitialState(options: InitialStateOptions): GameState {
     },
     unlocks: [],
     onboarding: { step: "inspect_lead", dismissed: false },
+    narrative: { chapter: 0, pendingBriefing: true },
     preferences: {
       reducedMotion: false,
       soundEnabled: false,
@@ -233,6 +232,13 @@ export function validateGameState(state: GameState): ValidationResult {
   }
   if (state.recentActivities.length > DEFAULT_RULES.maxRecentActivities) {
     issue(issues, "recentActivities", "Recent activity limit exceeded");
+  }
+  if (
+    !Number.isInteger(state.narrative.chapter) ||
+    state.narrative.chapter < 0 || state.narrative.chapter > 5 ||
+    typeof state.narrative.pendingBriefing !== "boolean"
+  ) {
+    issue(issues, "narrative", "Narrative progress is out of range");
   }
   if (
     state.platform.sequences.length > 12 ||

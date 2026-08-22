@@ -62,10 +62,23 @@ workflows, simulated integrations, custom fields, saved views, and duplicate
 review. Analytics derives funnel, cohort, attribution, retention, and forecast
 variance from canonical state. Mature operations adds departments, headcount
 plans, approval controls, quarterly targets, resilience investment, audit
-summaries, and escalating goals without introducing a final victory state.
+summaries, and escalating goals.
 Optional notification pings and an original procedurally synthesized lounge loop
 are available in Settings. Both are disabled by default and use the Web Audio
 API, so no licensed recordings or external media requests are involved.
+
+The campaign supplies a narrative throughline across those systems. A final
+runway investor letter opens before the CRM itself, then five persistent
+chapters move from
+the first proof of demand through repeatable acquisition, delegation,
+retention, support, and operational scale. Every chapter opens with a briefing,
+keeps its objectives visible in the workspace, and announces the next directive
+when completed. Reaching eight customers, $10,000 MRR, healthy accounts, a live
+workflow, and three resolved tickets completes the board story and turns the
+existing escalating goals into the postgame.
+
+Generated prospect companies draw from 24 prefixes and 12 suffixes, reducing
+the repetition produced by the original eight-prefix catalog.
 
 ## Core rules
 
@@ -78,7 +91,9 @@ API, so no licensed recordings or external media requests are involved.
   crisis workflow where campaigns can be paused and staff dismissed before
   resuming.
 - Active mismanagement can bankrupt the company and require a new run.
-- Progress is endless; there is no final victory screen.
+- The founder campaign has a clear ending, followed by optional endless play.
+- Closing below 70% lead intent can lose the client; risk rises to 95% at zero
+  intent and is shown before the close attempt.
 - CRM modules unlock through business milestones and operational need, not XP
   levels.
 
@@ -157,13 +172,18 @@ Available tasks:
 | `deno task test`     | Run engine and persistence tests under `lib/`         |
 | `deno task check`    | Check formatting, lint, and TypeScript types          |
 | `deno task build`    | Create a production Fresh build                       |
-| `deno task preview`  | Serve the production entry point locally              |
+| `deno task preview`  | Rebuild and serve the production entry point locally  |
 | `deno task manifest` | Regenerate the Fresh manifest                         |
 
 The test task covers deterministic simulation, commands, offline crisis versus
 active bankruptcy, schema validation, compression, signing, tamper rejection,
 cookie flags, stale chunk cleanup, save-size budgets, and the root persistence
 adapter including revision conflicts and corrupt-save recovery.
+
+Production bundles are intentionally not shipped in release archives. Run
+`deno task build` after extracting a release (the installer does this
+automatically). This prevents an older `_fresh` island bundle from masking newer
+interface code.
 
 ## Production configuration
 

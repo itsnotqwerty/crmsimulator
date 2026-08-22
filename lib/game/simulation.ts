@@ -2,6 +2,7 @@ import { generateLead } from "./catalog.ts";
 import { projectEvents } from "./events.ts";
 import { DEFAULT_RULES } from "./state.ts";
 import { advancePlatform } from "./platform.ts";
+import { syncNarrative } from "./narrative.ts";
 import type {
   AdvanceResult,
   AdvanceSummary,
@@ -588,7 +589,7 @@ function processStep(
   }
 
   return {
-    state: projectEvents(nextState, events, rules),
+    state: syncNarrative(projectEvents(nextState, events, rules)),
     events,
     stopped: nextState.clock.status !== "active",
   };

@@ -5,9 +5,9 @@
     "test": "deno test -A lib/",
     "cli": "echo \"import '\\$fresh/src/dev/cli.ts'\" | deno run -A -",
     "manifest": "deno task cli manifest $(pwd)",
-    "start": "deno run --env-file=.env -A --watch=static/,routes/ dev.ts",
+    "start": "deno run --env-file=.env -A --watch=static/,routes/,islands/,lib/,components/ dev.ts",
     "build": "deno run --env-file=.env -A dev.ts build",
-    "preview": "deno run --env-file=.env -A main.ts",
+    "preview": "deno task build && deno run --env-file=.env -A main.ts",
     "update": "deno run -A -r https://fresh.deno.dev/update ."
   },
   "lint": { "rules": { "tags": ["fresh", "recommended"] } },

@@ -1,7 +1,7 @@
 import { projectEvents } from "./events.ts";
 import { generateLead } from "./catalog.ts";
-import { dealCloseLossChance } from "./deals.ts";
 import { randomInteger } from "./rng.ts";
+import { syncNarrative } from "./narrative.ts";
 import { createInitialState, DEFAULT_RULES } from "./state.ts";
 import { applyPlatformCommand } from "./platform.ts";
 import type {
@@ -9,8 +9,6 @@ import type {
   CampaignAudience,
   CampaignChannel,
   CommandResult,
-  Deal,
-  DealLossReason,
   DealProduct,
   DealStage,
   DomainEvent,
@@ -416,7 +414,7 @@ function accepted(
 
   return {
     accepted: true,
-    state: projectEvents(nextState, projectedEvents, rules),
+    state: syncNarrative(projectEvents(nextState, projectedEvents, rules)),
     events: projectedEvents,
   };
 }
@@ -432,13 +430,17 @@ function nextDealStage(stage: DealStage): DealStage | undefined {
   return stages[stages.indexOf(stage) + 1];
 }
 
+export function closeLossRiskPercent(intent: number): number {
+  const boundedIntent = Math.max(0, Math.min(100, intent));
+  if (boundedIntent >= 70) return 0;
+  return Math.round((70 - boundedIntent) / 70 * 95);
+}
+
 function prospectLead(
   state: GameState,
   rules: GameRules,
 ): CommandResult {
-  if (
-    state.company.founderCapacityRemaining < rules.prospectingCapacityMinutes
-  ) {
+  if (state.company.founderCapacityRemaining < rules.prospectingCapacityMinutes) {
     return rejected(state, "Not enough founder capacity to prospect a lead");
   }
 
@@ -705,47 +707,6 @@ function updateDeal(
   }], rules);
 }
 
-function closeDealAsLost(
-  state: GameState,
-  deal: Deal,
-  reason: DealLossReason,
-  rules: GameRules,
-  summary = `Deal lost: ${reason.replaceAll("_", " ")}`,
-): CommandResult {
-  const gameMinute = state.clock.gameMinute;
-  const quotes = Object.fromEntries(
-    Object.entries(state.records.quotes).map(([quoteId, quote]) => [
-      quoteId,
-      quote.dealId === deal.id && ["draft", "sent"].includes(quote.status)
-        ? { ...quote, status: "expired" as const, updatedAt: gameMinute }
-        : quote,
-    ]),
-  );
-  const nextState: GameState = {
-    ...state,
-    records: {
-      ...state.records,
-      deals: {
-        ...state.records.deals,
-        [deal.id]: {
-          ...deal,
-          stage: "lost",
-          probability: 0,
-          lossReason: reason,
-          updatedAt: gameMinute,
-        },
-      },
-      quotes,
-    },
-  };
-  return accepted(nextState, [{
-    kind: "deal_lost",
-    summary,
-    relatedId: deal.id,
-    gameMinute,
-  }], rules);
-}
-
 function loseDeal(
   state: GameState,
   dealId: string,
@@ -760,7 +721,29 @@ function loseDeal(
   if (deal.stage === "won" || deal.stage === "lost") {
     return rejected(state, "This deal is already closed");
   }
-  return closeDealAsLost(state, deal, reason, rules);
+  const gameMinute = state.clock.gameMinute;
+  const nextState: GameState = {
+    ...state,
+    records: {
+      ...state.records,
+      deals: {
+        ...state.records.deals,
+        [deal.id]: {
+          ...deal,
+          stage: "lost",
+          probability: 0,
+          lossReason: reason,
+          updatedAt: gameMinute,
+        },
+      },
+    },
+  };
+  return accepted(nextState, [{
+    kind: "deal_lost",
+    summary: `Deal lost: ${reason.replaceAll("_", " ")}`,
+    relatedId: deal.id,
+    gameMinute,
+  }], rules);
 }
 
 function hireSalesRep(
@@ -1226,25 +1209,44 @@ function acceptQuote(
       },
     },
   };
+  const quoteEvent: DomainEvent = {
+    kind: "quote_accepted",
+    summary: `Quote accepted for $${
+      (quote.monthlyValueCents / 100).toFixed(0)
+    } MRR`,
+    relatedId: quote.id,
+    gameMinute,
+  };
   const closed = advanceDeal(prepared, deal.id, rules);
   if (!closed.accepted) return closed;
-  const won = closed.state.records.deals[deal.id].stage === "won";
-  const quoteEvent: DomainEvent = won
-    ? {
-      kind: "quote_accepted",
-      summary: `Quote accepted for $${
-        (quote.monthlyValueCents / 100).toFixed(0)
-      } MRR`,
-      relatedId: quote.id,
-      gameMinute,
-    }
-    : {
+  if (closed.state.records.deals[deal.id].stage === "lost") {
+    const quoteExpired: DomainEvent = {
       kind: "quote_expired",
-      summary: "Quote rejected after the prospect walked away",
+      summary: "Quote expired after the prospect walked away",
       relatedId: quote.id,
       gameMinute,
     };
-  const resolvedState: GameState = {
+    const lostState: GameState = {
+      ...closed.state,
+      records: {
+        ...closed.state.records,
+        quotes: {
+          ...closed.state.records.quotes,
+          [quote.id]: {
+            ...quote,
+            status: "expired",
+            updatedAt: gameMinute,
+          },
+        },
+      },
+    };
+    return {
+      accepted: true,
+      state: projectEvents(lostState, [quoteExpired], rules),
+      events: [...closed.events, quoteExpired],
+    };
+  }
+  const wonState: GameState = {
     ...closed.state,
     records: {
       ...closed.state.records,
@@ -1252,7 +1254,7 @@ function acceptQuote(
         ...closed.state.records.quotes,
         [quote.id]: {
           ...quote,
-          status: won ? "accepted" : "expired",
+          status: "accepted",
           updatedAt: gameMinute,
         },
       },
@@ -1260,7 +1262,7 @@ function acceptQuote(
   };
   return {
     accepted: true,
-    state: projectEvents(resolvedState, [quoteEvent], rules),
+    state: projectEvents(wonState, [quoteEvent], rules),
     events: [...closed.events, quoteEvent],
   };
 }
@@ -1524,8 +1526,7 @@ function fireSuccessRep(
     records: { ...state.records, successReps, customers },
   }, [{
     kind: "success_rep_fired",
-    summary:
-      `${rep.name} left customer success; their accounts were unassigned`,
+    summary: `${rep.name} left customer success; their accounts were unassigned`,
     relatedId: rep.id,
     gameMinute: state.clock.gameMinute,
   }], rules);
@@ -2292,24 +2293,47 @@ function advanceDeal(
   }
 
   const lead = state.records.leads[deal.leadId];
-  if (!lead) return rejected(state, "Deal contact does not exist");
-  const lossChance = dealCloseLossChance(lead.engagement, rules);
-  let closeState = state;
-  if (lossChance > 0) {
-    const closeRoll = randomInteger(state.seed, state.rngCursor, 1, 100);
-    closeState = { ...state, rngCursor: closeRoll.cursor };
-    if (closeRoll.value <= lossChance) {
-      return closeDealAsLost(
-        closeState,
-        deal,
-        "no_decision",
-        rules,
-        `Close pushed too early at ${lead.engagement}% intent; ${lead.firstName} ${lead.lastName} walked away`,
-      );
+  const closeRisk = closeLossRiskPercent(lead.engagement);
+  if (closeRisk > 0) {
+    const roll = randomInteger(state.seed, state.rngCursor, 1, 100);
+    if (roll.value <= closeRisk) {
+      const lostState: GameState = {
+        ...state,
+        rngCursor: roll.cursor,
+        records: {
+          ...state.records,
+          leads: {
+            ...state.records.leads,
+            [lead.id]: {
+              ...lead,
+              status: "cold",
+              lastActivityAt: gameMinute,
+            },
+          },
+          deals: {
+            ...state.records.deals,
+            [deal.id]: {
+              ...deal,
+              stage: "lost",
+              probability: 0,
+              lossReason: "no_decision",
+              updatedAt: gameMinute,
+            },
+          },
+        },
+      };
+      return accepted(lostState, [{
+        kind: "deal_lost",
+        summary:
+          `Close pushed too early; ${lead.firstName} ${lead.lastName} walked away`,
+        relatedId: deal.id,
+        gameMinute,
+      }], rules);
     }
+    state = { ...state, rngCursor: roll.cursor };
   }
 
-  const customerSequence = closeState.sequences.customer + 1;
+  const customerSequence = state.sequences.customer + 1;
   const customerId = `customer_${customerSequence}`;
   const taskSequence = state.sequences.task + 1;
   const taskId = `task_${taskSequence}`;
@@ -2347,7 +2371,7 @@ function advanceDeal(
   }
 
   const nextState: GameState = {
-    ...closeState,
+    ...state,
     company: {
       ...state.company,
       customerCount,
@@ -2580,6 +2604,18 @@ export function applyCommand(
         {
           ...state,
           preferences: { ...state.preferences, pipelineView: command.view },
+        },
+        [],
+        rules,
+      );
+    case "acknowledge_narrative":
+      if (!state.narrative.pendingBriefing) {
+        return rejected(state, "Chapter briefing is already acknowledged");
+      }
+      return accepted(
+        {
+          ...state,
+          narrative: { ...state.narrative, pendingBriefing: false },
         },
         [],
         rules,

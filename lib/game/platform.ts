@@ -1,4 +1,5 @@
 import { projectEvents } from "./events.ts";
+import { syncNarrative } from "./narrative.ts";
 import type {
   CommandResult,
   GameCommand,
@@ -24,7 +25,7 @@ function accept(
   };
   return {
     accepted: true,
-    state: projectEvents(state, [event], rules),
+    state: syncNarrative(projectEvents(state, [event], rules)),
     events: [event],
   };
 }

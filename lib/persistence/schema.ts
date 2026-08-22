@@ -480,6 +480,15 @@ export function parseGameState(value: unknown): GameState {
     issues.push({ path: "onboarding", message: "Invalid onboarding state" });
   }
   if (
+    !isRecord(value.narrative) || !isInteger(value.narrative.chapter) ||
+    Number(value.narrative.chapter) > 5 ||
+    typeof value.narrative.pendingBriefing !== "boolean" ||
+    (value.narrative.completedAt !== undefined &&
+      !isInteger(value.narrative.completedAt))
+  ) {
+    issues.push({ path: "narrative", message: "Invalid narrative state" });
+  }
+  if (
     !isRecord(value.preferences) ||
     typeof value.preferences.reducedMotion !== "boolean" ||
     typeof value.preferences.soundEnabled !== "boolean" ||

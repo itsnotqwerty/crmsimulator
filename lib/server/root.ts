@@ -37,6 +37,7 @@ export interface LoadedRoot {
 type RootAction =
   | { type: "save"; state: unknown }
   | { type: "reset" }
+  | { type: "begin" }
   | { type: "export" }
   | { type: "import"; data: unknown };
 
@@ -177,13 +178,7 @@ function sameOrigin(request: Request): boolean {
 }
 
 async function readAction(request: Request): Promise<RootAction> {
-  if (
-    !request.headers.get("content-type")?.toLowerCase().startsWith(
-      "application/json",
-    )
-  ) {
-    throw new TypeError("Content-Type must be application/json");
-  }
+  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
   const declaredLength = Number(request.headers.get("content-length") ?? 0);
   if (declaredLength > MAX_REQUEST_BYTES) {
     throw new RangeError("Request body is too large");
@@ -192,17 +187,29 @@ async function readAction(request: Request): Promise<RootAction> {
   if (new TextEncoder().encode(text).byteLength > MAX_REQUEST_BYTES) {
     throw new RangeError("Request body is too large");
   }
-  const value: unknown = JSON.parse(text);
+  const value: unknown = contentType.startsWith("application/json")
+    ? JSON.parse(text)
+    : contentType.startsWith("application/x-www-form-urlencoded")
+    ? Object.fromEntries(new URLSearchParams(text))
+    : (() => {
+      throw new TypeError(
+        "Content-Type must be application/json or application/x-www-form-urlencoded",
+      );
+    })();
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new TypeError("Action body must be an object");
   }
   const action = value as Record<string, unknown>;
-  if (!["save", "reset", "export", "import"].includes(String(action.type))) {
+  if (
+    !["save", "reset", "begin", "export", "import"].includes(
+      String(action.type),
+    )
+  ) {
     throw new TypeError("Unknown root action");
   }
   if (action.type === "save") return { type: "save", state: action.state };
   if (action.type === "import") return { type: "import", data: action.data };
-  return { type: action.type as "reset" | "export" };
+  return { type: action.type as "reset" | "begin" | "export" };
 }
 
 async function currentGame(
@@ -238,6 +245,34 @@ export async function handleRootPost(
       return appendSetCookies(
         jsonResponse({ game }),
         createClearCookieHeaders({ secure: config.secure }),
+      );
+    }
+
+    if (action.type === "begin") {
+      const loaded = await currentGame(cookies, config);
+      const initial = loaded ?? createInitialState({
+        seed: config.seed,
+        now: config.now,
+      });
+      const game = {
+        ...initial,
+        revision: initial.revision + 1,
+        savedAt: config.now,
+        narrative: {
+          ...initial.narrative,
+          pendingBriefing: false,
+        },
+      };
+      const response = new Response(null, {
+        status: 303,
+        headers: {
+          "Cache-Control": "no-store",
+          "Location": "/",
+        },
+      });
+      return appendSetCookies(
+        response,
+        await signedHeaders(game, config, previousChunkCount),
       );
     }
 
