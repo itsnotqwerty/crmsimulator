@@ -226,12 +226,13 @@ Unlocked at $1,000 MRR and three open deals:
 - pipeline board and list views;
 - stage age, expected close timing, value, probability, weighted pipeline, and
   forecast MRR derived from canonical deals;
-- editable Starter, Growth, and Scale product tiers, with explicit reasons for
-  closed-lost deals;
+- editable Starter, Growth, and Scale product tiers, with seat pricing, monthly
+  or annual billing, bounded discounts, and explicit reasons for closed-lost
+  deals;
 - deal-stage customization within supported rules;
 - sales representatives, ownership, and assignment;
 - targets, territories, routing, and forecast views;
-- quotes and expanded product plans.
+- draft, sent, accepted, and expired quotes that close canonical deals.
 
 ### Tier 3: Retention and service
 

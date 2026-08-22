@@ -33,7 +33,13 @@ deals. Its list and board views expose stage age, expected close timing, deal
 value, product tier, probability, weighted pipeline, forecast MRR, and explicit
 closed-lost reasons. Named sales representatives add recurring compensation,
 skill, deal capacity, ownership, territory routing, targets, derived activity
-queues, and workload-sensitive forecasting.
+queues, and workload-sensitive forecasting. Quotes add seat-based Starter,
+Growth, and Scale plans, monthly or discounted annual billing, commercial
+discounts, validity periods, and a send-to-accept lifecycle that closes the
+canonical deal. Missed follow-ups reduce engagement, sustained overload builds
+rep burnout and lowers deal progression, while paid training improves skill and
+relieves burnout. Pipeline list and board preferences persist with the save, and
+list selection supports bulk ownership and stage advancement.
 
 ## Core rules
 

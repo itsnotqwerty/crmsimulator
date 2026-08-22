@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 6 as const;
+export const SAVE_SCHEMA_VERSION = 8 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -47,6 +47,7 @@ export type ActivityKind =
   | "deal_won"
   | "deal_lost"
   | "sales_rep_hired"
+  | "sales_rep_trained"
   | "deal_assigned"
   | "leads_routed"
   | "quote_created"
@@ -157,6 +158,7 @@ export interface SalesRep {
   monthlyTargetCents: number;
   skill: number;
   dealCapacity: number;
+  burnout: number;
   hiredAt: GameMinute;
 }
 
@@ -253,6 +255,7 @@ export interface OnboardingState {
 export interface PreferenceState {
   reducedMotion: boolean;
   soundEnabled: boolean;
+  pipelineView: "list" | "board";
 }
 
 export interface GameState {
@@ -300,6 +303,7 @@ export type GameCommand =
     monthlyTargetCents: number;
   }
   | { type: "assign_deal"; dealId: EntityId; ownerId?: EntityId }
+  | { type: "train_sales_rep"; salesRepId: EntityId }
   | { type: "route_leads" }
   | {
     type: "create_quote";
@@ -351,6 +355,13 @@ export type GameCommand =
   | { type: "archive_campaign"; campaignId: EntityId }
   | { type: "rename_company"; name: string }
   | { type: "set_reduced_motion"; enabled: boolean }
+  | { type: "set_pipeline_view"; view: "list" | "board" }
+  | { type: "bulk_advance_deals"; dealIds: EntityId[] }
+  | {
+    type: "bulk_assign_deals";
+    dealIds: EntityId[];
+    ownerId?: EntityId;
+  }
   | { type: "complete_task"; taskId: EntityId }
   | { type: "resume_crisis" }
   | { type: "new_company"; seed: number; now: number; companyName?: string };

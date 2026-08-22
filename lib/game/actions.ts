@@ -671,6 +671,7 @@ function hireSalesRep(
           territory,
           monthlyTargetCents,
           ...profile,
+          burnout: 0,
           hiredAt: state.clock.gameMinute,
         },
       },
@@ -780,6 +781,67 @@ function assignDeal(
     relatedId: deal.id,
     gameMinute: state.clock.gameMinute,
   }], rules);
+}
+
+function trainSalesRep(
+  state: GameState,
+  salesRepId: string,
+  rules: GameRules,
+): CommandResult {
+  const rep = state.records.salesReps[salesRepId];
+  if (!rep) return rejected(state, "Sales representative does not exist");
+  const trainingCostCents = 100_000;
+  if (state.company.cashCents < trainingCostCents) {
+    return rejected(state, "Not enough cash for sales training");
+  }
+  if (rep.skill >= 100 && rep.burnout === 0) {
+    return rejected(state, "Representative has no current training need");
+  }
+  return accepted({
+    ...state,
+    company: {
+      ...state.company,
+      cashCents: state.company.cashCents - trainingCostCents,
+    },
+    records: {
+      ...state.records,
+      salesReps: {
+        ...state.records.salesReps,
+        [rep.id]: {
+          ...rep,
+          skill: Math.min(100, rep.skill + 5),
+          burnout: Math.max(0, rep.burnout - 20),
+        },
+      },
+    },
+  }, [{
+    kind: "sales_rep_trained",
+    summary: `${rep.name} completed sales training`,
+    relatedId: rep.id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function bulkDeals(
+  state: GameState,
+  dealIds: string[],
+  operation: (state: GameState, dealId: string) => CommandResult,
+): CommandResult {
+  const ids = [...new Set(dealIds)].slice(0, 50);
+  if (ids.length === 0) return rejected(state, "Select at least one deal");
+  let nextState = state;
+  const events: DomainEvent[] = [];
+  let acceptedCount = 0;
+  for (const dealId of ids) {
+    const result = operation(nextState, dealId);
+    if (!result.accepted) continue;
+    nextState = result.state;
+    events.push(...result.events);
+    acceptedCount += 1;
+  }
+  return acceptedCount > 0
+    ? { accepted: true, state: nextState, events }
+    : rejected(state, "No selected deals could be updated");
 }
 
 function compactQuoteHistory(state: GameState, rules: GameRules): GameState {
@@ -1172,12 +1234,17 @@ function advanceDeal(
     ).length
     : 0;
   const skillAdjustment = owner ? Math.floor((owner.skill - 50) / 10) * 2 : 0;
+  const burnoutPenalty = owner ? Math.floor(owner.burnout / 20) * 3 : 0;
   const overloadPenalty = owner
     ? Math.max(0, ownerWorkload - owner.dealCapacity) * 8
     : 0;
   const probability = Math.min(
     95,
-    Math.max(5, deal.probability + 20 + skillAdjustment - overloadPenalty),
+    Math.max(
+      5,
+      deal.probability + 20 + skillAdjustment - overloadPenalty -
+        burnoutPenalty,
+    ),
   );
 
   if (stage !== "won") {
@@ -1372,6 +1439,18 @@ export function applyCommand(
         [],
         rules,
       );
+    case "set_pipeline_view":
+      if (command.view === state.preferences.pipelineView) {
+        return rejected(state, "Pipeline view is unchanged");
+      }
+      return accepted(
+        {
+          ...state,
+          preferences: { ...state.preferences, pipelineView: command.view },
+        },
+        [],
+        rules,
+      );
     case "qualify_lead": {
       const lead = state.records.leads[command.leadId];
       return lead
@@ -1401,6 +1480,21 @@ export function applyCommand(
       );
     case "assign_deal":
       return assignDeal(state, command.dealId, command.ownerId, rules);
+    case "train_sales_rep":
+      return trainSalesRep(state, command.salesRepId, rules);
+    case "bulk_advance_deals":
+      return bulkDeals(
+        state,
+        command.dealIds,
+        (current, dealId) => advanceDeal(current, dealId, rules),
+      );
+    case "bulk_assign_deals":
+      return bulkDeals(
+        state,
+        command.dealIds,
+        (current, dealId) =>
+          assignDeal(current, dealId, command.ownerId, rules),
+      );
     case "route_leads":
       return routeLeads(state, rules);
     case "create_quote":

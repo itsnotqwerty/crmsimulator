@@ -78,6 +78,7 @@ const KEY_MAP: Readonly<Record<string, string>> = {
   skill: "sk",
   dealCapacity: "dc",
   hiredAt: "hi",
+  burnout: "bo",
   billingCycle: "bc",
   seats: "sz",
   discountPercent: "dp",

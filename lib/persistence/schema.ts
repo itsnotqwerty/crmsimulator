@@ -156,6 +156,7 @@ function validSalesRep(entry: Record<string, unknown>): boolean {
     isInteger(entry.monthlySalaryCents, 1) && isInteger(entry.skill, 1) &&
     isInteger(entry.monthlyTargetCents, 1) && Number(entry.skill) <= 100 &&
     isInteger(entry.dealCapacity, 1) &&
+    isInteger(entry.burnout) && Number(entry.burnout) <= 100 &&
     isInteger(entry.hiredAt);
 }
 
@@ -345,7 +346,8 @@ export function parseGameState(value: unknown): GameState {
   if (
     !isRecord(value.preferences) ||
     typeof value.preferences.reducedMotion !== "boolean" ||
-    typeof value.preferences.soundEnabled !== "boolean"
+    typeof value.preferences.soundEnabled !== "boolean" ||
+    !["list", "board"].includes(String(value.preferences.pipelineView))
   ) {
     issues.push({ path: "preferences", message: "Invalid preferences" });
   }

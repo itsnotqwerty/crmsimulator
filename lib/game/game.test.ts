@@ -292,6 +292,54 @@ Deno.test("sales compensation accrues as a deterministic operating cost", () => 
   );
 });
 
+Deno.test("overload builds burnout and training improves representative skill", () => {
+  const initial = createInitialState({ seed: 47, now: 1_000 });
+  let state = applyCommand(
+    { ...initial, unlocks: ["pipeline"] },
+    {
+      type: "hire_sales_rep",
+      name: "Avery Chen",
+      level: "junior",
+      territory: "all",
+      monthlyTargetCents: 1_500_000,
+    },
+  ).state;
+  const rep = state.records.salesReps.sales_rep_1;
+  const deals = Object.fromEntries(
+    Array.from({ length: rep.dealCapacity + 1 }, (_, index) => [
+      `deal_${index + 1}`,
+      {
+        id: `deal_${index + 1}`,
+        leadId: "lead_1",
+        companyId: "company_1",
+        stage: "qualified" as const,
+        product: "starter" as const,
+        ownerId: rep.id,
+        monthlyValueCents: 25_000,
+        probability: 25,
+        expectedCloseAt: 10_000,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ]),
+  );
+  state = { ...state, records: { ...state.records, deals } };
+  state = advanceGame(state, 60).state;
+  assertEquals(state.records.salesReps.sales_rep_1.burnout, 2);
+
+  const trained = applyCommand(state, {
+    type: "train_sales_rep",
+    salesRepId: "sales_rep_1",
+  });
+  assert(trained.accepted);
+  assertEquals(trained.state.records.salesReps.sales_rep_1.skill, 50);
+  assertEquals(trained.state.records.salesReps.sales_rep_1.burnout, 0);
+  assertEquals(
+    trained.state.company.cashCents,
+    state.company.cashCents - 100_000,
+  );
+});
+
 Deno.test("lead routing respects territory and carries ownership into deals", () => {
   let state = createInitialState({ seed: 46, now: 1_000 });
   const territory = state.records.companies.company_1.region as

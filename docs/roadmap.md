@@ -202,13 +202,13 @@ inefficient.
 - [x] Add pipeline list and board views.
 - [x] Add stage aging, probabilities, expected close dates, values, products,
       and loss reasons.
-- [ ] Add quotes and expanded subscription plans.
+- [x] Add quotes and expanded subscription plans.
 - [x] Add sales hiring, compensation, skill, capacity, assignment, and
       ownership.
 - [x] Add lead routing, territories, targets, and rep activity queues.
 - [x] Add weighted pipeline and forecast views.
-- [ ] Model missed follow-up, overloaded representatives, training, and burnout.
-- [ ] Add bulk actions and saved views needed at larger record counts.
+- [x] Model missed follow-up, overloaded representatives, training, and burnout.
+- [x] Add bulk actions and saved views needed at larger record counts.
 - [x] Bound and aggregate detailed sales activities.
 
 **Acceptance checks**

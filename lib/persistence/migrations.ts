@@ -69,6 +69,32 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       quotes: {},
     },
   }),
+  7: (save) => {
+    const records = save.records as Record<string, unknown>;
+    const salesReps = records.salesReps as Record<
+      string,
+      Record<string, unknown>
+    >;
+    return {
+      ...save,
+      records: {
+        ...records,
+        salesReps: Object.fromEntries(
+          Object.entries(salesReps).map(([id, rep]) => [
+            id,
+            { ...rep, burnout: 0 },
+          ]),
+        ),
+      },
+    };
+  },
+  8: (save) => ({
+    ...save,
+    preferences: {
+      ...(save.preferences as Record<string, unknown>),
+      pipelineView: "list",
+    },
+  }),
 };
 
 export function migrateGameState(value: unknown): GameState {

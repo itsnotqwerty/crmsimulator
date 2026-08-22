@@ -112,7 +112,11 @@ export function createInitialState(options: InitialStateOptions): GameState {
     },
     unlocks: [],
     onboarding: { step: "inspect_lead", dismissed: false },
-    preferences: { reducedMotion: false, soundEnabled: true },
+    preferences: {
+      reducedMotion: false,
+      soundEnabled: true,
+      pipelineView: "list",
+    },
   };
 }
 
@@ -245,7 +249,8 @@ export function validateGameState(state: GameState): ValidationResult {
   for (const rep of Object.values(state.records.salesReps)) {
     if (
       rep.name.trim().length < 2 || rep.name.length > 60 || rep.skill > 100 ||
-      rep.dealCapacity < 1 || rep.monthlySalaryCents < 1 ||
+      rep.dealCapacity < 1 || rep.burnout < 0 || rep.burnout > 100 ||
+      rep.monthlySalaryCents < 1 ||
       rep.monthlyTargetCents < 1
     ) {
       issue(

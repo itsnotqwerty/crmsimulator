@@ -109,7 +109,7 @@ Deno.test("version 1 saves migrate with empty campaign state", () => {
   delete (legacy.history as Record<string, unknown>).campaignLeadsArchived;
 
   const migrated = migrateGameState(legacy);
-  assertEquals(migrated.schemaVersion, 6);
+  assertEquals(migrated.schemaVersion, 8);
   assertEquals(migrated.sequences.campaign, 0);
   assertEquals(migrated.records.campaigns, {});
   assertEquals(migrated.history.campaignsArchived, 0);
@@ -141,7 +141,7 @@ Deno.test("version 3 deals migrate with an inferred product", () => {
 
   const migrated = migrateGameState(legacy);
 
-  assertEquals(migrated.schemaVersion, 6);
+  assertEquals(migrated.schemaVersion, 8);
   assertEquals(migrated.records.deals.deal_1.product, expectedProduct);
   assertEquals(migrated.records.salesReps, {});
   assertEquals(migrated.records.quotes, {});
@@ -153,6 +153,31 @@ Deno.test("signed cookie bundle round trips", async () => {
 
   assertEquals(await readCookieBundle(bundle.cookies, SECRET), state);
   assertEquals(bundle.manifest.chunks, 1);
+});
+
+Deno.test("codec preserves populated quote records", async () => {
+  let state = createInitialState({ seed: 27, now: 1_000 });
+  state = applyCommand(state, {
+    type: "contact_lead",
+    leadId: "lead_1",
+    channel: "email",
+  }).state;
+  state = applyCommand(state, {
+    type: "qualify_lead",
+    leadId: "lead_1",
+  }).state;
+  state = { ...state, unlocks: ["pipeline"] };
+  state = applyCommand(state, {
+    type: "create_quote",
+    dealId: "deal_1",
+    product: "scale",
+    billingCycle: "annual",
+    seats: 75,
+    discountPercent: 15,
+    validDays: 21,
+  }).state;
+
+  assertEquals(await decodeGameState(await encodeGameState(state)), state);
 });
 
 Deno.test("modified cookie payload is rejected", async () => {

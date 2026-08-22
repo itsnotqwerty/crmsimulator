@@ -327,12 +327,62 @@ function processStep(
         relatedId: task.id,
         gameMinute: task.dueAt,
       });
+      const lead = leads[task.relatedId];
+      if (task.kind === "follow_up" && lead) {
+        leads[lead.id] = {
+          ...lead,
+          engagement: Math.max(0, lead.engagement - 15),
+        };
+      }
+    }
+  }
+
+  const elapsedHours = Math.floor(endMinute / 60) -
+    Math.floor(startMinute / 60);
+  const salesReps = { ...nextState.records.salesReps };
+  if (elapsedHours > 0) {
+    for (const rep of Object.values(salesReps)) {
+      const leadLoad = Object.values(leads).filter((lead) =>
+        lead.ownerId === rep.id &&
+        ["new", "contacted", "cold"].includes(lead.status)
+      ).length;
+      const dealLoad = Object.values(nextState.records.deals).filter((deal) =>
+        deal.ownerId === rep.id && deal.stage !== "won" && deal.stage !== "lost"
+      ).length;
+      const overloaded = leadLoad + dealLoad > rep.dealCapacity;
+      salesReps[rep.id] = {
+        ...rep,
+        burnout: Math.max(
+          0,
+          Math.min(100, rep.burnout + elapsedHours * (overloaded ? 2 : -1)),
+        ),
+      };
+    }
+  }
+
+  const quotes = { ...nextState.records.quotes };
+  for (const quote of Object.values(quotes)) {
+    if (
+      (quote.status === "draft" || quote.status === "sent") &&
+      startMinute < quote.validUntil && quote.validUntil <= endMinute
+    ) {
+      quotes[quote.id] = {
+        ...quote,
+        status: "expired",
+        updatedAt: quote.validUntil,
+      };
+      events.push({
+        kind: "quote_expired",
+        summary: "Quote validity period ended",
+        relatedId: quote.id,
+        gameMinute: quote.validUntil,
+      });
     }
   }
 
   nextState = {
     ...nextState,
-    records: { ...nextState.records, leads },
+    records: { ...nextState.records, leads, quotes, salesReps },
   };
 
   if (nextCashCents < nextState.company.bankruptcyThresholdCents) {

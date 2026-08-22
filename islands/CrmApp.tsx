@@ -15,6 +15,7 @@ import {
   Download,
   FileText,
   Gauge,
+  GraduationCap,
   Inbox,
   LayoutDashboard,
   List,
@@ -168,6 +169,8 @@ function PipelineWorkspace(props: {
   const quoteSeats = useSignal("10");
   const quoteDiscount = useSignal("0");
   const quoteValidDays = useSignal("14");
+  const selectedDeals = useSignal<Set<string>>(new Set());
+  const bulkOwner = useSignal("");
   const deals = Object.values(props.game.records.deals).sort((a, b) =>
     b.updatedAt - a.updatedAt
   );
@@ -269,6 +272,13 @@ function PipelineWorkspace(props: {
       validDays: Number(quoteValidDays.value),
     });
   };
+  const toggleDeal = (dealId: string) => {
+    const next = new Set(selectedDeals.value);
+    if (next.has(dealId)) next.delete(dealId);
+    else next.add(dealId);
+    selectedDeals.value = next;
+  };
+  const clearSelection = () => selectedDeals.value = new Set();
 
   return (
     <>
@@ -445,7 +455,24 @@ function PipelineWorkspace(props: {
                         )}%
                       </dd>
                     </div>
+                    <div>
+                      <dt>Burnout</dt>
+                      <dd class={rep.burnout >= 60 ? "overloaded" : ""}>
+                        {rep.burnout}%
+                      </dd>
+                    </div>
                   </dl>
+                  <button
+                    type="button"
+                    class="secondary rep-training"
+                    onClick={() =>
+                      props.dispatch({
+                        type: "train_sales_rep",
+                        salesRepId: rep.id,
+                      })}
+                  >
+                    <GraduationCap size={15} />Train · $1,000
+                  </button>
                 </div>
               );
             })}
@@ -724,13 +751,60 @@ function PipelineWorkspace(props: {
         ? (
           <div class="panel table-panel">
             <div class="table-toolbar">
-              <strong>{openDeals.length} open deals</strong>
-              <span>Forecast derived from current probabilities</span>
+              <strong>
+                {selectedDeals.value.size || openDeals.length}{" "}
+                {selectedDeals.value.size ? "selected" : "open deals"}
+              </strong>
+              {selectedDeals.value.size > 0
+                ? (
+                  <div class="bulk-actions">
+                    <select
+                      aria-label="Bulk deal owner"
+                      value={bulkOwner.value}
+                      onChange={(event) =>
+                        bulkOwner.value = event.currentTarget.value}
+                    >
+                      <option value="">Founder</option>
+                      {salesReps.map((rep) => (
+                        <option value={rep.id}>{rep.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      class="secondary"
+                      onClick={() => {
+                        props.dispatch({
+                          type: "bulk_assign_deals",
+                          dealIds: [...selectedDeals.value],
+                          ownerId: bulkOwner.value || undefined,
+                        });
+                        clearSelection();
+                      }}
+                    >
+                      <Users size={15} />Assign
+                    </button>
+                    <button
+                      type="button"
+                      class="primary"
+                      onClick={() => {
+                        props.dispatch({
+                          type: "bulk_advance_deals",
+                          dealIds: [...selectedDeals.value],
+                        });
+                        clearSelection();
+                      }}
+                    >
+                      Advance <ChevronRight size={15} />
+                    </button>
+                  </div>
+                )
+                : <span>Forecast derived from current probabilities</span>}
             </div>
             <div class="table-scroll">
               <table class="pipeline-table">
                 <thead>
                   <tr>
+                    <th aria-label="Select deals"></th>
                     <th>Deal</th>
                     <th>Stage</th>
                     <th>Product</th>
@@ -747,6 +821,14 @@ function PipelineWorkspace(props: {
                     const { lead, company } = detail(deal);
                     return (
                       <tr>
+                        <td>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${company?.name ?? "deal"}`}
+                            checked={selectedDeals.value.has(deal.id)}
+                            onChange={() => toggleDeal(deal.id)}
+                          />
+                        </td>
                         <td>
                           <strong>{company?.name ?? "Unknown company"}</strong>
                           <small>
@@ -945,7 +1027,6 @@ export default function CrmApp(props: CrmAppProps) {
   const showNotifications = useSignal(false);
   const showCompanyMenu = useSignal(false);
   const mobileNav = useSignal(false);
-  const pipelineMode = useSignal<"list" | "board">("list");
   const showOffline = useSignal(
     props.loadStatus === "offline" || props.loadStatus === "crisis",
   );
@@ -2300,8 +2381,9 @@ export default function CrmApp(props: CrmAppProps) {
             <PipelineWorkspace
               game={game}
               currentMinute={effectiveMinute}
-              mode={pipelineMode.value}
-              onModeChange={(mode) => pipelineMode.value = mode}
+              mode={game.preferences.pipelineView}
+              onModeChange={(view) =>
+                dispatch({ type: "set_pipeline_view", view })}
               dispatch={dispatch}
             />
           )}

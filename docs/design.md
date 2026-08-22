@@ -50,6 +50,11 @@ A discriminated action envelope selects one operation:
 - `export`: validate and return a portable JSON download;
 - `import`: validate and migrate a portable JSON save before replacing cookies.
 
+Schema version 6 adds bounded quote records independently from deals. Quote
+acceptance applies its commercial terms to the deal, then uses the canonical
+deal-win transaction to create the customer, subscription MRR, and onboarding
+work without duplicating revenue state transitions.
+
 Each operation returns JSON except export. The client identifies the action in
 the request body, not in a query path. Requests must use
 `Content-Type: application/json` except a bounded multipart import if later
