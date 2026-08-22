@@ -1,8 +1,9 @@
 # Generic web service deployment
 
 This folder installs any long-running web application behind nginx and systemd.
-It does not install a runtime, package manager, application dependencies, nginx,
-or TLS certificates. Prepare those prerequisites before installation.
+When a configured Deno executable is missing, it installs the latest stable Deno
+release into `/usr/local/bin`. Other runtimes, application dependencies, nginx,
+and TLS certificates remain prerequisites.
 
 ## Required inputs
 
@@ -41,6 +42,9 @@ sudo ./deploy/install.sh \
 
 Use `--dry-run` without root to inspect rendered systemd and nginx files. Use
 `--skip-nginx` when another reverse proxy or load balancer owns ingress.
+Dry-run output reports when Deno would be installed. Before writing the systemd
+unit, a real installation verifies that the service user can execute the chosen
+runtime, preventing a delayed `203/EXEC` service failure.
 
 ## TLS
 

@@ -31,6 +31,7 @@ Nginx and TLS:
   --acme-root PATH        ACME challenge root (default: /var/lib/letsencrypt)
 
 System:
+  Missing Deno executables are installed into /usr/local/bin automatically.
   --systemd-dir PATH      Systemd unit directory (default: /etc/systemd/system)
   --dry-run               Render configurations without installing or requiring root
   -h, --help              Show this help
@@ -207,6 +208,21 @@ if [[ "$start_command" != /* ]]; then
   exit 2
 fi
 
+start_executable="${start_command%% *}"
+install_deno="false"
+if [[ ! -x "$start_executable" ]]; then
+  if [[ "$(basename "$start_executable")" == "deno" ]]; then
+    start_command="/usr/local/bin/deno${start_command#"$start_executable"}"
+    start_executable="/usr/local/bin/deno"
+    if [[ ! -x "$start_executable" ]]; then
+      install_deno="true"
+    fi
+  else
+    echo "Start executable does not exist or is not executable: $start_executable" >&2
+    exit 1
+  fi
+fi
+
 if [[ -z "$project_dir" ]]; then
   project_dir="$repo_root"
 fi
@@ -331,6 +347,9 @@ if [[ "$skip_nginx" == "false" ]] && grep -q '__[A-Z0-9_]*__' "$rendered_nginx";
 fi
 
 if [[ "$dry_run" == "true" ]]; then
+  if [[ "$install_deno" == "true" ]]; then
+    printf '%s\n' "--- install Deno -> /usr/local/bin/deno"
+  fi
   printf '%s\n' "--- ${service_dest}"
   cat "$rendered_service"
   if [[ "$skip_nginx" == "false" ]]; then
@@ -351,8 +370,26 @@ if ! command -v systemctl >/dev/null 2>&1; then
   echo "systemctl is required." >&2
   exit 1
 fi
+if [[ "$install_deno" == "true" ]]; then
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "curl is required to install Deno." >&2
+    exit 1
+  fi
+  deno_installer="${work_dir}/install-deno.sh"
+  curl --proto '=https' --tlsv1.2 -fsSL \
+    https://deno.land/install.sh -o "$deno_installer"
+  DENO_INSTALL=/usr/local sh "$deno_installer"
+fi
+if [[ ! -x "$start_executable" ]]; then
+  echo "Start executable does not exist or is not executable: $start_executable" >&2
+  exit 1
+fi
 if ! runuser -u "$app_user" -- test -x "$project_dir"; then
   echo "Service user '$app_user' cannot traverse '$project_dir'." >&2
+  exit 1
+fi
+if ! runuser -u "$app_user" -- test -x "$start_executable"; then
+  echo "Service user '$app_user' cannot execute '$start_executable'." >&2
   exit 1
 fi
 if [[ "$skip_nginx" == "false" ]] && ! command -v nginx >/dev/null 2>&1; then
