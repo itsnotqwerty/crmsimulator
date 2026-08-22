@@ -46,6 +46,12 @@ output reports when Deno would be installed. Before writing the systemd unit, a
 real installation verifies that the service user can execute the chosen runtime,
 preventing a delayed `203/EXEC` service failure.
 
+For a Fresh project containing `deno.json`, `dev.ts`, and `fresh.config.ts`, the
+installer runs `deno task build` as the service user before replacing service or
+nginx configuration. This regenerates `fresh.gen.ts` and `_fresh` so deployments
+cannot serve stale islands or styles. Use `--skip-build` only when assets were
+built separately from the same commit.
+
 ## TLS
 
 When both certificate files exist, the installer uses the HTTPS template and

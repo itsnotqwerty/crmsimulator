@@ -19,6 +19,7 @@ Application:
   -p, --port PORT         Local application port (default: 8000)
   -e, --env FILE          Environment file to copy into project-owned /etc storage
   --config-root PATH      Application config root (default: /etc)
+  --skip-build            Do not run the detected Fresh production build
 
 Nginx and TLS:
   -n, --domain NAME       Nginx server_name (default: localhost)
@@ -73,6 +74,7 @@ client_max_body_size="1m"
 acme_root="/var/lib/letsencrypt"
 systemd_dir="/etc/systemd/system"
 dry_run="false"
+skip_build="false"
 cert_was_set="false"
 key_was_set="false"
 deno_install_root="${DENO_INSTALL_ROOT:-/usr/local}"
@@ -123,6 +125,10 @@ while [[ $# -gt 0 ]]; do
       require_value "$@"
       config_root="$2"
       shift 2
+      ;;
+    --skip-build)
+      skip_build="true"
+      shift
       ;;
     -n|--domain)
       require_value "$@"
@@ -232,6 +238,17 @@ if [[ ! -d "$project_dir" ]]; then
   exit 1
 fi
 project_dir="$(cd "$project_dir" && pwd)"
+
+build_project="false"
+if [[
+  "$skip_build" == "false" &&
+  "$(basename "$start_executable")" == "deno" &&
+  -f "$project_dir/deno.json" &&
+  -f "$project_dir/dev.ts" &&
+  -f "$project_dir/fresh.config.ts"
+]]; then
+  build_project="true"
+fi
 
 if [[ -z "$app_user" ]]; then
   app_user="$(stat -c '%U' "$project_dir")"
@@ -351,6 +368,9 @@ if [[ "$dry_run" == "true" ]]; then
   if [[ "$install_deno" == "true" ]]; then
     printf '%s\n' "--- install Deno -> ${start_executable}"
   fi
+  if [[ "$build_project" == "true" ]]; then
+    printf '%s\n' "--- build ${project_dir}: ${start_executable} task build"
+  fi
   printf '%s\n' "--- ${service_dest}"
   cat "$rendered_service"
   if [[ "$skip_nginx" == "false" ]]; then
@@ -396,6 +416,15 @@ fi
 if [[ "$skip_nginx" == "false" ]] && ! command -v nginx >/dev/null 2>&1; then
   echo "nginx is required unless --skip-nginx is used." >&2
   exit 1
+fi
+if [[ "$build_project" == "true" ]]; then
+  app_home="$(getent passwd "$app_user" | cut -d: -f6)"
+  printf '%s\n' "Building Fresh production assets as ${app_user}..."
+  (
+    cd "$project_dir"
+    runuser -u "$app_user" -- env HOME="$app_home" \
+      "$start_executable" task build
+  )
 fi
 
 install -d -m 0755 "$systemd_dir"
