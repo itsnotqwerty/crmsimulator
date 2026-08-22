@@ -1,10 +1,11 @@
-export const SAVE_SCHEMA_VERSION = 16 as const;
+export const SAVE_SCHEMA_VERSION = 17 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
 export type GameMinute = number;
 
 export type SimulationStatus = "active" | "crisis" | "bankrupt";
+export type TimeScale = 1 | 2 | 4;
 export type LeadStatus =
   | "new"
   | "contacted"
@@ -53,6 +54,7 @@ export type ActivityKind =
   | "deal_won"
   | "deal_lost"
   | "sales_rep_hired"
+  | "sales_rep_fired"
   | "sales_rep_trained"
   | "deal_assigned"
   | "leads_routed"
@@ -68,6 +70,7 @@ export type ActivityKind =
   | "customer_at_risk"
   | "customer_churned"
   | "success_rep_hired"
+  | "success_rep_fired"
   | "customer_assigned"
   | "success_playbook_run"
   | "ticket_created"
@@ -76,12 +79,14 @@ export type ActivityKind =
   | "ticket_resolved"
   | "ticket_sla_breached"
   | "support_rep_hired"
+  | "support_rep_fired"
   | "ticket_escalated"
   | "incident_declared"
   | "incident_resolved"
   | "customer_feedback_received"
   | "task_created"
   | "task_completed"
+  | "task_cancelled"
   | "task_overdue"
   | "revenue_accrued"
   | "expense_accrued"
@@ -429,6 +434,7 @@ export interface PreferenceState {
   musicEnabled: boolean;
   musicVolume: number;
   pipelineView: "list" | "board";
+  timeScale: TimeScale;
 }
 
 export interface GameState {
@@ -453,6 +459,7 @@ export interface GameState {
 }
 
 export type GameCommand =
+  | { type: "prospect_lead" }
   | { type: "contact_lead"; leadId: EntityId; channel: "call" | "email" }
   | { type: "qualify_lead"; leadId: EntityId }
   | { type: "disqualify_lead"; leadId: EntityId }
@@ -476,6 +483,7 @@ export type GameCommand =
     territory: SalesTerritory;
     monthlyTargetCents: number;
   }
+  | { type: "fire_sales_rep"; salesRepId: EntityId }
   | { type: "assign_deal"; dealId: EntityId; ownerId?: EntityId }
   | { type: "train_sales_rep"; salesRepId: EntityId }
   | { type: "route_leads" }
@@ -532,6 +540,7 @@ export type GameCommand =
   | { type: "set_sound_enabled"; enabled: boolean }
   | { type: "set_music_enabled"; enabled: boolean }
   | { type: "set_music_volume"; volume: number }
+  | { type: "set_time_scale"; timeScale: TimeScale }
   | { type: "set_pipeline_view"; view: "list" | "board" }
   | { type: "bulk_advance_deals"; dealIds: EntityId[] }
   | {
@@ -540,11 +549,13 @@ export type GameCommand =
     ownerId?: EntityId;
   }
   | { type: "complete_task"; taskId: EntityId }
+  | { type: "cancel_task"; taskId: EntityId }
   | { type: "complete_customer_onboarding"; customerId: EntityId }
   | { type: "customer_check_in"; customerId: EntityId }
   | { type: "renew_customer"; customerId: EntityId }
   | { type: "expand_customer"; customerId: EntityId }
   | { type: "hire_success_rep"; name: string; level: SalesRepLevel }
+  | { type: "fire_success_rep"; successRepId: EntityId }
   | {
     type: "assign_customer";
     customerId: EntityId;
@@ -566,6 +577,7 @@ export type GameCommand =
   | { type: "acknowledge_ticket"; ticketId: EntityId }
   | { type: "resolve_ticket"; ticketId: EntityId }
   | { type: "hire_support_rep"; name: string; level: SalesRepLevel }
+  | { type: "fire_support_rep"; supportRepId: EntityId }
   | { type: "escalate_ticket"; ticketId: EntityId }
   | {
     type: "declare_incident";
@@ -645,6 +657,7 @@ export interface GameRules {
   realMillisecondsPerGameMinute: number;
   maxOfflineRealMilliseconds: number;
   leadArrivalIntervalMinutes: number;
+  prospectingCapacityMinutes: number;
   leadCoolingMinutes: number;
   capacityResetIntervalMinutes: number;
   billingIntervalMinutes: number;

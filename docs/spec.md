@@ -61,6 +61,7 @@ The company begins with:
 - no paying customers;
 - one basic product plan;
 - a small stream of inbound leads;
+- founder prospecting that trades daily capacity for an immediate lead;
 - founder capacity for outreach and account work;
 - Dashboard, Inbox, Contacts, and Tasks modules.
 
@@ -71,8 +72,10 @@ demand, lead quality, conversion, workload, service quality, and staff capacity.
 
 ### 5.1 Game clock
 
-One real minute equals one game hour. The simulation advances from elapsed
-timestamps rather than animation frames.
+At 1x, one real minute equals one game hour. The player may select 1x, 2x, or
+4x; a new company defaults to 2x. The selected scale applies to active and
+offline elapsed time and persists with the company. The simulation advances
+from elapsed timestamps rather than animation frames.
 
 Rules and recurring effects are evaluated in fixed intervals. Given the same
 saved state, seed, player commands, and elapsed time, the result must be
@@ -88,6 +91,8 @@ While the application is open:
 - inbound leads, task deadlines, campaigns, recurring revenue, payroll,
   workload, customer health, renewals, and incidents advance with game time;
 - manual actions apply immediately through validated game commands;
+- founders can spend capacity to prospect a lead instead of waiting for organic
+  demand;
 - the game autosaves after meaningful mutations and at safe lifecycle
   boundaries;
 - cash may fall below the bankruptcy threshold.
@@ -336,7 +341,9 @@ bypass bankruptcy.
 
 Crisis Pause exists only to prevent unseen offline bankruptcy. It is not a
 general safety net. Time remains paused until the player makes a valid
-corrective change or elects to resume and accept the risk.
+corrective change or elects to resume and accept the risk. Corrective commands
+include pausing active campaigns and dismissing sales, success, or support
+staff; these changes preserve referential integrity by unassigning owned work.
 
 ## 13. Persistence and portability
 

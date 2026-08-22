@@ -67,6 +67,10 @@ SLA breach tracking.
 Schema version 12 separates support ownership into a bounded specialist roster
 and adds escalation, incident records, workload burnout, and resolution quality.
 
+Schema version 17 persists the 1x/2x/4x simulation scale. Existing saves migrate
+to the faster 2x default and repair ticket-resolution counts that older builds
+incorrectly incremented during assignment.
+
 Each operation returns JSON except export. The client identifies the action in
 the request body, not in a query path. Requests must use
 `Content-Type: application/json` except a bounded multipart import if later
@@ -131,9 +135,9 @@ The persisted envelope contains:
 - bounded recent activities and notifications;
 - onboarding progress and UI preferences.
 
-Company identity and accessibility preferences are canonical save data. They
-change through validated commands and use the same cookie autosave path as
-simulation progress.
+Company identity, accessibility preferences, and simulation speed are canonical
+save data. They change through validated commands and use the same cookie
+autosave path as simulation progress.
 
 The save does not persist values that can be reliably derived from canonical
 records. Display labels, generated descriptions, computed KPIs, filtered lists,
@@ -244,9 +248,10 @@ summaries through bounded projectors. The event log is not retained forever.
 max(0, min(now - lastSimulatedAt, 24 hours))
 ```
 
-It converts accepted real time at one game hour per real minute and advances
-through the normal engine. Before applying an interval that would bankrupt the
-company, offline mode stops at the previous valid state and emits Crisis Pause.
+It converts accepted real time at one game hour per real minute at 1x, multiplies
+the result by the saved 1x/2x/4x scale, and advances through the normal engine.
+Before applying an interval that would bankrupt the company, offline mode stops
+at the previous valid state and emits Crisis Pause.
 
 Active mode does not use this protection. It emits bankruptcy, freezes
 simulation, and requires a reset action.

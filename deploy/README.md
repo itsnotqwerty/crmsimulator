@@ -86,3 +86,7 @@ env file do not require a placeholder.
 
 Rerunning the installer updates the same project-owned files and restarts only
 the selected service.
+
+The nginx templates allocate 64 KiB upstream and client header buffers because
+the signed, chunked save can produce response and request cookie headers larger
+than nginx's defaults.

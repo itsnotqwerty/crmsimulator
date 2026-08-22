@@ -55,6 +55,35 @@ Deno.test("rejected commands preserve the original state reference", () => {
   assertStrictEquals(result.state, state);
 });
 
+Deno.test("founders can prospect deterministic leads using capacity", () => {
+  const initial = createInitialState({ seed: 101, now: 1_000 });
+  const first = applyCommand(initial, { type: "prospect_lead" });
+  const replay = applyCommand(initial, { type: "prospect_lead" });
+
+  assert(first.accepted);
+  assertEquals(first, replay);
+  assertEquals(Object.keys(first.state.records.leads).length, 2);
+  assertEquals(Object.keys(first.state.records.tasks).length, 2);
+  assertEquals(
+    first.state.company.founderCapacityRemaining,
+    initial.company.founderCapacityRemaining -
+      DEFAULT_RULES.prospectingCapacityMinutes,
+  );
+  assertEquals(first.state.history.leadsCreated, 2);
+});
+
+Deno.test("open tasks can be cancelled", () => {
+  const initial = createInitialState({ seed: 102, now: 1_000 });
+  const cancelled = applyCommand(initial, {
+    type: "cancel_task",
+    taskId: "task_1",
+  });
+
+  assert(cancelled.accepted);
+  assertEquals(cancelled.state.records.tasks.task_1.status, "cancelled");
+  assertEquals(cancelled.events[0].kind, "task_cancelled");
+});
+
 Deno.test("lead commands create a customer and recurring revenue", () => {
   let state = createInitialState({ seed: 5, now: 1_000 });
   const contacted = applyCommand(state, {
@@ -250,6 +279,17 @@ Deno.test("success representatives own accounts and improve playbooks", () => {
     played.state.company.founderCapacityRemaining,
     state.company.founderCapacityRemaining,
   );
+
+  const fired = applyCommand(played.state, {
+    type: "fire_success_rep",
+    successRepId: "success_rep_1",
+  });
+  assert(fired.accepted);
+  assertEquals(fired.state.records.successReps, {});
+  assertEquals(
+    fired.state.records.customers.customer_1.ownerId,
+    undefined,
+  );
 });
 
 Deno.test("NPS surveys produce deterministic bounded feedback", () => {
@@ -408,6 +448,7 @@ Deno.test("support tickets follow an assigned SLA lifecycle", () => {
     ticketId: "ticket_1",
     ownerId: "support_rep_1",
   }).state;
+  assertEquals(state.history.ticketsResolved, 0);
   state = applyCommand(state, {
     type: "acknowledge_ticket",
     ticketId: "ticket_1",
@@ -419,10 +460,19 @@ Deno.test("support tickets follow an assigned SLA lifecycle", () => {
 
   assert(resolved.accepted);
   assertEquals(resolved.state.records.tickets.ticket_1.status, "resolved");
+  assertEquals(resolved.state.history.ticketsResolved, 1);
   assertEquals(
     resolved.state.records.tickets.ticket_1.ownerId,
     "support_rep_1",
   );
+
+  const fired = applyCommand(resolved.state, {
+    type: "fire_support_rep",
+    supportRepId: "support_rep_1",
+  });
+  assert(fired.accepted);
+  assertEquals(fired.state.records.supportReps, {});
+  assertEquals(fired.state.records.tickets.ticket_1.ownerId, undefined);
 });
 
 Deno.test("missed ticket SLAs fire once and damage account health", () => {
@@ -742,6 +792,14 @@ Deno.test("sales representatives can be hired and assigned to deals", () => {
     dealId: "deal_1",
   });
   assertEquals(advanced.state.records.deals.deal_1.probability, 51);
+
+  const fired = applyCommand(assigned.state, {
+    type: "fire_sales_rep",
+    salesRepId: "sales_rep_1",
+  });
+  assert(fired.accepted);
+  assertEquals(fired.state.records.salesReps, {});
+  assertEquals(fired.state.records.deals.deal_1.ownerId, undefined);
 });
 
 Deno.test("sales compensation accrues as a deterministic operating cost", () => {
@@ -1123,10 +1181,12 @@ Deno.test("campaign saturation rises with volume and reduces lead quality", () =
     },
   };
 
-  const freshLead =
-    advanceGame(created.state, 4 * 60).state.records.leads.lead_2;
-  const saturatedLead =
-    advanceGame(saturated, 4 * 60).state.records.leads.lead_2;
+  const freshLead = Object.values(
+    advanceGame(created.state, 4 * 60).state.records.leads,
+  ).find((lead) => lead.campaignId === "campaign_1")!;
+  const saturatedLead = Object.values(
+    advanceGame(saturated, 4 * 60).state.records.leads,
+  ).find((lead) => lead.campaignId === "campaign_1")!;
   assertEquals(campaignSaturation(30), 100);
   assertEquals(saturatedLead.fit, Math.max(0, freshLead.fit - 30));
 });
@@ -1286,6 +1346,34 @@ Deno.test("offline simulation pauses before bankruptcy", () => {
   assertEquals(result.summary.stoppedForCrisis, true);
 });
 
+Deno.test("crisis pause permits payroll-cutting corrections", () => {
+  const initial = createInitialState({ seed: 104, now: 1_000 });
+  const staffed = applyCommand(
+    { ...initial, unlocks: ["pipeline"] },
+    {
+      type: "hire_sales_rep",
+      name: "Avery Chen",
+      level: "senior",
+      territory: "all",
+      monthlyTargetCents: 2_000_000,
+    },
+  ).state;
+  const endangered = {
+    ...staffed,
+    company: { ...staffed.company, cashCents: 1 },
+  };
+  const crisis = advanceOffline(endangered, 61_000).state;
+  const fired = applyCommand(crisis, {
+    type: "fire_sales_rep",
+    salesRepId: "sales_rep_1",
+  });
+
+  assert(fired.accepted);
+  assertEquals(fired.state.clock.status, "crisis");
+  assertEquals(fired.state.records.salesReps, {});
+  assert(applyCommand(fired.state, { type: "resume_crisis" }).accepted);
+});
+
 Deno.test("active simulation can declare bankruptcy", () => {
   const initial = createInitialState({ seed: 8, now: 1_000 });
   const endangered = {
@@ -1315,9 +1403,26 @@ Deno.test("offline elapsed time is capped at 24 hours", () => {
   );
   const expectedGameMinutes = Math.floor(
     DEFAULT_RULES.maxOfflineRealMilliseconds /
-      DEFAULT_RULES.realMillisecondsPerGameMinute,
+      DEFAULT_RULES.realMillisecondsPerGameMinute *
+      wealthy.preferences.timeScale,
   );
 
   assertEquals(result.summary.elapsedGameMinutes, expectedGameMinutes);
   assertEquals(result.state.clock.gameMinute, expectedGameMinutes);
+});
+
+Deno.test("simulation speed preference controls offline game time", () => {
+  const initial = createInitialState({ seed: 103, now: 1_000 });
+  const normal = {
+    ...initial,
+    preferences: { ...initial.preferences, timeScale: 1 as const },
+  };
+  const fast = {
+    ...initial,
+    preferences: { ...initial.preferences, timeScale: 4 as const },
+  };
+  const now = initial.lastSimulatedAt + 10_000;
+
+  assertEquals(advanceOffline(normal, now).state.clock.gameMinute, 10);
+  assertEquals(advanceOffline(fast, now).state.clock.gameMinute, 40);
 });

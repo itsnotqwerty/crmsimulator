@@ -48,7 +48,11 @@ Deno.test("codec preserves campaign records and attribution fields", async () =>
     await decodeGameState(await encodeGameState(advanced)),
     advanced,
   );
-  assertEquals(advanced.records.leads.lead_2.campaignId, "campaign_1");
+  assert(
+    Object.values(advanced.records.leads).some((lead) =>
+      lead.campaignId === "campaign_1"
+    ),
+  );
 });
 
 Deno.test("codec preserves sales representatives and deal ownership", async () => {
@@ -109,7 +113,7 @@ Deno.test("version 1 saves migrate with empty campaign state", () => {
   delete (legacy.history as Record<string, unknown>).campaignLeadsArchived;
 
   const migrated = migrateGameState(legacy);
-  assertEquals(migrated.schemaVersion, 16);
+  assertEquals(migrated.schemaVersion, 17);
   assertEquals(migrated.sequences.campaign, 0);
   assertEquals(migrated.records.campaigns, {});
   assertEquals(migrated.history.campaignsArchived, 0);
@@ -123,6 +127,7 @@ Deno.test("version 1 saves migrate with empty campaign state", () => {
   assertEquals(migrated.records.supportReps, {});
   assertEquals(migrated.sequences.incident, 0);
   assertEquals(migrated.records.incidents, {});
+  assertEquals(migrated.preferences.timeScale, 2);
 });
 
 Deno.test("version 3 deals migrate with an inferred product", () => {
@@ -147,7 +152,7 @@ Deno.test("version 3 deals migrate with an inferred product", () => {
 
   const migrated = migrateGameState(legacy);
 
-  assertEquals(migrated.schemaVersion, 16);
+  assertEquals(migrated.schemaVersion, 17);
   assertEquals(migrated.records.deals.deal_1.product, expectedProduct);
   assertEquals(migrated.records.salesReps, {});
   assertEquals(migrated.records.quotes, {});
@@ -209,7 +214,7 @@ Deno.test("version 8 customers migrate into active lifecycle records", () => {
   };
 
   const migrated = migrateGameState(legacy);
-  assertEquals(migrated.schemaVersion, 16);
+  assertEquals(migrated.schemaVersion, 17);
   assertEquals(migrated.records.customers.customer_1.lifecycle, "active");
   assertEquals(migrated.records.customers.customer_1.adoption, 65);
   assertEquals(migrated.records.customers.customer_1.renewalAt, 43_200);
@@ -258,11 +263,28 @@ Deno.test("version 11 tickets migrate to dedicated support ownership", () => {
 
   const migrated = migrateGameState(legacy);
 
-  assertEquals(migrated.schemaVersion, 16);
+  assertEquals(migrated.schemaVersion, 17);
   assertEquals(migrated.records.tickets.ticket_1.ownerId, undefined);
   assertEquals(migrated.records.tickets.ticket_1.escalated, false);
   assertEquals(migrated.records.supportReps, {});
   assertEquals(migrated.records.incidents, {});
+});
+
+Deno.test("version 16 migration repairs assignment-inflated ticket history", () => {
+  const current = createInitialState({ seed: 105, now: 1_000 });
+  const legacy = structuredClone(current) as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 16;
+  delete (legacy.preferences as Record<string, unknown>).timeScale;
+  const history = legacy.history as Record<string, unknown>;
+  history.ticketsResolved = 5;
+  history.ticketResolutionMinutes = 200;
+
+  const migrated = migrateGameState(legacy);
+
+  assertEquals(migrated.schemaVersion, 17);
+  assertEquals(migrated.history.ticketsResolved, 0);
+  assertEquals(migrated.history.ticketResolutionMinutes, 0);
+  assertEquals(migrated.preferences.timeScale, 2);
 });
 
 Deno.test("codec preserves success representatives and account ownership", async () => {

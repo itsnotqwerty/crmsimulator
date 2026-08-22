@@ -22,7 +22,6 @@ import {
   LockKeyhole,
   Mail,
   Menu,
-  MoreHorizontal,
   Music2,
   Pencil,
   Phone,
@@ -161,7 +160,7 @@ const PIPELINE_STAGES = [
 function CustomerSuccessWorkspace(props: {
   game: GameState;
   currentMinute: number;
-  dispatch: (command: GameCommand) => void;
+  dispatch: (command: GameCommand) => boolean;
 }) {
   const repName = useSignal("");
   const repLevel = useSignal<SalesRepLevel>("junior");
@@ -215,32 +214,32 @@ function CustomerSuccessWorkspace(props: {
   const retention = retentionReport(props.game);
   const hireSuccessRep = (event: SubmitEvent) => {
     event.preventDefault();
-    props.dispatch({
+    const accepted = props.dispatch({
       type: "hire_success_rep",
       name: repName.value,
       level: repLevel.value,
     });
-    repName.value = "";
+    if (accepted) repName.value = "";
   };
   const createTicket = (event: SubmitEvent) => {
     event.preventDefault();
-    props.dispatch({
+    const accepted = props.dispatch({
       type: "create_ticket",
       customerId: ticketCustomerId.value,
       channel: ticketChannel.value,
       priority: ticketPriority.value,
       title: ticketTitle.value,
     });
-    ticketTitle.value = "";
+    if (accepted) ticketTitle.value = "";
   };
   const hireSupportRep = (event: SubmitEvent) => {
     event.preventDefault();
-    props.dispatch({
+    const accepted = props.dispatch({
       type: "hire_support_rep",
       name: supportRepName.value,
       level: supportRepLevel.value,
     });
-    supportRepName.value = "";
+    if (accepted) supportRepName.value = "";
   };
 
   return (
@@ -347,6 +346,20 @@ function CustomerSuccessWorkspace(props: {
                   <span class={rep.burnout >= 60 ? "overloaded" : ""}>
                     {rep.burnout}% burnout
                   </span>
+                  <button
+                    type="button"
+                    class="text-button staff-fire"
+                    onClick={() => {
+                      if (globalThis.confirm(`Dismiss ${rep.name}?`)) {
+                        props.dispatch({
+                          type: "fire_success_rep",
+                          successRepId: rep.id,
+                        });
+                      }
+                    }}
+                  >
+                    Dismiss
+                  </button>
                 </div>
               );
             })}
@@ -414,6 +427,20 @@ function CustomerSuccessWorkspace(props: {
                   <span class={rep.burnout >= 60 ? "overloaded" : ""}>
                     {rep.burnout}% burnout
                   </span>
+                  <button
+                    type="button"
+                    class="text-button staff-fire"
+                    onClick={() => {
+                      if (globalThis.confirm(`Dismiss ${rep.name}?`)) {
+                        props.dispatch({
+                          type: "fire_support_rep",
+                          supportRepId: rep.id,
+                        });
+                      }
+                    }}
+                  >
+                    Dismiss
+                  </button>
                 </div>
               );
             })}
@@ -1291,7 +1318,7 @@ function PipelineWorkspace(props: {
   currentMinute: number;
   mode: "list" | "board";
   onModeChange: (mode: "list" | "board") => void;
-  dispatch: (command: GameCommand) => void;
+  dispatch: (command: GameCommand) => boolean;
 }) {
   const editingDealId = useSignal<string | undefined>(undefined);
   const editProduct = useSignal<DealProduct>("growth");
@@ -1389,14 +1416,14 @@ function PipelineWorkspace(props: {
   };
   const hireRep = (event: SubmitEvent) => {
     event.preventDefault();
-    props.dispatch({
+    const accepted = props.dispatch({
       type: "hire_sales_rep",
       name: repName.value,
       level: repLevel.value,
       territory: repTerritory.value,
       monthlyTargetCents: Math.round(Number(repTarget.value) * 100),
     });
-    repName.value = "";
+    if (accepted) repName.value = "";
   };
   const createQuote = (event: SubmitEvent) => {
     event.preventDefault();
@@ -1601,17 +1628,33 @@ function PipelineWorkspace(props: {
                       </dd>
                     </div>
                   </dl>
-                  <button
-                    type="button"
-                    class="secondary rep-training"
-                    onClick={() =>
-                      props.dispatch({
-                        type: "train_sales_rep",
-                        salesRepId: rep.id,
-                      })}
-                  >
-                    <GraduationCap size={15} />Train · $1,000
-                  </button>
+                  <div class="rep-actions">
+                    <button
+                      type="button"
+                      class="secondary rep-training"
+                      onClick={() =>
+                        props.dispatch({
+                          type: "train_sales_rep",
+                          salesRepId: rep.id,
+                        })}
+                    >
+                      <GraduationCap size={15} />Train · $1,000
+                    </button>
+                    <button
+                      type="button"
+                      class="text-button staff-fire"
+                      onClick={() => {
+                        if (globalThis.confirm(`Dismiss ${rep.name}?`)) {
+                          props.dispatch({
+                            type: "fire_sales_rep",
+                            salesRepId: rep.id,
+                          });
+                        }
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -2226,6 +2269,9 @@ export default function CrmApp(props: CrmAppProps) {
   const openTasks = Object.values(game.records.tasks).filter((task) =>
     task.status === "open"
   );
+  const actionableLeads = leads.filter((lead) =>
+    ["new", "contacted", "cold"].includes(lead.status)
+  );
   const selectedLead = selectedLeadId.value
     ? game.records.leads[selectedLeadId.value]
     : undefined;
@@ -2331,11 +2377,18 @@ export default function CrmApp(props: CrmAppProps) {
     : game.company.founderCapacityRemaining < 60
     ? "Requires 60 minutes of available founder capacity."
     : undefined;
+  const prospectingBlockedReason = game.clock.status !== "active"
+    ? "Company time must be active before prospecting."
+    : game.company.founderCapacityRemaining <
+        DEFAULT_RULES.prospectingCapacityMinutes
+    ? `Requires ${DEFAULT_RULES.prospectingCapacityMinutes} minutes of founder capacity.`
+    : undefined;
   const effectiveMinute = game.clock.gameMinute + Math.max(
     0,
     Math.floor(
       (store.now.value - game.lastSimulatedAt) /
-        DEFAULT_RULES.realMillisecondsPerGameMinute,
+        DEFAULT_RULES.realMillisecondsPerGameMinute *
+        game.preferences.timeScale,
     ),
   );
 
@@ -2658,6 +2711,25 @@ export default function CrmApp(props: CrmAppProps) {
             )}
           </div>
           <div class="topbar-meta">
+            <div
+              class="time-controls"
+              role="group"
+              aria-label="Simulation speed"
+            >
+              {([1, 2, 4] as const).map((timeScale) => (
+                <button
+                  type="button"
+                  class={game.preferences.timeScale === timeScale
+                    ? "active"
+                    : ""}
+                  aria-pressed={game.preferences.timeScale === timeScale}
+                  onClick={() =>
+                    dispatch({ type: "set_time_scale", timeScale })}
+                >
+                  {timeScale}×
+                </button>
+              ))}
+            </div>
             <span class={`save-state ${store.saveStatus.value}`}>
               {store.saveStatus.value === "saving" && <RefreshCw size={13} />}
               {" "}
@@ -2847,6 +2919,11 @@ export default function CrmApp(props: CrmAppProps) {
                                 type: "complete_task",
                                 taskId: task.id,
                               })}
+                            onCancel={() =>
+                              dispatch({
+                                type: "cancel_task",
+                                taskId: task.id,
+                              })}
                           />
                         ))}
                       </div>
@@ -2895,6 +2972,21 @@ export default function CrmApp(props: CrmAppProps) {
                 <div class="view-actions">
                   <button
                     type="button"
+                    class="primary"
+                    disabled={Boolean(prospectingBlockedReason)}
+                    title={prospectingBlockedReason}
+                    onClick={() => {
+                      if (dispatch({ type: "prospect_lead" })) {
+                        selectedLeadId.value =
+                          `lead_${store.game.value.sequences.lead}`;
+                      }
+                    }}
+                  >
+                    <Search size={16} />Prospect lead ·{" "}
+                    {DEFAULT_RULES.prospectingCapacityMinutes}m
+                  </button>
+                  <button
+                    type="button"
                     class={`secondary ${showLeadFilters.value ? "active" : ""}`}
                     aria-expanded={showLeadFilters.value}
                     onClick={() =>
@@ -2904,8 +2996,10 @@ export default function CrmApp(props: CrmAppProps) {
                   </button>
                   <button
                     type="button"
-                    class="primary"
-                    onClick={() => selectedLeadId.value = leads[0]?.id}
+                    class="secondary"
+                    disabled={actionableLeads.length === 0}
+                    onClick={() =>
+                      selectedLeadId.value = actionableLeads[0]?.id}
                   >
                     <Target size={16} />Next lead
                   </button>
@@ -3205,6 +3299,11 @@ export default function CrmApp(props: CrmAppProps) {
                           onComplete={() =>
                             dispatch({
                               type: "complete_task",
+                              taskId: task.id,
+                            })}
+                          onCancel={() =>
+                            dispatch({
+                              type: "cancel_task",
                               taskId: task.id,
                             })}
                         />
@@ -4028,7 +4127,12 @@ export default function CrmApp(props: CrmAppProps) {
 }
 
 function TaskRow(
-  props: { task: Task; currentMinute: number; onComplete: () => void },
+  props: {
+    task: Task;
+    currentMinute: number;
+    onComplete: () => void;
+    onCancel: () => void;
+  },
 ) {
   const overdue = props.task.dueAt < props.currentMinute;
   return (
@@ -4048,9 +4152,19 @@ function TaskRow(
       <time class={overdue ? "overdue" : ""}>
         {relativeGameTime(props.task.dueAt, props.currentMinute)}
       </time>
-      <button type="button" class="icon-button" aria-label="Task options">
-        <MoreHorizontal size={16} />
-      </button>
+      {props.task.kind === "onboarding"
+        ? <span />
+        : (
+          <button
+            type="button"
+            class="icon-button task-cancel"
+            aria-label={`Cancel ${props.task.title}`}
+            title="Cancel task"
+            onClick={props.onCancel}
+          >
+            <X size={16} />
+          </button>
+        )}
     </div>
   );
 }

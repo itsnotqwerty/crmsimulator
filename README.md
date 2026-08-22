@@ -19,9 +19,9 @@ chunks, migrations, and foundation tests are available under `lib/`.
 
 Release 2 is complete with a playable root-only SPA: the responsive CRM shell,
 global search, Dashboard, Lead Inbox, Contacts, Companies, Tasks, deal workflow,
-customer-referral acquisition, live simulation, cookie autosave, company naming,
-reduced-motion preferences, import/export/reset, and recovery modals
-implemented.
+founder prospecting, customer-referral acquisition, selectable 1x/2x/4x live
+simulation, task cancellation, cookie autosave, company naming, reduced-motion
+preferences, import/export/reset, and recovery modals implemented.
 
 Release 3 is complete with persistent campaign records, configurable audience,
 channel, budget, duration, and messaging, deterministic spend and attributed
@@ -38,8 +38,9 @@ Growth, and Scale plans, monthly or discounted annual billing, commercial
 discounts, validity periods, and a send-to-accept lifecycle that closes the
 canonical deal. Missed follow-ups reduce engagement, sustained overload builds
 rep burnout and lowers deal progression, while paid training improves skill and
-relieves burnout. Pipeline list and board preferences persist with the save, and
-list selection supports bulk ownership and stage advancement.
+relieves burnout. Representatives can be dismissed, with owned work safely
+returned to the unassigned queue. Pipeline list and board preferences persist
+with the save, and list selection supports bulk ownership and stage advancement.
 
 Release 5 begins with a Customer Success workspace unlocked at five retained
 customers. Account health and adoption respond to onboarding, check-ins, and
@@ -51,7 +52,9 @@ persistent priority- and channel-based tickets, assignment, acknowledgement and
 resolution workflows, and visible SLA timers. Missed response or resolution
 deadlines reduce account health. Dedicated support agents add payroll, skill,
 ticket capacity, and burnout. Escalated tickets can become incidents whose
-recovery quality and duration directly affect customer health.
+recovery quality and duration directly affect customer health. Success
+specialists and support agents can be dismissed without leaving dangling account
+or ticket ownership.
 
 Releases 5 through 7 are complete. NPS, retention and support reporting feed a
 bounded history model. Automation adds sequences, trigger-condition-action
@@ -66,12 +69,14 @@ API, so no licensed recordings or external media requests are involved.
 
 ## Core rules
 
-- One real minute equals one game hour.
+- The base 1x clock converts one real minute to one game hour. New companies
+  begin at 2x, and the player can choose 1x, 2x, or 4x.
 - The simulation is deterministic from the company seed, state, commands, and
   elapsed time.
 - Returning players receive up to 24 real hours of offline progress.
 - Offline simulation pauses before unseen bankruptcy and opens a financial
-  crisis workflow.
+  crisis workflow where campaigns can be paused and staff dismissed before
+  resuming.
 - Active mismanagement can bankrupt the company and require a new run.
 - Progress is endless; there is no final victory screen.
 - CRM modules unlock through business milestones and operational need, not XP

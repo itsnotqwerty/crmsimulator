@@ -652,7 +652,8 @@ export function advanceOffline(
     rules.maxOfflineRealMilliseconds,
   );
   const elapsedGameMinutes = Math.floor(
-    acceptedRealMilliseconds / rules.realMillisecondsPerGameMinute,
+    acceptedRealMilliseconds / rules.realMillisecondsPerGameMinute *
+      state.preferences.timeScale,
   );
   const result = advanceGame(state, elapsedGameMinutes, "offline", rules);
 

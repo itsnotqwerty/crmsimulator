@@ -353,6 +353,37 @@ main {
   margin-left: auto;
 }
 
+.time-controls {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.time-controls button {
+  min-width: 34px;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.time-controls button:last-child {
+  border-right: 0;
+}
+
+.time-controls button.active {
+  color: var(--green-dark);
+  background: var(--green-soft);
+}
+
 .save-state,
 .game-clock {
   display: inline-flex;
@@ -1534,7 +1565,7 @@ td small {
 .success-team-list > div,
 .support-team-list > div {
   display: grid;
-  grid-template-columns: 42px minmax(150px, 1fr) auto auto;
+  grid-template-columns: 42px minmax(150px, 1fr) auto auto auto;
   gap: 14px;
   align-items: center;
   padding: 11px 0;
@@ -1556,6 +1587,10 @@ td small {
 .support-team-list .overloaded {
   color: var(--coral);
   font-weight: 700;
+}
+
+.staff-fire {
+  color: var(--coral);
 }
 
 .support-panel {
@@ -1741,6 +1776,20 @@ td small {
 }
 
 .sales-team-list dd.overloaded {
+  color: var(--coral);
+}
+
+.rep-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-cancel {
+  color: var(--muted);
+}
+
+.task-cancel:hover {
   color: var(--coral);
 }
 
@@ -2639,7 +2688,7 @@ table,
     grid-column: 1 / -1;
   }
 
-  .rep-training {
+  .rep-actions {
     grid-column: 1 / -1;
     justify-self: start;
   }

@@ -142,6 +142,7 @@ const KEY_MAP: Readonly<Record<string, string>> = {
   soundEnabled: "se",
   musicEnabled: "mu",
   musicVolume: "ml",
+  timeScale: "tm",
   platform: "pf",
   workflows: "wf",
   integrations: "ig",

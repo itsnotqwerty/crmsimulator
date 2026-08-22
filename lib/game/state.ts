@@ -12,7 +12,8 @@ export const DEFAULT_RULES: GameRules = {
   simulationStepMinutes: 10,
   realMillisecondsPerGameMinute: 1_000,
   maxOfflineRealMilliseconds: 24 * 60 * 60 * 1_000,
-  leadArrivalIntervalMinutes: 8 * 60,
+  leadArrivalIntervalMinutes: 4 * 60,
+  prospectingCapacityMinutes: 45,
   leadCoolingMinutes: 3 * 24 * 60,
   capacityResetIntervalMinutes: 24 * 60,
   billingIntervalMinutes: 30 * 24 * 60,
@@ -143,6 +144,7 @@ export function createInitialState(options: InitialStateOptions): GameState {
       musicEnabled: false,
       musicVolume: 35,
       pipelineView: "list",
+      timeScale: 2,
     },
     platform: {
       sequences: [],

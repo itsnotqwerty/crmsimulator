@@ -429,6 +429,80 @@ function nextDealStage(stage: DealStage): DealStage | undefined {
   return stages[stages.indexOf(stage) + 1];
 }
 
+function prospectLead(
+  state: GameState,
+  rules: GameRules,
+): CommandResult {
+  if (state.company.founderCapacityRemaining < rules.prospectingCapacityMinutes) {
+    return rejected(state, "Not enough founder capacity to prospect a lead");
+  }
+
+  const sequence = Math.max(
+    state.sequences.company,
+    state.sequences.lead,
+  ) + 1;
+  const generated = generateLead(
+    state.seed,
+    state.rngCursor,
+    sequence,
+    state.clock.gameMinute,
+  );
+  const taskSequence = state.sequences.task + 1;
+  const taskId = `task_${taskSequence}`;
+  const nextState: GameState = {
+    ...state,
+    rngCursor: generated.nextCursor,
+    company: {
+      ...state.company,
+      founderCapacityRemaining: state.company.founderCapacityRemaining -
+        rules.prospectingCapacityMinutes,
+    },
+    sequences: {
+      ...state.sequences,
+      company: sequence,
+      lead: sequence,
+      task: taskSequence,
+    },
+    records: {
+      ...state.records,
+      companies: {
+        ...state.records.companies,
+        [generated.company.id]: generated.company,
+      },
+      leads: {
+        ...state.records.leads,
+        [generated.lead.id]: generated.lead,
+      },
+      tasks: {
+        ...state.records.tasks,
+        [taskId]: {
+          id: taskId,
+          kind: "call",
+          status: "open",
+          relatedId: generated.lead.id,
+          title:
+            `Review ${generated.lead.firstName} ${generated.lead.lastName}`,
+          dueAt: state.clock.gameMinute + 4 * 60,
+          createdAt: state.clock.gameMinute,
+        },
+      },
+    },
+  };
+
+  return accepted(nextState, [{
+    kind: "lead_created",
+    summary: `Founder prospected ${generated.company.name}`,
+    relatedId: generated.lead.id,
+    gameMinute: state.clock.gameMinute,
+  }, {
+    kind: "task_created",
+    summary:
+      `Review task created for ${generated.lead.firstName} ${generated.lead.lastName}`,
+    relatedId: taskId,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
 function contactLead(
   state: GameState,
   lead: Lead,
@@ -722,6 +796,42 @@ function hireSalesRep(
     kind: "sales_rep_hired",
     summary: `${name} joined the sales team`,
     relatedId: id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function fireSalesRep(
+  state: GameState,
+  salesRepId: string,
+  rules: GameRules,
+): CommandResult {
+  const rep = state.records.salesReps[salesRepId];
+  if (!rep) return rejected(state, "Sales representative does not exist");
+
+  const salesReps = { ...state.records.salesReps };
+  delete salesReps[rep.id];
+  const leads = { ...state.records.leads };
+  for (const lead of Object.values(leads)) {
+    if (lead.ownerId !== rep.id) continue;
+    const unassigned = { ...lead };
+    delete unassigned.ownerId;
+    leads[lead.id] = unassigned;
+  }
+  const deals = { ...state.records.deals };
+  for (const deal of Object.values(deals)) {
+    if (deal.ownerId !== rep.id) continue;
+    const unassigned = { ...deal, updatedAt: state.clock.gameMinute };
+    delete unassigned.ownerId;
+    deals[deal.id] = unassigned;
+  }
+
+  return accepted({
+    ...state,
+    records: { ...state.records, salesReps, leads, deals },
+  }, [{
+    kind: "sales_rep_fired",
+    summary: `${rep.name} left the sales team; their work was unassigned`,
+    relatedId: rep.id,
     gameMinute: state.clock.gameMinute,
   }], rules);
 }
@@ -1349,6 +1459,35 @@ function hireSuccessRep(
   }], rules);
 }
 
+function fireSuccessRep(
+  state: GameState,
+  successRepId: string,
+  rules: GameRules,
+): CommandResult {
+  const rep = state.records.successReps[successRepId];
+  if (!rep) return rejected(state, "Success specialist does not exist");
+
+  const successReps = { ...state.records.successReps };
+  delete successReps[rep.id];
+  const customers = { ...state.records.customers };
+  for (const customer of Object.values(customers)) {
+    if (customer.ownerId !== rep.id) continue;
+    const unassigned = { ...customer };
+    delete unassigned.ownerId;
+    customers[customer.id] = unassigned;
+  }
+
+  return accepted({
+    ...state,
+    records: { ...state.records, successReps, customers },
+  }, [{
+    kind: "success_rep_fired",
+    summary: `${rep.name} left customer success; their accounts were unassigned`,
+    relatedId: rep.id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
 function assignCustomer(
   state: GameState,
   customerId: string,
@@ -1592,12 +1731,6 @@ function assignTicket(
   else delete updated.ownerId;
   return accepted({
     ...state,
-    history: {
-      ...state.history,
-      ticketsResolved: state.history.ticketsResolved + 1,
-      ticketResolutionMinutes: state.history.ticketResolutionMinutes +
-        state.clock.gameMinute - ticket.createdAt,
-    },
     records: {
       ...state.records,
       tickets: { ...state.records.tickets, [ticket.id]: updated },
@@ -1676,6 +1809,12 @@ function resolveTicket(
     : -4;
   return accepted({
     ...state,
+    history: {
+      ...state.history,
+      ticketsResolved: state.history.ticketsResolved + 1,
+      ticketResolutionMinutes: state.history.ticketResolutionMinutes +
+        state.clock.gameMinute - ticket.createdAt,
+    },
     records: {
       ...state.records,
       tickets: {
@@ -1748,6 +1887,35 @@ function hireSupportRep(
     kind: "support_rep_hired",
     summary: `${name} joined customer support`,
     relatedId: id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
+function fireSupportRep(
+  state: GameState,
+  supportRepId: string,
+  rules: GameRules,
+): CommandResult {
+  const rep = state.records.supportReps[supportRepId];
+  if (!rep) return rejected(state, "Support agent does not exist");
+
+  const supportReps = { ...state.records.supportReps };
+  delete supportReps[rep.id];
+  const tickets = { ...state.records.tickets };
+  for (const ticket of Object.values(tickets)) {
+    if (ticket.ownerId !== rep.id) continue;
+    const unassigned = { ...ticket };
+    delete unassigned.ownerId;
+    tickets[ticket.id] = unassigned;
+  }
+
+  return accepted({
+    ...state,
+    records: { ...state.records, supportReps, tickets },
+  }, [{
+    kind: "support_rep_fired",
+    summary: `${rep.name} left support; their tickets were unassigned`,
+    relatedId: rep.id,
     gameMinute: state.clock.gameMinute,
   }], rules);
 }
@@ -2203,11 +2371,23 @@ export function applyCommand(
   if (state.clock.status === "bankrupt") {
     return rejected(state, "The company is bankrupt");
   }
-  if (state.clock.status === "crisis" && command.type !== "resume_crisis") {
-    return rejected(state, "Resolve or resume the financial crisis first");
+  const crisisCorrection = command.type === "fire_sales_rep" ||
+    command.type === "fire_success_rep" ||
+    command.type === "fire_support_rep" ||
+    (command.type === "set_campaign_status" && command.status === "paused");
+  if (
+    state.clock.status === "crisis" && command.type !== "resume_crisis" &&
+    !crisisCorrection
+  ) {
+    return rejected(
+      state,
+      "Pause spending, dismiss staff, or resume the financial crisis first",
+    );
   }
 
   switch (command.type) {
+    case "prospect_lead":
+      return prospectLead(state, rules);
     case "contact_lead": {
       const lead = state.records.leads[command.leadId];
       return lead
@@ -2314,6 +2494,24 @@ export function applyCommand(
         [],
         rules,
       );
+    case "set_time_scale":
+      if (![1, 2, 4].includes(command.timeScale)) {
+        return rejected(state, "Simulation speed must be 1x, 2x, or 4x");
+      }
+      if (command.timeScale === state.preferences.timeScale) {
+        return rejected(state, "Simulation speed is unchanged");
+      }
+      return accepted(
+        {
+          ...state,
+          preferences: {
+            ...state.preferences,
+            timeScale: command.timeScale,
+          },
+        },
+        [],
+        rules,
+      );
     case "set_pipeline_view":
       if (command.view === state.preferences.pipelineView) {
         return rejected(state, "Pipeline view is unchanged");
@@ -2353,6 +2551,8 @@ export function applyCommand(
         command.monthlyTargetCents,
         rules,
       );
+    case "fire_sales_rep":
+      return fireSalesRep(state, command.salesRepId, rules);
     case "assign_deal":
       return assignDeal(state, command.dealId, command.ownerId, rules);
     case "train_sales_rep":
@@ -2412,6 +2612,29 @@ export function applyCommand(
         gameMinute,
       }], rules);
     }
+    case "cancel_task": {
+      const task = state.records.tasks[command.taskId];
+      if (!task) return rejected(state, "Task does not exist");
+      if (task.status !== "open") return rejected(state, "Task is not open");
+      if (task.kind === "onboarding") {
+        return rejected(state, "Customer onboarding tasks cannot be cancelled");
+      }
+      return accepted({
+        ...state,
+        records: {
+          ...state.records,
+          tasks: {
+            ...state.records.tasks,
+            [task.id]: { ...task, status: "cancelled" },
+          },
+        },
+      }, [{
+        kind: "task_cancelled",
+        summary: `Cancelled: ${task.title}`,
+        relatedId: task.id,
+        gameMinute: state.clock.gameMinute,
+      }], rules);
+    }
     case "complete_customer_onboarding":
       return completeCustomerOnboarding(state, command.customerId, rules);
     case "customer_check_in":
@@ -2422,6 +2645,8 @@ export function applyCommand(
       return expandCustomer(state, command.customerId, rules);
     case "hire_success_rep":
       return hireSuccessRep(state, command.name, command.level, rules);
+    case "fire_success_rep":
+      return fireSuccessRep(state, command.successRepId, rules);
     case "assign_customer":
       return assignCustomer(state, command.customerId, command.ownerId, rules);
     case "run_success_playbook":
@@ -2443,6 +2668,8 @@ export function applyCommand(
       return resolveTicket(state, command.ticketId, rules);
     case "hire_support_rep":
       return hireSupportRep(state, command.name, command.level, rules);
+    case "fire_support_rep":
+      return fireSupportRep(state, command.supportRepId, rules);
     case "escalate_ticket":
       return escalateTicket(state, command.ticketId, rules);
     case "declare_incident":

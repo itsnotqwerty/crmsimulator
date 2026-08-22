@@ -224,6 +224,29 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       musicVolume: 35,
     },
   }),
+  17: (save) => {
+    const records = save.records as Record<string, unknown>;
+    const tickets = records.tickets as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const history = save.history as Record<string, unknown>;
+    const resolvedTickets = Object.values(tickets).filter((ticket) =>
+      ticket.status === "resolved"
+    ).length + Number(history.ticketsArchived ?? 0);
+    return {
+      ...save,
+      history: {
+        ...history,
+        ticketsResolved: resolvedTickets,
+        ...(resolvedTickets === 0 ? { ticketResolutionMinutes: 0 } : {}),
+      },
+      preferences: {
+        ...(save.preferences as Record<string, unknown>),
+        timeScale: 2,
+      },
+    };
+  },
 };
 
 export function migrateGameState(value: unknown): GameState {

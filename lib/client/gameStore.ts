@@ -69,9 +69,10 @@ export function useGameStore(initial: GameState) {
   const catchUp = (timestamp = Date.now()) => {
     now.value = timestamp;
     if (game.value.clock.status !== "active") return;
+    const timeScale = game.value.preferences.timeScale;
     const elapsedGameMinutes = Math.floor(
       (timestamp - game.value.lastSimulatedAt) /
-        DEFAULT_RULES.realMillisecondsPerGameMinute,
+        DEFAULT_RULES.realMillisecondsPerGameMinute * timeScale,
     );
     const processableMinutes = elapsedGameMinutes -
       (elapsedGameMinutes % DEFAULT_RULES.simulationStepMinutes);
@@ -81,7 +82,8 @@ export function useGameStore(initial: GameState) {
     game.value = {
       ...result.state,
       lastSimulatedAt: game.value.lastSimulatedAt +
-        processableMinutes * DEFAULT_RULES.realMillisecondsPerGameMinute,
+        processableMinutes * DEFAULT_RULES.realMillisecondsPerGameMinute /
+          timeScale,
     };
     queueSave();
   };
@@ -93,7 +95,13 @@ export function useGameStore(initial: GameState) {
       notice.value = result.reason;
       return false;
     }
-    game.value = result.state;
+    if (command.type === "set_time_scale") {
+      const timestamp = Date.now();
+      game.value = { ...result.state, lastSimulatedAt: timestamp };
+      now.value = timestamp;
+    } else {
+      game.value = result.state;
+    }
     notice.value = result.events.at(-1)?.summary;
     queueSave();
     return true;
