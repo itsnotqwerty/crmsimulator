@@ -1951,6 +1951,23 @@ export function applyCommand(
         rules,
       );
     }
+    case "set_palette":
+      if (!["forest", "ocean", "berry", "graphite"].includes(
+        command.palette,
+      )) {
+        return rejected(state, "Color palette is invalid");
+      }
+      if (command.palette === state.preferences.palette) {
+        return rejected(state, "Color palette is unchanged");
+      }
+      return accepted(
+        {
+          ...state,
+          preferences: { ...state.preferences, palette: command.palette },
+        },
+        [],
+        rules,
+      );
     case "set_reduced_motion":
       if (command.enabled === state.preferences.reducedMotion) {
         return rejected(state, "Reduced motion preference is unchanged");

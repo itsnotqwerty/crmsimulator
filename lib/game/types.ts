@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 20 as const;
+export const SAVE_SCHEMA_VERSION = 21 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -6,6 +6,7 @@ export type GameMinute = number;
 
 export type SimulationStatus = "active" | "crisis" | "bankrupt";
 export type TimeScale = 1 | 2 | 4;
+export type ColorPalette = "forest" | "ocean" | "berry" | "graphite";
 export type LeadStatus =
   | "new"
   | "contacted"
@@ -460,6 +461,7 @@ export interface NarrativeState {
 }
 
 export interface PreferenceState {
+  palette: ColorPalette;
   reducedMotion: boolean;
   soundEnabled: boolean;
   musicEnabled: boolean;
@@ -568,6 +570,7 @@ export type GameCommand =
   | { type: "duplicate_campaign"; campaignId: EntityId }
   | { type: "archive_campaign"; campaignId: EntityId }
   | { type: "rename_company"; name: string }
+  | { type: "set_palette"; palette: ColorPalette }
   | { type: "set_reduced_motion"; enabled: boolean }
   | { type: "set_sound_enabled"; enabled: boolean }
   | { type: "set_music_enabled"; enabled: boolean }

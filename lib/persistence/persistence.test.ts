@@ -348,6 +348,7 @@ Deno.test("version 19 saves migrate with an empty manager roster", () => {
 
   assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
   assertEquals(migrated.platform.managers, []);
+  assertEquals(migrated.preferences.palette, "forest");
 });
 
 Deno.test("codec preserves success representatives and account ownership", async () => {

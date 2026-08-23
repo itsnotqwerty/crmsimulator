@@ -62,6 +62,7 @@ import type {
   BillingCycle,
   CampaignAudience,
   CampaignChannel,
+  ColorPalette,
   Deal,
   DealLossReason,
   DealProduct,
@@ -3225,7 +3226,9 @@ export default function CrmApp(props: CrmAppProps) {
 
   return (
     <div
-      class={`crm-app ${game.preferences.reducedMotion ? "reduce-motion" : ""}`}
+      class={`crm-app palette-${game.preferences.palette} ${
+        game.preferences.reducedMotion ? "reduce-motion" : ""
+      }`}
     >
       <aside class={`sidebar ${mobileNav.value ? "open" : ""}`}>
         <div class="brand">
@@ -4539,6 +4542,43 @@ export default function CrmApp(props: CrmAppProps) {
                 </div>
               </div>
               <div class="settings-grid">
+                <div class="panel settings-panel palette-panel">
+                  <h2>Color palette</h2>
+                  <p>Choose the workspace colors used throughout the CRM.</p>
+                  <div
+                    class="palette-options"
+                    role="radiogroup"
+                    aria-label="Color palette"
+                  >
+                    {([
+                      ["forest", "Forest"],
+                      ["ocean", "Ocean"],
+                      ["berry", "Berry"],
+                      ["graphite", "Graphite"],
+                    ] as Array<[ColorPalette, string]>).map(([
+                      palette,
+                      label,
+                    ]) => (
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={game.preferences.palette === palette}
+                        class={game.preferences.palette === palette
+                          ? "active"
+                          : ""}
+                        onClick={() =>
+                          dispatch({ type: "set_palette", palette })}
+                      >
+                        <span class={`palette-swatch ${palette}`}>
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                        <strong>{label}</strong>
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div class="panel settings-panel identity-panel">
                   <h2>Workspace identity</h2>
                   <p>

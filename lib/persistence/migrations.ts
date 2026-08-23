@@ -271,6 +271,13 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       managers: [],
     },
   }),
+  21: (save) => ({
+    ...save,
+    preferences: {
+      ...(save.preferences as Record<string, unknown>),
+      palette: "forest",
+    },
+  }),
 };
 
 export function migrateGameState(value: unknown): GameState {

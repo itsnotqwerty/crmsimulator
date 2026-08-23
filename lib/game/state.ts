@@ -167,6 +167,7 @@ export function createInitialState(options: InitialStateOptions): GameState {
     onboarding: { step: "inspect_lead", dismissed: false },
     narrative: { chapter: 0, pendingBriefing: true },
     preferences: {
+      palette: "forest",
       reducedMotion: false,
       soundEnabled: false,
       musicEnabled: false,
