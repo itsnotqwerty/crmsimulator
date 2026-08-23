@@ -64,6 +64,7 @@ import type {
   GameCommand,
   GameState,
   Lead,
+  ManagerDepartment,
   SalesRepLevel,
   SalesTerritory,
   Task,
@@ -569,6 +570,14 @@ function CustomerSuccessWorkspace(props: {
               {money.format(monthlyPayrollCents / 100)} monthly payroll
             </span>
           </div>
+          <button
+            type="button"
+            class="secondary"
+            disabled={successReps.length === 0}
+            onClick={() => props.dispatch({ type: "route_customers" })}
+          >
+            <ArrowUpDown size={16} />Route accounts
+          </button>
         </div>
         <form class="success-hire-form" onSubmit={hireSuccessRep}>
           <label>
@@ -990,7 +999,7 @@ function CustomerSuccessWorkspace(props: {
           </div>
         )}
       </section>
-      <section class="panel table-panel">
+      <section class="panel table-panel customer-portfolio-panel">
         <div class="table-toolbar">
           <strong>Account portfolio</strong>
           <span>Health declines after seven days without a success touch</span>
@@ -1003,7 +1012,7 @@ function CustomerSuccessWorkspace(props: {
             />
           )
           : (
-            <div class="table-scroll">
+            <div class="table-scroll customer-portfolio-scroll">
               <table class="customer-table">
                 <thead>
                   <tr>
@@ -1183,6 +1192,7 @@ function PlatformWorkspace(props: {
   const trigger = useSignal<AutomationTrigger>("lead_created");
   const condition = useSignal<AutomationCondition>("all");
   const action = useSignal<AutomationAction>("create_task");
+  const managerDepartment = useSignal<ManagerDepartment>("sales");
   const report = analyticsReport(props.game);
   const platform = props.game.platform;
   if (props.mode === "analytics") {
@@ -1226,6 +1236,60 @@ function PlatformWorkspace(props: {
     );
   }
   if (props.mode === "operations") {
+    const marketing = platform.departments.find((department) =>
+      department.id === "department_marketing"
+    );
+    const managerDepartments: Array<{
+      id: ManagerDepartment;
+      label: string;
+      headcount: number;
+      demand: number;
+      capacity: number;
+    }> = [{
+      id: "sales",
+      label: "Sales",
+      headcount: Object.keys(props.game.records.salesReps).length,
+      demand: Object.values(props.game.records.leads).filter((lead) =>
+        ["new", "contacted", "cold"].includes(lead.status)
+      ).length + Object.values(props.game.records.deals).filter((deal) =>
+        deal.stage !== "won" && deal.stage !== "lost"
+      ).length,
+      capacity: Object.values(props.game.records.salesReps).reduce(
+        (total, rep) =>
+          total + rep.dealCapacity,
+        0,
+      ),
+    }, {
+      id: "marketing",
+      label: "Marketing",
+      headcount: marketing?.headcount ?? 0,
+      demand: Object.values(props.game.records.campaigns).filter((campaign) =>
+        campaign.status === "active"
+      ).length,
+      capacity: (marketing?.headcount ?? 0) * 2,
+    }, {
+      id: "customer_success",
+      label: "Customer Success",
+      headcount: Object.keys(props.game.records.successReps).length,
+      demand: Object.keys(props.game.records.customers).length,
+      capacity: Object.values(props.game.records.successReps).reduce(
+        (total, rep) =>
+          total + rep.accountCapacity,
+        0,
+      ),
+    }, {
+      id: "support",
+      label: "Support",
+      headcount: Object.keys(props.game.records.supportReps).length,
+      demand: Object.values(props.game.records.tickets).filter((ticket) =>
+        ticket.status !== "resolved"
+      ).length,
+      capacity: Object.values(props.game.records.supportReps).reduce(
+        (total, rep) =>
+          total + rep.ticketCapacity,
+        0,
+      ),
+    }];
     return (
       <>
         <div class="page-heading">
@@ -1256,27 +1320,34 @@ function PlatformWorkspace(props: {
         <section class="panel">
           <div class="panel-heading">
             <div>
-              <h2>Departments</h2>
-              <span>{platform.departments.length} operating teams</span>
+              <h2>Department leadership</h2>
+              <span>
+                {platform.managers.length}/4 managers · Daily staffing reviews
+              </span>
             </div>
           </div>
           <form
-            class="support-hire-form"
+            class="operations-manager-form"
             onSubmit={(event) => {
               event.preventDefault();
-              props.dispatch({
-                type: "create_department",
+              const hired = props.dispatch({
+                type: "hire_manager",
                 name: name.value,
-                manager: secondary.value,
-                monthlyBudgetCents: 500_000,
-                headcountPlan: 5,
+                department: managerDepartment.value,
               });
+              if (!hired) return;
               name.value = "";
-              secondary.value = "";
+              const nextVacancy = managerDepartments.find((department) =>
+                department.id !== managerDepartment.value &&
+                !platform.managers.some((manager) =>
+                  manager.department === department.id
+                )
+              );
+              if (nextVacancy) managerDepartment.value = nextVacancy.id;
             }}
           >
             <label>
-              <span>Department</span>
+              <span>Manager name</span>
               <input
                 required
                 minLength={2}
@@ -1285,43 +1356,80 @@ function PlatformWorkspace(props: {
               />
             </label>
             <label>
-              <span>Manager</span>
-              <input
-                required
-                minLength={2}
-                value={secondary.value}
-                onInput={(event) => secondary.value = event.currentTarget.value}
-              />
+              <span>Department</span>
+              <select
+                value={managerDepartment.value}
+                onChange={(event) =>
+                  managerDepartment.value = event.currentTarget
+                    .value as ManagerDepartment}
+              >
+                {managerDepartments.map((department) => (
+                  <option
+                    key={department.id}
+                    value={department.id}
+                    disabled={platform.managers.some((manager) =>
+                      manager.department === department.id
+                    )}
+                  >
+                    {department.label}
+                  </option>
+                ))}
+              </select>
             </label>
-            <button class="primary" type="submit">
-              <Building2 size={16} />Open department
+            <button
+              class="primary"
+              type="submit"
+              disabled={platform.managers.some((manager) =>
+                manager.department === managerDepartment.value
+              )}
+            >
+              <Users size={16} />Hire manager
             </button>
           </form>
-          <div class="success-team-list">
-            {platform.departments.map((department) => (
-              <div key={department.id}>
-                <span class="rep-avatar">{initials(department.name)}</span>
-                <span>
-                  <strong>{department.name}</strong>
-                  <small>{department.manager}</small>
-                </span>
-                <span>
-                  {department.headcount}/{department.headcountPlan} staff
-                </span>
-                <button
-                  class="secondary"
-                  type="button"
-                  disabled={department.headcount >= department.headcountPlan}
-                  onClick={() =>
-                    props.dispatch({
-                      type: "hire_department_staff",
-                      departmentId: department.id,
-                    })}
-                >
-                  <Users size={15} />Hire
-                </button>
-              </div>
-            ))}
+          <div class="operations-manager-list">
+            {managerDepartments.map((department) => {
+              const manager = platform.managers.find((item) =>
+                item.department === department.id
+              );
+              return (
+                <div key={department.id}>
+                  <span class="rep-avatar">{initials(department.label)}</span>
+                  <span class="operations-manager-identity">
+                    <strong>{department.label}</strong>
+                    <small>{manager?.name ?? "Manager position vacant"}</small>
+                  </span>
+                  <span class="operations-manager-metric">
+                    <small>Headcount</small>
+                    <strong>{department.headcount}</strong>
+                  </span>
+                  <span class="operations-manager-metric">
+                    <small>Work / capacity</small>
+                    <strong>{department.demand} / {department.capacity}</strong>
+                  </span>
+                  <span class="operations-manager-decision">
+                    <small>Latest decision</small>
+                    <strong>
+                      {manager?.lastDecision ?? "Awaiting leadership"}
+                    </strong>
+                  </span>
+                  {manager && (
+                    <button
+                      class="icon-button staff-fire"
+                      type="button"
+                      title={`Dismiss ${manager.name}`}
+                      aria-label={`Dismiss ${manager.name}`}
+                      onClick={() =>
+                        props.dispatch({
+                          type: "fire_manager",
+                          department: department.id,
+                        })}
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
         <section class="panel">

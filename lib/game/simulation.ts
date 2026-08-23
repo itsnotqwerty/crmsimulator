@@ -4,6 +4,7 @@ import { DEFAULT_RULES, syncProgressionUnlocks } from "./state.ts";
 import { advancePlatform } from "./platform.ts";
 import { advanceSequences, applyAutomations } from "./automation.ts";
 import { applyStaffWork } from "./staff.ts";
+import { applyManagerDecisions } from "./managers.ts";
 import { createTicketWork } from "./work.ts";
 import { syncNarrative } from "./narrative.ts";
 import type {
@@ -210,6 +211,9 @@ function processStep(
       0,
     ) + Object.values(state.records.supportReps).reduce(
       (total, rep) => total + rep.monthlySalaryCents,
+      0,
+    ) + state.platform.managers.reduce(
+      (total, manager) => total + manager.monthlySalaryCents,
       0,
     ),
     startMinute,
@@ -750,6 +754,9 @@ function processStep(
       records: { ...nextState.records, supportReps },
     };
   }
+  const managed = applyManagerDecisions(nextState, rules);
+  nextState = managed.state;
+  events.push(...managed.events);
   const staffAutomated = applyAutomations(nextState, staffed.events, rules);
   nextState = staffAutomated.state;
   events.push(...staffAutomated.events);

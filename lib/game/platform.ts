@@ -30,6 +30,7 @@ function accept(
   };
 }
 const clean = (value: string) => value.trim().replaceAll(/\s+/g, " ");
+const MANAGER_MONTHLY_SALARY_CENTS = 1_200_000;
 
 export function applyPlatformCommand(
   state: GameState,
@@ -213,6 +214,81 @@ export function applyPlatformCommand(
         },
         rules,
         `Hired into ${department.name}`,
+      );
+    }
+    case "hire_manager": {
+      const name = clean(command.name);
+      if (name.length < 2 || name.length > 60) {
+        return reject(state, "Manager name must contain 2 to 60 characters");
+      }
+      if (
+        platform.managers.some((manager) =>
+          manager.department === command.department
+        )
+      ) {
+        return reject(state, "This department already has a manager");
+      }
+      const requiredUnlock = command.department === "sales"
+        ? "pipeline"
+        : command.department === "marketing"
+        ? "marketing"
+        : "customer_success";
+      if (!state.unlocks.includes(requiredUnlock)) {
+        return reject(state, "Unlock this department before hiring a manager");
+      }
+      return accept(
+        {
+          ...state,
+          platform: {
+            ...platform,
+            managers: [...platform.managers, {
+              id: `manager_${command.department}`,
+              name,
+              department: command.department,
+              monthlySalaryCents: MANAGER_MONTHLY_SALARY_CENTS,
+              hiredAt: state.clock.gameMinute,
+              lastReviewedAt: state.clock.gameMinute,
+              underCapacityReviews: 0,
+            }],
+            departments: command.department === "marketing" &&
+                !platform.departments.some((item) =>
+                  item.id === "department_marketing"
+                )
+              ? [...platform.departments, {
+                id: "department_marketing",
+                name: "Marketing",
+                manager: name,
+                monthlyBudgetCents: 500_000,
+                headcountPlan: 8,
+                headcount: 0,
+                burnout: 0,
+              }]
+              : platform.departments,
+            auditEntriesArchived: platform.auditEntriesArchived + 1,
+          },
+        },
+        rules,
+        `${name} hired to manage ${command.department.replaceAll("_", " ")}`,
+      );
+    }
+    case "fire_manager": {
+      const manager = platform.managers.find((item) =>
+        item.department === command.department
+      );
+      if (!manager) return reject(state, "This department has no manager");
+      return accept(
+        {
+          ...state,
+          platform: {
+            ...platform,
+            managers: platform.managers.filter((item) =>
+              item.id !== manager.id
+            ),
+            auditEntriesArchived: platform.auditEntriesArchived + 1,
+          },
+        },
+        rules,
+        `${manager.name} left ${command.department.replaceAll("_", " ")}`,
       );
     }
     case "set_approval_threshold":

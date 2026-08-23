@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 19 as const;
+export const SAVE_SCHEMA_VERSION = 20 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -72,6 +72,7 @@ export type ActivityKind =
   | "success_rep_hired"
   | "success_rep_fired"
   | "customer_assigned"
+  | "customers_routed"
   | "success_playbook_run"
   | "ticket_created"
   | "ticket_assigned"
@@ -155,6 +156,23 @@ export interface Department {
   burnout: number;
 }
 
+export type ManagerDepartment =
+  | "sales"
+  | "marketing"
+  | "customer_success"
+  | "support";
+
+export interface OperatingManager {
+  id: EntityId;
+  name: string;
+  department: ManagerDepartment;
+  monthlySalaryCents: number;
+  hiredAt: GameMinute;
+  lastReviewedAt: GameMinute;
+  underCapacityReviews: number;
+  lastDecision?: string;
+}
+
 export interface PlatformState {
   sequences: SequenceAutomation[];
   workflows: WorkflowAutomation[];
@@ -162,6 +180,7 @@ export interface PlatformState {
   automationRunsArchived: number;
   automationErrorsArchived: number;
   departments: Department[];
+  managers: OperatingManager[];
   approvalThresholdCents: number;
   auditEntriesArchived: number;
   quarter: number;
@@ -567,6 +586,7 @@ export type GameCommand =
   | { type: "expand_customer"; customerId: EntityId }
   | { type: "hire_success_rep"; name: string; level: SalesRepLevel }
   | { type: "fire_success_rep"; successRepId: EntityId }
+  | { type: "route_customers" }
   | {
     type: "assign_customer";
     customerId: EntityId;
@@ -616,6 +636,12 @@ export type GameCommand =
     headcountPlan: number;
   }
   | { type: "hire_department_staff"; departmentId: EntityId }
+  | {
+    type: "hire_manager";
+    name: string;
+    department: ManagerDepartment;
+  }
+  | { type: "fire_manager"; department: ManagerDepartment }
   | { type: "set_approval_threshold"; amountCents: number }
   | {
     type: "set_quarterly_plan";

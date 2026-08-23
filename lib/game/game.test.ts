@@ -62,7 +62,7 @@ Deno.test("generated contact names use a broad catalog", () => {
     names.add(`${generated.lead.firstName} ${generated.lead.lastName}`);
   }
 
-  assert(names.size >= 800);
+  assertEquals(names.size, 2_400);
 });
 
 Deno.test("segmented and batched simulation are equivalent", () => {
@@ -550,6 +550,114 @@ Deno.test("mature operations enforce plans and escalating goals", () => {
   assert(goal.accepted);
   assertEquals(goal.state.platform.departments[0].headcount, 2);
   assertEquals(goal.state.platform.endlessGoal, 2);
+});
+
+Deno.test("operations hires one manager per unlocked department", () => {
+  const initial = createInitialState({ seed: 57, now: 1_000 });
+  const state: GameState = {
+    ...initial,
+    unlocks: ["marketing", "pipeline", "customer_success"],
+  };
+  const hired = applyCommand(state, {
+    type: "hire_manager",
+    name: "Morgan Lee",
+    department: "sales",
+  });
+
+  assert(hired.accepted);
+  assertEquals(hired.state.platform.managers[0].department, "sales");
+  assertEquals(hired.state.platform.managers[0].monthlySalaryCents, 1_200_000);
+  const duplicate = applyCommand(hired.state, {
+    type: "hire_manager",
+    name: "Taylor Singh",
+    department: "sales",
+  });
+  assertEquals(duplicate.accepted, false);
+
+  const fired = applyCommand(hired.state, {
+    type: "fire_manager",
+    department: "sales",
+  });
+  assert(fired.accepted);
+  assertEquals(fired.state.platform.managers, []);
+});
+
+Deno.test("sales managers hire for uncovered workload deterministically", () => {
+  const initial: GameState = {
+    ...createInitialState({ seed: 58, now: 1_000 }),
+    unlocks: ["pipeline"],
+  };
+  const managed = applyCommand(initial, {
+    type: "hire_manager",
+    name: "Morgan Lee",
+    department: "sales",
+  }).state;
+
+  const first = advanceGame(managed, 24 * 60).state;
+  const replay = advanceGame(managed, 24 * 60).state;
+
+  assertEquals(first, replay);
+  assertEquals(Object.keys(first.records.salesReps).length, 1);
+  assertStringIncludes(
+    first.platform.managers[0].lastDecision ?? "",
+    "hired",
+  );
+});
+
+Deno.test("managers fire only after sustained excess capacity", () => {
+  let state: GameState = {
+    ...createInitialState({ seed: 59, now: 1_000 }),
+    unlocks: ["customer_success"],
+  };
+  state = applyCommand(state, {
+    type: "hire_manager",
+    name: "Morgan Lee",
+    department: "customer_success",
+  }).state;
+  for (const name of ["Avery Chen", "Taylor Singh"]) {
+    state = applyCommand(state, {
+      type: "hire_success_rep",
+      name,
+      level: "mid",
+    }).state;
+  }
+
+  const afterTwoReviews = advanceGame(state, 2 * 24 * 60).state;
+  assertEquals(Object.keys(afterTwoReviews.records.successReps).length, 2);
+  const afterThreeReviews = advanceGame(afterTwoReviews, 24 * 60).state;
+  assertEquals(Object.keys(afterThreeReviews.records.successReps).length, 1);
+  assertStringIncludes(
+    afterThreeReviews.platform.managers[0].lastDecision ?? "",
+    "reduced Customer Success headcount",
+  );
+});
+
+Deno.test("marketing managers staff active campaigns", () => {
+  let state: GameState = {
+    ...createInitialState({ seed: 60, now: 1_000 }),
+    unlocks: ["marketing"],
+  };
+  state = applyCommand(state, {
+    type: "create_campaign",
+    name: "Demand test",
+    channel: "email",
+    audience: "mid_market",
+    dailyBudgetCents: 10_000,
+    durationDays: 7,
+    message: "A focused campaign message for operations testing.",
+  }).state;
+  state = applyCommand(state, {
+    type: "hire_manager",
+    name: "Jordan Kim",
+    department: "marketing",
+  }).state;
+
+  const worked = advanceGame(state, 24 * 60).state;
+  const marketing = worked.platform.departments.find((department) =>
+    department.id === "department_marketing"
+  );
+  assert(marketing);
+  assertEquals(marketing.headcount, 1);
 });
 
 Deno.test("support tickets follow an assigned SLA lifecycle", () => {
@@ -1154,6 +1262,55 @@ Deno.test("lead routing respects territory and carries ownership into deals", ()
     leadId: "lead_1",
   }).state;
   assertEquals(state.records.deals.deal_1.ownerId, "sales_rep_1");
+});
+
+Deno.test("customer routing balances unassigned accounts by capacity", () => {
+  let state: GameState = {
+    ...createInitialState({ seed: 461, now: 1_000 }),
+    unlocks: ["customer_success"],
+  };
+  for (const name of ["Avery Chen", "Morgan Lee"]) {
+    state = applyCommand(state, {
+      type: "hire_success_rep",
+      name,
+      level: "junior",
+    }).state;
+  }
+  const customers = Object.fromEntries(
+    Array.from({ length: 5 }, (_, index) => {
+      const id = `customer_${index + 1}`;
+      return [id, {
+        id,
+        companyId: "company_1",
+        primaryLeadId: "lead_1",
+        monthlyValueCents: 25_000,
+        health: 75,
+        adoption: 65,
+        lifecycle: "active" as const,
+        startedAt: index,
+        nextBillingAt: 43_200,
+        renewalAt: 43_200,
+        lastSuccessAt: 0,
+        expansions: 0,
+      }];
+    }),
+  );
+  state = { ...state, records: { ...state.records, customers } };
+
+  const routed = applyCommand(state, { type: "route_customers" });
+  assert(routed.accepted);
+  const loads = Object.values(routed.state.records.customers).reduce(
+    (counts, customer) => {
+      if (customer.ownerId) counts[customer.ownerId] += 1;
+      return counts;
+    },
+    { sales_rep_1: 0, success_rep_1: 0, success_rep_2: 0 } as Record<
+      string,
+      number
+    >,
+  );
+  assertEquals(loads.success_rep_1, 3);
+  assertEquals(loads.success_rep_2, 2);
 });
 
 Deno.test("detailed sales activity compacts into bounded history", () => {

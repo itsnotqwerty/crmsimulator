@@ -181,6 +181,7 @@ export function createInitialState(options: InitialStateOptions): GameState {
       automationRunsArchived: 0,
       automationErrorsArchived: 0,
       departments: [],
+      managers: [],
       approvalThresholdCents: 100_000,
       auditEntriesArchived: 0,
       quarter: 1,

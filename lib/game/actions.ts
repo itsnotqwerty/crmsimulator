@@ -1327,6 +1327,49 @@ function fireSuccessRep(
   }], rules);
 }
 
+function routeCustomers(state: GameState, rules: GameRules): CommandResult {
+  if (!state.unlocks.includes("customer_success")) {
+    return rejected(state, "Unlock Customer Success to route accounts");
+  }
+  const reps = Object.values(state.records.successReps);
+  if (reps.length === 0) {
+    return rejected(state, "Hire a success specialist first");
+  }
+  const customers = { ...state.records.customers };
+  const load = Object.fromEntries(reps.map((rep) => [rep.id, 0]));
+  for (const customer of Object.values(customers)) {
+    if (customer.ownerId && load[customer.ownerId] !== undefined) {
+      load[customer.ownerId] += 1;
+    }
+  }
+  let routed = 0;
+  for (
+    const customer of Object.values(customers).filter((entry) => !entry.ownerId)
+      .sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))
+  ) {
+    const owner = reps.filter((rep) => load[rep.id] < rep.accountCapacity).sort(
+      (a, b) =>
+        load[a.id] - load[b.id] || a.hiredAt - b.hiredAt ||
+        a.id.localeCompare(b.id),
+    )[0];
+    if (!owner) continue;
+    customers[customer.id] = { ...customer, ownerId: owner.id };
+    load[owner.id] += 1;
+    routed += 1;
+  }
+  if (routed === 0) {
+    return rejected(state, "No eligible unassigned accounts to route");
+  }
+  return accepted({
+    ...state,
+    records: { ...state.records, customers },
+  }, [{
+    kind: "customers_routed",
+    summary: `${routed} account${routed === 1 ? "" : "s"} routed by capacity`,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
 function assignCustomer(
   state: GameState,
   customerId: string,
@@ -1844,6 +1887,7 @@ export function applyCommand(
   const crisisCorrection = command.type === "fire_sales_rep" ||
     command.type === "fire_success_rep" ||
     command.type === "fire_support_rep" ||
+    command.type === "fire_manager" ||
     (command.type === "set_campaign_status" && command.status === "paused");
   if (
     state.clock.status === "crisis" && command.type !== "resume_crisis" &&
@@ -2129,6 +2173,8 @@ export function applyCommand(
       return hireSuccessRep(state, command.name, command.level, rules);
     case "fire_success_rep":
       return fireSuccessRep(state, command.successRepId, rules);
+    case "route_customers":
+      return routeCustomers(state, rules);
     case "assign_customer":
       return assignCustomer(state, command.customerId, command.ownerId, rules);
     case "run_success_playbook":

@@ -264,6 +264,13 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
     delete platform.duplicatesMerged;
     return { ...save, platform };
   },
+  20: (save) => ({
+    ...save,
+    platform: {
+      ...(save.platform as Record<string, unknown>),
+      managers: [],
+    },
+  }),
 };
 
 export function migrateGameState(value: unknown): GameState {

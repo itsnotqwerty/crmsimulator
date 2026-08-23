@@ -263,6 +263,17 @@ function validIncident(entry: Record<string, unknown>): boolean {
     (entry.resolvedAt === undefined || isInteger(entry.resolvedAt));
 }
 
+function validManager(entry: unknown): boolean {
+  if (!isRecord(entry)) return false;
+  return hasStrings(entry, ["id", "name", "department"]) &&
+    ["sales", "marketing", "customer_success", "support"].includes(
+      String(entry.department),
+    ) && isInteger(entry.monthlySalaryCents) &&
+    isInteger(entry.hiredAt) && isInteger(entry.lastReviewedAt) &&
+    isInteger(entry.underCapacityReviews) &&
+    (entry.lastDecision === undefined || isString(entry.lastDecision));
+}
+
 function validPlatform(value: unknown): boolean {
   if (!isRecord(value)) return false;
   const arrays = [
@@ -270,6 +281,7 @@ function validPlatform(value: unknown): boolean {
     "workflows",
     "dashboardWidgets",
     "departments",
+    "managers",
   ];
   const integers = [
     "automationRunsArchived",
@@ -286,7 +298,8 @@ function validPlatform(value: unknown): boolean {
   return arrays.every((key) =>
     Array.isArray(value[key]) && (value[key] as unknown[]).length <= 20
   ) &&
-    integers.every((key) => isInteger(value[key]));
+    integers.every((key) => isInteger(value[key])) &&
+    (value.managers as unknown[]).every(validManager);
 }
 
 export function parseGameState(value: unknown): GameState {
