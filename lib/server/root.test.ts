@@ -183,6 +183,69 @@ Deno.test("root save increments revision and rejects stale updates", async () =>
   assertStringIncludes((await stale.json()).error, "another tab");
 });
 
+Deno.test("root reload and save compact excess unassigned active leads", async () => {
+  const initial = createInitialState({ seed: 80, now: 1_000 });
+  const templateCompany = initial.records.companies.company_1;
+  const templateLead = initial.records.leads.lead_1;
+  const companies = Object.fromEntries(
+    Array.from({ length: 300 }, (_, index) => {
+      const sequence = index + 1;
+      const id = `company_${sequence}`;
+      return [id, {
+        ...templateCompany,
+        id,
+        name: `Company ${sequence}`,
+        createdAt: sequence,
+      }];
+    }),
+  );
+  const leads = Object.fromEntries(
+    Array.from({ length: 300 }, (_, index) => {
+      const sequence = index + 1;
+      const id = `lead_${sequence}`;
+      return [id, {
+        ...templateLead,
+        id,
+        companyId: `company_${sequence}`,
+        firstName: `Contact${sequence}`,
+        email: `contact-${sequence}@example.test`,
+        status: "new" as const,
+        createdAt: sequence,
+        lastActivityAt: sequence,
+      }];
+    }),
+  );
+  const oversized = {
+    ...initial,
+    sequences: { ...initial.sequences, company: 300, lead: 300 },
+    records: { ...initial.records, companies, leads },
+  };
+  const oversizedCookies = await createSetCookieHeaders(oversized, SECRET, {
+    secure: true,
+  });
+  const reloaded = await loadRoot(
+    requestWithCookies(oversizedCookies),
+    config(1_000),
+  );
+
+  assertEquals(reloaded.data.loadStatus, "loaded");
+  assertEquals(Object.keys(reloaded.data.game.records.leads).length, 120);
+  assert(reloaded.setCookies.length > 0);
+
+  const initialCookies = await createSetCookieHeaders(initial, SECRET, {
+    secure: true,
+  });
+  const response = await handleRootPost(
+    post({ type: "save", state: oversized }, initialCookies),
+    config(2_000),
+  );
+  const body = await response.json();
+
+  assertEquals(response.status, 200);
+  assertEquals(Object.keys(body.game.records.leads).length, 120);
+  assert(responseCookies(response).length <= 13);
+});
+
 Deno.test("root POST rejects cross-origin actions", async () => {
   const response = await handleRootPost(
     post({ type: "reset" }, [], "https://attacker.example"),

@@ -7,6 +7,13 @@ function oldestFirst(
   return left.createdAt - right.createdAt || left.id.localeCompare(right.id);
 }
 
+function leadArchivePriority(status: string): number {
+  if (status === "disqualified" || status === "converted") return 0;
+  if (status === "cold") return 1;
+  if (status === "new") return 2;
+  return 3;
+}
+
 export function compactGameState(
   state: GameState,
   rules: GameRules,
@@ -47,12 +54,13 @@ export function compactGameState(
   const removedLeadIds = new Set(
     Object.values(leads)
       .filter((lead) =>
-        !referencedLeadIds.has(lead.id) &&
-        (lead.status === "cold" ||
-          lead.status === "disqualified" ||
-          lead.status === "converted")
+        !referencedLeadIds.has(lead.id) && !lead.ownerId &&
+        lead.status !== "qualified"
       )
-      .sort(oldestFirst)
+      .sort((left, right) =>
+        leadArchivePriority(left.status) - leadArchivePriority(right.status) ||
+        oldestFirst(left, right)
+      )
       .slice(0, leadOverflow)
       .map((lead) => lead.id),
   );

@@ -7,8 +7,9 @@ import {
 } from "$std/assert/mod.ts";
 import { decodeBase64Url, encodeBase64Url } from "$std/encoding/base64url.ts";
 import { applyCommand } from "../game/actions.ts";
+import { compactGameState } from "../game/compaction.ts";
 import { advanceGame } from "../game/simulation.ts";
-import { createInitialState } from "../game/state.ts";
+import { createInitialState, DEFAULT_RULES } from "../game/state.ts";
 import { SAVE_SCHEMA_VERSION } from "../game/types.ts";
 import {
   createCookieBundle,
@@ -593,11 +594,60 @@ Deno.test("long-running saves compact inactive sales history", async () => {
   const grown = advanceGame(funded, 480 * 24 * 60).state;
   const bundle = await createCookieBundle(grown, SECRET);
 
-  assert(Object.keys(grown.records.leads).length <= 160);
+  assert(Object.keys(grown.records.leads).length <= 120);
   assertEquals(
     Object.keys(grown.records.companies).length,
     Object.keys(grown.records.leads).length,
   );
   assert(bundle.manifest.chunks <= 12);
   assert(bundle.payload.length <= 36_000);
+});
+
+Deno.test("compaction archives excess unassigned active leads", async () => {
+  const initial = createInitialState({ seed: 28, now: 1_000 });
+  const templateCompany = initial.records.companies.company_1;
+  const templateLead = initial.records.leads.lead_1;
+  const companies = Object.fromEntries(
+    Array.from({ length: 300 }, (_, index) => {
+      const sequence = index + 1;
+      const id = `company_${sequence}`;
+      return [id, {
+        ...templateCompany,
+        id,
+        name: `Company ${sequence} ${sequence.toString(36)}`,
+        createdAt: sequence,
+      }];
+    }),
+  );
+  const leads = Object.fromEntries(
+    Array.from({ length: 300 }, (_, index) => {
+      const sequence = index + 1;
+      const id = `lead_${sequence}`;
+      return [id, {
+        ...templateLead,
+        id,
+        companyId: `company_${sequence}`,
+        firstName: `Contact${sequence.toString(36)}`,
+        email: `contact-${sequence}-${
+          (sequence * 2_654_435_761 >>> 0).toString(36)
+        }@example.test`,
+        status: "new" as const,
+        createdAt: sequence,
+        lastActivityAt: sequence,
+      }];
+    }),
+  );
+  const oversized = {
+    ...initial,
+    sequences: { ...initial.sequences, company: 300, lead: 300 },
+    records: { ...initial.records, companies, leads },
+  };
+  const compacted = compactGameState(oversized, DEFAULT_RULES);
+  const bundle = await createCookieBundle(compacted, SECRET);
+
+  assertEquals(Object.keys(compacted.records.leads).length, 120);
+  assertEquals(Object.keys(compacted.records.companies).length, 120);
+  assert(compacted.records.leads.lead_300);
+  assertEquals(compacted.records.leads.lead_1, undefined);
+  assert(bundle.manifest.chunks <= 12);
 });

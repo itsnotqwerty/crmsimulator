@@ -159,10 +159,10 @@ Contacts, companies, deals, customers, campaigns, tasks, tickets, employees, and
 automation rules use compact stable IDs and normalized maps or bounded arrays.
 Relationships store IDs rather than duplicated objects.
 
-Inactive sales history is compacted before persistence. The engine retains
-actionable leads and open deals, removes the oldest terminal leads and closed
-deals above their record limits, drops tasks tied to removed records, and
-removes companies no longer referenced by canonical CRM records. Aggregate
+Sales history is compacted before persistence. The engine retains owned and
+referenced leads and open deals, then archives the oldest unassigned leads and
+closed deals above their record limits. It also drops tasks tied to removed
+records and companies no longer referenced by canonical CRM records. Aggregate
 history and recent activity preserve long-run outcomes without linear save
 growth.
 
