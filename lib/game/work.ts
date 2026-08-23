@@ -9,7 +9,19 @@ import type {
   SuccessRep,
   SupportRep,
   TaskKind,
+  TicketChannel,
+  TicketPriority,
 } from "./types.ts";
+
+export const TICKET_SLA_MINUTES: Record<
+  TicketPriority,
+  { response: number; resolution: number }
+> = {
+  urgent: { response: 60, resolution: 4 * 60 },
+  high: { response: 4 * 60, resolution: 12 * 60 },
+  normal: { response: 8 * 60, resolution: 24 * 60 },
+  low: { response: 24 * 60, resolution: 3 * 24 * 60 },
+};
 
 export type WorkResult =
   | { ok: true; state: GameState; events: DomainEvent[] }
@@ -100,8 +112,10 @@ export function contactLeadWork(
   state: GameState,
   leadId: string,
   channel: "call" | "email",
-  consumeFounderCapacity = true,
+  options: { consumeFounderCapacity?: boolean; paced?: boolean } = {},
 ): WorkResult {
+  const consumeFounderCapacity = options.consumeFounderCapacity ?? true;
+  const paced = options.paced ?? false;
   const lead = state.records.leads[leadId];
   if (!lead) return fail("Lead does not exist");
   if (!ACTIVE_LEAD_STATUSES.has(lead.status)) {
@@ -118,11 +132,44 @@ export function contactLeadWork(
   const gameMinute = state.clock.gameMinute;
   const rapidRepeat = lead.status === "contacted" &&
     gameMinute - lead.lastActivityAt < 60;
+  if (paced && rapidRepeat) {
+    return ok(state, []);
+  }
   const engagementChange = rapidRepeat
     ? { value: channel === "call" ? -30 : -20, cursor: state.rngCursor }
     : randomInteger(state.seed, state.rngCursor, 6, 16);
-  const taskSequence = state.sequences.task + 1;
+  const createTask = !paced;
+  const taskSequence = createTask
+    ? state.sequences.task + 1
+    : state.sequences.task;
   const taskId = `task_${taskSequence}`;
+  const nextLead = {
+    ...lead,
+    status: "contacted" as const,
+    engagement: Math.max(
+      0,
+      Math.min(100, lead.engagement + engagementChange.value),
+    ),
+    lastActivityAt: gameMinute,
+  };
+  const events: DomainEvent[] = [{
+    kind: "lead_contacted",
+    summary: rapidRepeat
+      ? `Over-contacted ${lead.firstName} ${lead.lastName}; intent fell sharply`
+      : `${
+        channel === "call" ? "Called" : "Emailed"
+      } ${lead.firstName} ${lead.lastName}`,
+    relatedId: lead.id,
+    gameMinute,
+  }];
+  if (createTask) {
+    events.push({
+      kind: "task_created",
+      summary: `Follow-up task created for ${lead.firstName} ${lead.lastName}`,
+      relatedId: taskId,
+      gameMinute,
+    });
+  }
   return ok({
     ...state,
     rngCursor: engagementChange.cursor,
@@ -137,28 +184,22 @@ export function contactLeadWork(
       ...state.records,
       leads: {
         ...state.records.leads,
-        [lead.id]: {
-          ...lead,
-          status: "contacted",
-          engagement: Math.max(
-            0,
-            Math.min(100, lead.engagement + engagementChange.value),
-          ),
-          lastActivityAt: gameMinute,
-        },
+        [lead.id]: nextLead,
       },
-      tasks: {
-        ...state.records.tasks,
-        [taskId]: {
-          id: taskId,
-          kind: "follow_up",
-          status: "open",
-          relatedId: lead.id,
-          title: `Follow up with ${lead.firstName} ${lead.lastName}`,
-          dueAt: gameMinute + 4 * 60,
-          createdAt: gameMinute,
-        },
-      },
+      tasks: createTask
+        ? {
+          ...state.records.tasks,
+          [taskId]: {
+            id: taskId,
+            kind: "follow_up",
+            status: "open",
+            relatedId: lead.id,
+            title: `Follow up with ${lead.firstName} ${lead.lastName}`,
+            dueAt: gameMinute + 4 * 60,
+            createdAt: gameMinute,
+          },
+        }
+        : state.records.tasks,
     },
     onboarding: {
       ...state.onboarding,
@@ -167,32 +208,24 @@ export function contactLeadWork(
         ? "qualify_lead"
         : state.onboarding.step,
     },
-  }, [{
-    kind: "lead_contacted",
-    summary: rapidRepeat
-      ? `Over-contacted ${lead.firstName} ${lead.lastName}; intent fell sharply`
-      : `${
-        channel === "call" ? "Called" : "Emailed"
-      } ${lead.firstName} ${lead.lastName}`,
-    relatedId: lead.id,
-    gameMinute,
-  }, {
-    kind: "task_created",
-    summary: `Follow-up task created for ${lead.firstName} ${lead.lastName}`,
-    relatedId: taskId,
-    gameMinute,
-  }]);
+  }, events);
 }
 
 export function followUpLeadWork(
   state: GameState,
   leadId: string,
-  consumeFounderCapacity = true,
+  options: { consumeFounderCapacity?: boolean; paced?: boolean } = {},
 ): WorkResult {
+  const consumeFounderCapacity = options.consumeFounderCapacity ?? true;
+  const paced = options.paced ?? false;
   const lead = state.records.leads[leadId];
   if (!lead) return fail("Lead does not exist");
   if (lead.status !== "contacted" && lead.status !== "cold") {
     return fail("Only contacted or cold leads need follow-up");
+  }
+  const gameMinute = state.clock.gameMinute;
+  if (paced && gameMinute - lead.lastActivityAt < 4 * 60) {
+    return ok(state, []);
   }
   const capacityCost = 15;
   if (
@@ -202,7 +235,6 @@ export function followUpLeadWork(
     return fail("Not enough founder capacity");
   }
   const engagementGain = randomInteger(state.seed, state.rngCursor, 8, 18);
-  const gameMinute = state.clock.gameMinute;
   return ok({
     ...state,
     rngCursor: engagementGain.cursor,
@@ -341,6 +373,72 @@ export function assignCustomerWork(
     summary: `Account assigned to ${owner.name}`,
     relatedId: customer.id,
     gameMinute: state.clock.gameMinute,
+  }]);
+}
+
+export function createTicketWork(
+  state: GameState,
+  input: {
+    customerId: string;
+    channel: TicketChannel;
+    priority: TicketPriority;
+    title: string;
+    createdAt?: number;
+  },
+  rules: GameRules,
+): WorkResult {
+  const customer = state.records.customers[input.customerId];
+  if (!customer) return fail("Customer does not exist");
+  const tickets = { ...state.records.tickets };
+  const overflow = Object.keys(tickets).length - rules.maxTicketRecords + 1;
+  const archived = Object.values(tickets).filter((ticket) =>
+    ticket.status === "resolved"
+  ).sort((a, b) => (a.resolvedAt ?? 0) - (b.resolvedAt ?? 0)).slice(
+    0,
+    Math.max(0, overflow),
+  );
+  for (const ticket of archived) delete tickets[ticket.id];
+  if (Object.keys(tickets).length >= rules.maxTicketRecords) {
+    return fail("Resolve existing tickets before adding more");
+  }
+  const title = input.title.trim().replaceAll(/\s+/g, " ");
+  if (title.length < 3 || title.length > 100) {
+    return fail("Ticket title must contain 3 to 100 characters");
+  }
+  const sequence = state.sequences.ticket + 1;
+  const id = `ticket_${sequence}`;
+  const createdAt = input.createdAt ?? state.clock.gameMinute;
+  const sla = TICKET_SLA_MINUTES[input.priority];
+  return ok({
+    ...state,
+    history: {
+      ...state.history,
+      ticketsArchived: state.history.ticketsArchived + archived.length,
+    },
+    sequences: { ...state.sequences, ticket: sequence },
+    records: {
+      ...state.records,
+      tickets: {
+        ...tickets,
+        [id]: {
+          id,
+          customerId: customer.id,
+          channel: input.channel,
+          priority: input.priority,
+          status: "open",
+          title,
+          createdAt,
+          responseDueAt: createdAt + sla.response,
+          resolutionDueAt: createdAt + sla.resolution,
+          escalated: false,
+        },
+      },
+    },
+  }, [{
+    kind: "ticket_created",
+    summary: `${input.priority} priority ticket opened: ${title}`,
+    relatedId: id,
+    gameMinute: createdAt,
   }]);
 }
 
@@ -676,11 +774,13 @@ export function outreachLeadWork(
   state: GameState,
   lead: Lead,
 ): WorkResult {
-  if (lead.status === "new") {
-    return contactLeadWork(state, lead.id, "email", false);
+  const live = state.records.leads[lead.id] ?? lead;
+  const paced = { consumeFounderCapacity: false, paced: true } as const;
+  if (live.status === "new") {
+    return contactLeadWork(state, live.id, "email", paced);
   }
-  if (lead.status === "contacted" || lead.status === "cold") {
-    return followUpLeadWork(state, lead.id, false);
+  if (live.status === "contacted" || live.status === "cold") {
+    return followUpLeadWork(state, live.id, paced);
   }
   return fail("Lead does not need outreach");
 }
@@ -696,7 +796,10 @@ export function advanceLeadStatusWork(
     return qualifyLeadWork(state, lead.id);
   }
   if (lead.status === "contacted") {
-    return followUpLeadWork(state, lead.id, false);
+    return followUpLeadWork(state, lead.id, {
+      consumeFounderCapacity: false,
+      paced: true,
+    });
   }
   return fail("Lead status cannot be advanced");
 }

@@ -85,7 +85,7 @@ repetition produced by the original eight-prefix catalog.
   begin at 2x, and the player can choose 1x, 2x, or 4x.
 - The simulation is deterministic from the company seed, state, commands, and
   elapsed time.
-- Returning players receive up to 24 real hours of offline progress.
+- Returning players receive up to seven game days of inactive progress.
 - Offline simulation pauses before unseen bankruptcy and opens a financial
   crisis workflow where campaigns can be paused and staff dismissed before
   resuming.

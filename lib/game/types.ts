@@ -664,6 +664,7 @@ export interface GameRules {
   simulationStepMinutes: number;
   realMillisecondsPerGameMinute: number;
   maxOfflineRealMilliseconds: number;
+  maxInactiveGameMinutes: number;
   leadArrivalIntervalMinutes: number;
   prospectingCapacityMinutes: number;
   leadCoolingMinutes: number;

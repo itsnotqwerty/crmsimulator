@@ -99,16 +99,16 @@ While the application is open:
 
 ### 5.3 Offline progress
 
-When the player returns, the game simulates at most 24 real hours of elapsed
-time.
+When the player returns, the game simulates at most seven days of game time. The
+same cap applies when a live tab resumes after being hidden.
 
 Offline resolution uses the same engine as active play, with one exception: it
 stops at the last safe interval before an expense would cause bankruptcy. The
 company enters **Crisis Pause**, and the player must reduce costs, recover
 revenue, or otherwise act before resuming time.
 
-Elapsed time beyond the 24-hour cap is discarded. It is not queued for later
-resolution.
+Elapsed time beyond the seven-game-day cap is discarded. It is not queued for
+later resolution.
 
 The player receives an offline summary showing elapsed time processed, leads
 received, revenue and costs accrued, customer changes, completed work,

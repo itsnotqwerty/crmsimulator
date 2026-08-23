@@ -62,7 +62,13 @@ function workSalesRep(
   ).sort(byCreated);
   const fresh = ownedLeads.find((lead) => lead.status === "new");
   if (fresh) {
-    return applyWork(current, contactLeadWork(state, fresh.id, "email", false));
+    return applyWork(
+      current,
+      contactLeadWork(state, fresh.id, "email", {
+        consumeFounderCapacity: false,
+        paced: true,
+      }),
+    );
   }
   const readyToQualify = ownedLeads.find((lead) =>
     lead.status === "contacted" && lead.engagement >= 50 &&
@@ -76,7 +82,13 @@ function workSalesRep(
     state.clock.gameMinute - lead.lastActivityAt >= 4 * 60
   );
   if (needsFollowUp) {
-    return applyWork(current, followUpLeadWork(state, needsFollowUp.id, false));
+    return applyWork(
+      current,
+      followUpLeadWork(state, needsFollowUp.id, {
+        consumeFounderCapacity: false,
+        paced: true,
+      }),
+    );
   }
 
   const ownedDeal =

@@ -437,7 +437,7 @@ engine commands rather than view components.
 - command lifecycle transitions and invariants;
 - interval equivalence and deterministic replay;
 - revenue, expenses, workload, churn, unlocks, and bankruptcy;
-- 24-hour offline cap and crisis stop;
+- seven-game-day inactive cap and crisis stop;
 - schema validation and every migration;
 - codec round trips, tampering, corruption, chunk cleanup, and size fixtures.
 

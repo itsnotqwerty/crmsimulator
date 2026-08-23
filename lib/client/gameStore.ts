@@ -67,14 +67,20 @@ export function useGameStore(initial: GameState) {
     saveTimer.current = globalThis.setTimeout(() => void saveNow(), 500);
   };
 
-  const catchUp = (timestamp = Date.now()) => {
+  const catchUp = (
+    timestamp = Date.now(),
+    maxGameMinutes?: number,
+  ) => {
     now.value = timestamp;
     if (game.value.clock.status !== "active") return;
     const timeScale = game.value.preferences.timeScale;
-    const elapsedGameMinutes = Math.floor(
+    const totalElapsedGameMinutes = Math.floor(
       (timestamp - game.value.lastSimulatedAt) /
         DEFAULT_RULES.realMillisecondsPerGameMinute * timeScale,
     );
+    const elapsedGameMinutes = maxGameMinutes === undefined
+      ? totalElapsedGameMinutes
+      : Math.min(totalElapsedGameMinutes, maxGameMinutes);
     const processableMinutes = elapsedGameMinutes -
       (elapsedGameMinutes % DEFAULT_RULES.simulationStepMinutes);
     if (processableMinutes < DEFAULT_RULES.simulationStepMinutes) return;
@@ -83,9 +89,11 @@ export function useGameStore(initial: GameState) {
     const result = advanceGame(game.value, processableMinutes);
     game.value = {
       ...result.state,
-      lastSimulatedAt: game.value.lastSimulatedAt +
-        processableMinutes * DEFAULT_RULES.realMillisecondsPerGameMinute /
-          timeScale,
+      lastSimulatedAt: totalElapsedGameMinutes > elapsedGameMinutes
+        ? timestamp
+        : game.value.lastSimulatedAt +
+          processableMinutes * DEFAULT_RULES.realMillisecondsPerGameMinute /
+            timeScale,
     };
     if (game.value.narrative.chapter > previousChapter) {
       notice.value = `Chapter complete — next: ${
@@ -180,7 +188,9 @@ export function useGameStore(initial: GameState) {
 
   useEffect(() => {
     mounted.current = true;
-    const interval = globalThis.setInterval(() => catchUp(), 1_000);
+    const interval = globalThis.setInterval(() => {
+      if (document.visibilityState === "visible") catchUp();
+    }, 1_000);
     const flush = () => {
       if (saveStatus.value === "unsaved" || saveStatus.value === "error") {
         void saveNow();
@@ -188,7 +198,7 @@ export function useGameStore(initial: GameState) {
     };
     const visibility = () => {
       if (document.visibilityState === "hidden") flush();
-      else catchUp();
+      else catchUp(Date.now(), DEFAULT_RULES.maxInactiveGameMinutes);
     };
     document.addEventListener("visibilitychange", visibility);
     globalThis.addEventListener("pagehide", flush);

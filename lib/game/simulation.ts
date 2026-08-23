@@ -1,13 +1,15 @@
-import { generateLead } from "./catalog.ts";
+import { generateLead, generateSupportIssue } from "./catalog.ts";
 import { projectEvents } from "./events.ts";
 import { DEFAULT_RULES, syncProgressionUnlocks } from "./state.ts";
 import { advancePlatform } from "./platform.ts";
 import { advanceSequences, applyAutomations } from "./automation.ts";
 import { applyStaffWork } from "./staff.ts";
+import { createTicketWork } from "./work.ts";
 import { syncNarrative } from "./narrative.ts";
 import type {
   AdvanceResult,
   AdvanceSummary,
+  Customer,
   DomainEvent,
   GameRules,
   GameState,
@@ -43,6 +45,100 @@ function campaignLeadInterval(channel: string): number {
   if (channel === "paid_social") return 4 * 60;
   if (channel === "email") return 6 * 60;
   return 12 * 60;
+}
+
+const TICKET_ARRIVAL_INTERVAL_MINUTES = 6 * 60;
+
+function inboundTicketChance(customer: Customer): number {
+  if (customer.lifecycle === "at_risk" || customer.health < 45) return 35;
+  if (customer.lifecycle === "onboarding" || customer.health < 65) return 20;
+  return 10;
+}
+
+function openUnresolvedTicketCount(
+  state: GameState,
+  customerId: string,
+): number {
+  return Object.values(state.records.tickets).filter((ticket) =>
+    ticket.customerId === customerId && ticket.status !== "resolved"
+  ).length;
+}
+
+function openInboundTickets(
+  state: GameState,
+  startMinute: number,
+  endMinute: number,
+  rules: GameRules,
+): { state: GameState; events: DomainEvent[] } {
+  if (!state.unlocks.includes("customer_success")) {
+    return { state, events: [] };
+  }
+  const firstBoundary =
+    Math.floor(startMinute / TICKET_ARRIVAL_INTERVAL_MINUTES) +
+    1;
+  const lastBoundary = Math.floor(endMinute / TICKET_ARRIVAL_INTERVAL_MINUTES);
+  if (lastBoundary < firstBoundary) return { state, events: [] };
+
+  let current = state;
+  const events: DomainEvent[] = [];
+  for (
+    let boundary = firstBoundary;
+    boundary <= lastBoundary;
+    boundary += 1
+  ) {
+    const arrivalMinute = boundary * TICKET_ARRIVAL_INTERVAL_MINUTES;
+    const eligible = Object.values(current.records.customers).filter((
+      customer,
+    ) => openUnresolvedTicketCount(current, customer.id) === 0).sort((a, b) =>
+      a.health - b.health || a.id.localeCompare(b.id)
+    );
+    if (eligible.length === 0) continue;
+    const openedIds = new Set<string>();
+    for (const customer of eligible) {
+      const chance = inboundTicketChance(customer);
+      const roll = (current.seed + boundary * 17 +
+        Number(customer.id.replaceAll(/\D/g, "") || 0)) % 100;
+      if (roll >= chance) continue;
+      const issue = generateSupportIssue(
+        current.seed,
+        current.rngCursor,
+        customer.health,
+        customer.lifecycle,
+      );
+      const result = createTicketWork(current, {
+        customerId: customer.id,
+        channel: issue.channel,
+        priority: issue.priority,
+        title: issue.title,
+        createdAt: arrivalMinute,
+      }, rules);
+      if (!result.ok) break;
+      current = { ...result.state, rngCursor: issue.nextCursor };
+      events.push(...result.events);
+      openedIds.add(customer.id);
+    }
+    const fallback = openedIds.size === 0
+      ? eligible.find((customer) => !openedIds.has(customer.id))
+      : undefined;
+    if (!fallback) continue;
+    const issue = generateSupportIssue(
+      current.seed,
+      current.rngCursor,
+      fallback.health,
+      fallback.lifecycle,
+    );
+    const result = createTicketWork(current, {
+      customerId: fallback.id,
+      channel: issue.channel,
+      priority: issue.priority,
+      title: issue.title,
+      createdAt: arrivalMinute,
+    }, rules);
+    if (!result.ok) continue;
+    current = { ...result.state, rngCursor: issue.nextCursor };
+    events.push(...result.events);
+  }
+  return { state: current, events };
 }
 
 export function campaignSaturation(leadsGenerated: number): number {
@@ -338,7 +434,7 @@ function processStep(
         gameMinute: task.dueAt,
       });
       const lead = leads[task.relatedId];
-      if (task.kind === "follow_up" && lead) {
+      if (task.kind === "follow_up" && lead && !lead.ownerId) {
         leads[lead.id] = {
           ...lead,
           engagement: Math.max(0, lead.engagement - 15),
@@ -423,6 +519,15 @@ function processStep(
       });
     }
   }
+
+  const inbound = openInboundTickets(
+    nextState,
+    startMinute,
+    endMinute,
+    rules,
+  );
+  nextState = inbound.state;
+  events.push(...inbound.events);
 
   const tickets = { ...nextState.records.tickets };
   const customers = { ...nextState.records.customers };
@@ -667,9 +772,12 @@ export function advanceOffline(
     elapsedRealMilliseconds,
     rules.maxOfflineRealMilliseconds,
   );
-  const elapsedGameMinutes = Math.floor(
-    acceptedRealMilliseconds / rules.realMillisecondsPerGameMinute *
-      state.preferences.timeScale,
+  const elapsedGameMinutes = Math.min(
+    rules.maxInactiveGameMinutes,
+    Math.floor(
+      acceptedRealMilliseconds / rules.realMillisecondsPerGameMinute *
+        state.preferences.timeScale,
+    ),
   );
   const result = advanceGame(state, elapsedGameMinutes, "offline", rules);
 

@@ -3635,7 +3635,11 @@ export default function CrmApp(props: CrmAppProps) {
                   )}
                 </div>
               )}
-              <div class="record-layout">
+              <div
+                class={`record-layout lead-record-layout ${
+                  showLeadFilters.value ? "filters-open" : ""
+                }`}
+              >
                 <div class="panel table-panel">
                   <div class="table-toolbar">
                     <strong>{filteredLeads.length} leads</strong>

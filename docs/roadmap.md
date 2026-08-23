@@ -55,7 +55,7 @@ a cookie round trip.
 - [x] Emit bounded typed domain events and aggregate history.
 - [x] Implement milestone evaluation and feature unlock events.
 - [x] Implement active bankruptcy.
-- [x] Implement 24-hour offline catch-up and Crisis Pause.
+- [x] Implement seven-game-day inactive catch-up and Crisis Pause.
 
 ### Commands
 
@@ -79,7 +79,7 @@ a cookie round trip.
 
 - Identical seed, commands, and elapsed time produce identical state.
 - Batched and segmented time advancement produce the same canonical result.
-- Offline catch-up never exceeds 24 real hours and stops before bankruptcy.
+- Inactive catch-up never exceeds seven game days and stops before bankruptcy.
 - Active play can enter bankruptcy.
 - Corrupt or modified chunks fail validation.
 - Opening and mature fixtures remain below the documented save budget.

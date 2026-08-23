@@ -622,6 +622,55 @@ Deno.test("support tickets follow an assigned SLA lifecycle", () => {
   assertEquals(fired.state.records.tickets.ticket_1.ownerId, undefined);
 });
 
+Deno.test("customers open inbound support tickets over time", () => {
+  const initial = createInitialState({ seed: 206, now: 1_000 });
+  const state = {
+    ...initial,
+    unlocks: ["customer_success" as const],
+    company: { ...initial.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...initial.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 55,
+          adoption: 40,
+          lifecycle: "active" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+
+  assertEquals(Object.keys(state.records.tickets), []);
+  const first = advanceGame(state, 6 * 60);
+  const replay = advanceGame(state, 6 * 60);
+  assertEquals(first.state, replay.state);
+  const tickets = Object.values(first.state.records.tickets);
+  assertEquals(tickets.length, 1);
+  assertEquals(tickets[0].customerId, "customer_1");
+  assertEquals(tickets[0].status, "open");
+  assertEquals(tickets[0].escalated, false);
+  assert(
+    first.events.some((event) => event.kind === "ticket_created"),
+  );
+
+  const withOpen = advanceGame(first.state, 6 * 60).state;
+  assertEquals(
+    Object.values(withOpen.records.tickets).filter((ticket) =>
+      ticket.status !== "resolved"
+    ).length,
+    1,
+  );
+});
+
 Deno.test("missed ticket SLAs fire once and damage account health", () => {
   const initial = createInitialState({ seed: 52, now: 1_000 });
   const state = {
@@ -1538,7 +1587,7 @@ Deno.test("active simulation can declare bankruptcy", () => {
   assert(result.state.company.cashCents < 0);
 });
 
-Deno.test("offline elapsed time is capped at 24 hours", () => {
+Deno.test("inactive simulation is capped at one game week", () => {
   const initial = createInitialState({ seed: 17, now: 1_000 });
   const wealthy = {
     ...initial,
@@ -1552,11 +1601,7 @@ Deno.test("offline elapsed time is capped at 24 hours", () => {
     wealthy,
     initial.lastSimulatedAt + 7 * 24 * 60 * 60 * 1_000,
   );
-  const expectedGameMinutes = Math.floor(
-    DEFAULT_RULES.maxOfflineRealMilliseconds /
-      DEFAULT_RULES.realMillisecondsPerGameMinute *
-      wealthy.preferences.timeScale,
-  );
+  const expectedGameMinutes = DEFAULT_RULES.maxInactiveGameMinutes;
 
   assertEquals(result.summary.elapsedGameMinutes, expectedGameMinutes);
   assertEquals(result.state.clock.gameMinute, expectedGameMinutes);
@@ -1576,6 +1621,66 @@ Deno.test("simulation speed preference controls offline game time", () => {
 
   assertEquals(advanceOffline(normal, now).state.clock.gameMinute, 10);
   assertEquals(advanceOffline(fast, now).state.clock.gameMinute, 40);
+});
+
+Deno.test("automated sales outreach does not apply the spam penalty", () => {
+  let state = createInitialState({ seed: 205, now: 1_000 });
+  state = { ...state, unlocks: ["pipeline"] };
+  state = applyCommand(state, {
+    type: "hire_sales_rep",
+    name: "Avery Chen",
+    level: "senior",
+    territory: "all",
+    monthlyTargetCents: 1_500_000,
+  }).state;
+  state = applyCommand(state, {
+    type: "create_workflow",
+    name: "First touch",
+    trigger: "lead_created",
+    condition: "all",
+    action: "send_outreach",
+  }).state;
+  state = applyCommand(state, {
+    type: "create_workflow",
+    name: "Second touch",
+    trigger: "lead_created",
+    condition: "all",
+    action: "send_outreach",
+  }).state;
+  state = {
+    ...state,
+    records: {
+      ...state.records,
+      leads: {
+        ...state.records.leads,
+        lead_1: { ...state.records.leads.lead_1, ownerId: "sales_rep_1" },
+      },
+    },
+  };
+
+  const prospected = applyCommand(state, { type: "prospect_lead" });
+  const created = Object.values(prospected.state.records.leads).find((lead) =>
+    lead.id !== "lead_1"
+  );
+  assert(created);
+  assertEquals(created.status, "contacted");
+  assertEquals(
+    prospected.events.some((event) =>
+      event.summary.includes("intent fell sharply")
+    ),
+    false,
+  );
+
+  const before = state.records.leads.lead_1.engagement;
+  const worked = advanceGame(state, 60).state;
+  assertEquals(worked.records.leads.lead_1.status, "contacted");
+  assert(worked.records.leads.lead_1.engagement > before);
+  assertEquals(
+    worked.recentActivities.some((activity) =>
+      activity.summary.includes("intent fell sharply")
+    ),
+    false,
+  );
 });
 
 Deno.test("sales representatives contact and qualify owned leads over time", () => {

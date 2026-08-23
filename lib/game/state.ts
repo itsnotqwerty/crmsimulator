@@ -12,6 +12,7 @@ export const DEFAULT_RULES: GameRules = {
   simulationStepMinutes: 10,
   realMillisecondsPerGameMinute: 1_000,
   maxOfflineRealMilliseconds: 24 * 60 * 60 * 1_000,
+  maxInactiveGameMinutes: 7 * 24 * 60,
   leadArrivalIntervalMinutes: 4 * 60,
   prospectingCapacityMinutes: 45,
   leadCoolingMinutes: 3 * 24 * 60,

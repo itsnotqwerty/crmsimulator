@@ -1,4 +1,11 @@
-import type { CrmCompany, GameMinute, Lead } from "./types.ts";
+import type {
+  CrmCompany,
+  CustomerLifecycle,
+  GameMinute,
+  Lead,
+  TicketChannel,
+  TicketPriority,
+} from "./types.ts";
 import { pick, randomInteger } from "./rng.ts";
 
 const FIRST_NAMES = [
@@ -77,6 +84,23 @@ const ROLES = [
   "Operations Manager",
   "VP of Sales",
 ] as const;
+const TICKET_TITLES = [
+  "Cannot export the monthly report",
+  "SSO login loops on sign-in",
+  "Seat count did not update after expansion",
+  "Dashboard widgets render blank",
+  "Invoice PDF will not download",
+  "API requests are hitting rate limits",
+  "Need a two-factor reset for the billing owner",
+  "Overnight data sync stalled",
+  "Permission denied on the billing page",
+  "Scheduled digest never arrived",
+] as const;
+const TICKET_CHANNELS: readonly TicketChannel[] = [
+  "email",
+  "chat",
+  "phone",
+];
 
 export interface GeneratedLead {
   company: CrmCompany;
@@ -147,5 +171,33 @@ export function generateLead(
       lastActivityAt: gameMinute,
     },
     nextCursor: currentCursor,
+  };
+}
+
+export function generateSupportIssue(
+  seed: number,
+  cursor: number,
+  health: number,
+  lifecycle: CustomerLifecycle,
+): {
+  title: string;
+  channel: TicketChannel;
+  priority: TicketPriority;
+  nextCursor: number;
+} {
+  const title = pick(TICKET_TITLES, seed, cursor);
+  const channel = pick(TICKET_CHANNELS, seed, title.cursor);
+  const priorities: readonly TicketPriority[] =
+    lifecycle === "at_risk" || health < 40
+      ? ["high", "urgent"]
+      : health < 65
+      ? ["normal", "high"]
+      : ["low", "normal"];
+  const priority = pick(priorities, seed, channel.cursor);
+  return {
+    title: title.value,
+    channel: channel.value,
+    priority: priority.value,
+    nextCursor: priority.cursor,
   };
 }

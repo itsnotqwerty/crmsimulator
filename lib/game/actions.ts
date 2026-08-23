@@ -15,6 +15,7 @@ import {
   closeLossRiskPercent,
   completeOnboardingWork,
   contactLeadWork,
+  createTicketWork,
   customerCheckInWork,
   followUpLeadWork,
   qualifyLeadWork,
@@ -64,16 +65,6 @@ const SUPPORT_REP_PROFILES: Record<
   junior: { monthlySalaryCents: 320_000, skill: 45, ticketCapacity: 6 },
   mid: { monthlySalaryCents: 560_000, skill: 65, ticketCapacity: 10 },
   senior: { monthlySalaryCents: 850_000, skill: 82, ticketCapacity: 14 },
-};
-
-const TICKET_SLA_MINUTES: Record<
-  TicketPriority,
-  { response: number; resolution: number }
-> = {
-  urgent: { response: 60, resolution: 4 * 60 },
-  high: { response: 4 * 60, resolution: 12 * 60 },
-  normal: { response: 8 * 60, resolution: 24 * 60 },
-  low: { response: 24 * 60, resolution: 3 * 24 * 60 },
 };
 
 export function quoteMonthlyValueCents(
@@ -515,7 +506,7 @@ function contactLead(
   channel: "call" | "email",
   rules: GameRules,
 ): CommandResult {
-  const result = contactLeadWork(state, lead.id, channel, true);
+  const result = contactLeadWork(state, lead.id, channel);
   return result.ok
     ? accepted(result.state, result.events, rules)
     : rejected(state, result.reason);
@@ -1456,59 +1447,10 @@ function createTicket(
   if (!state.unlocks.includes("customer_success")) {
     return rejected(state, "Unlock Customer Success to manage support");
   }
-  const customer = state.records.customers[input.customerId];
-  if (!customer) return rejected(state, "Customer does not exist");
-  const tickets = { ...state.records.tickets };
-  const overflow = Object.keys(tickets).length - rules.maxTicketRecords + 1;
-  const archived = Object.values(tickets).filter((ticket) =>
-    ticket.status === "resolved"
-  ).sort((a, b) => (a.resolvedAt ?? 0) - (b.resolvedAt ?? 0)).slice(
-    0,
-    Math.max(0, overflow),
-  );
-  for (const ticket of archived) delete tickets[ticket.id];
-  if (Object.keys(tickets).length >= rules.maxTicketRecords) {
-    return rejected(state, "Resolve existing tickets before adding more");
-  }
-  const title = input.title.trim().replaceAll(/\s+/g, " ");
-  if (title.length < 3 || title.length > 100) {
-    return rejected(state, "Ticket title must contain 3 to 100 characters");
-  }
-  const sequence = state.sequences.ticket + 1;
-  const id = `ticket_${sequence}`;
-  const gameMinute = state.clock.gameMinute;
-  const sla = TICKET_SLA_MINUTES[input.priority];
-  return accepted({
-    ...state,
-    history: {
-      ...state.history,
-      ticketsArchived: state.history.ticketsArchived + archived.length,
-    },
-    sequences: { ...state.sequences, ticket: sequence },
-    records: {
-      ...state.records,
-      tickets: {
-        ...tickets,
-        [id]: {
-          id,
-          customerId: customer.id,
-          channel: input.channel,
-          priority: input.priority,
-          status: "open",
-          title,
-          createdAt: gameMinute,
-          responseDueAt: gameMinute + sla.response,
-          resolutionDueAt: gameMinute + sla.resolution,
-          escalated: false,
-        },
-      },
-    },
-  }, [{
-    kind: "ticket_created",
-    summary: `${input.priority} priority ticket opened: ${title}`,
-    relatedId: id,
-    gameMinute,
-  }], rules);
+  const result = createTicketWork(state, input, rules);
+  return result.ok
+    ? accepted(result.state, result.events, rules)
+    : rejected(state, result.reason);
 }
 
 function assignTicket(
@@ -1773,7 +1715,7 @@ function followUpLead(
   lead: Lead,
   rules: GameRules,
 ): CommandResult {
-  const result = followUpLeadWork(state, lead.id, true);
+  const result = followUpLeadWork(state, lead.id);
   return result.ok
     ? accepted(result.state, result.events, rules)
     : rejected(state, result.reason);
