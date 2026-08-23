@@ -278,6 +278,34 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       palette: "forest",
     },
   }),
+  22: (save) => {
+    const preferences = save.preferences as Record<string, unknown>;
+    return {
+      ...save,
+      preferences: {
+        ...preferences,
+        palette: preferences.palette === "berry"
+          ? "pearl"
+          : preferences.palette,
+      },
+    };
+  },
+  23: (save) => {
+    const preferences = save.preferences as Record<string, unknown>;
+    const renamedPalettes: Record<string, string> = {
+      forest: "emerald",
+      ocean: "sapphire",
+      graphite: "onyx",
+    };
+    const palette = String(preferences.palette);
+    return {
+      ...save,
+      preferences: {
+        ...preferences,
+        palette: renamedPalettes[palette] ?? palette,
+      },
+    };
+  },
 };
 
 export function migrateGameState(value: unknown): GameState {

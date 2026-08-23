@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 21 as const;
+export const SAVE_SCHEMA_VERSION = 23 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -6,7 +6,13 @@ export type GameMinute = number;
 
 export type SimulationStatus = "active" | "crisis" | "bankrupt";
 export type TimeScale = 1 | 2 | 4;
-export type ColorPalette = "forest" | "ocean" | "berry" | "graphite";
+export type ColorPalette =
+  | "emerald"
+  | "sapphire"
+  | "ruby"
+  | "pearl"
+  | "opal"
+  | "onyx";
 export type LeadStatus =
   | "new"
   | "contacted"

@@ -348,7 +348,31 @@ Deno.test("version 19 saves migrate with an empty manager roster", () => {
 
   assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
   assertEquals(migrated.platform.managers, []);
-  assertEquals(migrated.preferences.palette, "forest");
+  assertEquals(migrated.preferences.palette, "emerald");
+});
+
+Deno.test("version 21 saves migrate the Berry palette to Pearl", () => {
+  const current = createInitialState({ seed: 112, now: 1_000 });
+  const legacy = structuredClone(current) as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 21;
+  (legacy.preferences as Record<string, unknown>).palette = "berry";
+
+  const migrated = migrateGameState(legacy);
+
+  assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
+  assertEquals(migrated.preferences.palette, "pearl");
+});
+
+Deno.test("version 22 saves migrate legacy palette names to gemstones", () => {
+  const current = createInitialState({ seed: 113, now: 1_000 });
+  const legacy = structuredClone(current) as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 22;
+  (legacy.preferences as Record<string, unknown>).palette = "graphite";
+
+  const migrated = migrateGameState(legacy);
+
+  assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
+  assertEquals(migrated.preferences.palette, "onyx");
 });
 
 Deno.test("codec preserves success representatives and account ownership", async () => {

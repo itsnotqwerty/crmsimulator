@@ -1952,9 +1952,11 @@ export function applyCommand(
       );
     }
     case "set_palette":
-      if (!["forest", "ocean", "berry", "graphite"].includes(
-        command.palette,
-      )) {
+      if (
+        !["emerald", "sapphire", "ruby", "pearl", "opal", "onyx"].includes(
+          command.palette,
+        )
+      ) {
         return rejected(state, "Color palette is invalid");
       }
       if (command.palette === state.preferences.palette) {

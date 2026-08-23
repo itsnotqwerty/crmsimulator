@@ -4551,10 +4551,12 @@ export default function CrmApp(props: CrmAppProps) {
                     aria-label="Color palette"
                   >
                     {([
-                      ["forest", "Forest"],
-                      ["ocean", "Ocean"],
-                      ["berry", "Berry"],
-                      ["graphite", "Graphite"],
+                      ["emerald", "Emerald"],
+                      ["sapphire", "Sapphire"],
+                      ["ruby", "Ruby"],
+                      ["pearl", "Pearl"],
+                      ["opal", "Opal"],
+                      ["onyx", "Onyx"],
                     ] as Array<[ColorPalette, string]>).map(([
                       palette,
                       label,

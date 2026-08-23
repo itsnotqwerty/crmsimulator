@@ -27,20 +27,20 @@ Deno.test("initial state is deterministic and valid", () => {
   assertEquals(first, second);
   assertEquals(validateGameState(first), { ok: true });
   assertEquals(Object.keys(first.records.leads), ["lead_1"]);
-  assertEquals(first.preferences.palette, "forest");
+  assertEquals(first.preferences.palette, "emerald");
 });
 
 Deno.test("color palette preference updates deterministically", () => {
   const state = createInitialState({ seed: 43, now: 1_000 });
   const changed = applyCommand(state, {
     type: "set_palette",
-    palette: "ocean",
+    palette: "sapphire",
   });
 
   assert(changed.accepted);
-  assertEquals(changed.state.preferences.palette, "ocean");
+  assertEquals(changed.state.preferences.palette, "sapphire");
   assertEquals(
-    applyCommand(changed.state, { type: "set_palette", palette: "ocean" })
+    applyCommand(changed.state, { type: "set_palette", palette: "sapphire" })
       .accepted,
     false,
   );
