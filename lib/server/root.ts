@@ -1,5 +1,10 @@
 import { advanceOffline } from "../game/simulation.ts";
-import { createInitialState, syncProgressionUnlocks } from "../game/state.ts";
+import { compactGameState } from "../game/compaction.ts";
+import {
+  createInitialState,
+  DEFAULT_RULES,
+  syncProgressionUnlocks,
+} from "../game/state.ts";
 import type { AdvanceSummary, GameState } from "../game/types.ts";
 import {
   createClearCookieHeaders,
@@ -129,11 +134,12 @@ export async function loadRoot(
 
   try {
     const loaded = await readCookieBundle(cookies, config.secret);
-    const result = advanceOffline(loaded, config.now);
+    const compacted = compactGameState(loaded, DEFAULT_RULES);
+    const result = advanceOffline(compacted, config.now);
     const unlocksChanged = result.state.unlocks.length !==
         loaded.unlocks.length ||
       result.state.unlocks.some((unlock) => !loaded.unlocks.includes(unlock));
-    const changed = unlocksChanged ||
+    const changed = compacted !== loaded || unlocksChanged ||
       result.state.lastSimulatedAt !== loaded.lastSimulatedAt ||
       result.state.clock.gameMinute !== loaded.clock.gameMinute ||
       result.state.clock.status !== loaded.clock.status;
@@ -294,7 +300,10 @@ export async function handleRootPost(
     }
 
     if (action.type === "import") {
-      const imported = syncProgressionUnlocks(migrateGameState(action.data));
+      const imported = compactGameState(
+        syncProgressionUnlocks(migrateGameState(action.data)),
+        DEFAULT_RULES,
+      );
       let previousRevision = -1;
       try {
         previousRevision = (await currentGame(cookies, config))?.revision ?? -1;
@@ -313,7 +322,10 @@ export async function handleRootPost(
       );
     }
 
-    const submitted = syncProgressionUnlocks(parseGameState(action.state));
+    const submitted = compactGameState(
+      syncProgressionUnlocks(parseGameState(action.state)),
+      DEFAULT_RULES,
+    );
     let stored: GameState | undefined;
     try {
       stored = await currentGame(cookies, config);

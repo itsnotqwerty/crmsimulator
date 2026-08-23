@@ -159,6 +159,13 @@ Contacts, companies, deals, customers, campaigns, tasks, tickets, employees, and
 automation rules use compact stable IDs and normalized maps or bounded arrays.
 Relationships store IDs rather than duplicated objects.
 
+Inactive sales history is compacted before persistence. The engine retains
+actionable leads and open deals, removes the oldest terminal leads and closed
+deals above their record limits, drops tasks tied to removed records, and
+removes companies no longer referenced by canonical CRM records. Aggregate
+history and recent activity preserve long-run outcomes without linear save
+growth.
+
 Campaigns accrue their daily budget in the same fixed simulation intervals as
 operating expenses. Channel-specific boundaries generate deterministic leads,
 and each lead stores its originating campaign ID for reporting. Offline campaign

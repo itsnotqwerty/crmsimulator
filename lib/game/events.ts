@@ -1,11 +1,12 @@
 import type { DomainEvent, GameRules, GameState } from "./types.ts";
+import { compactGameState } from "./compaction.ts";
 
 export function projectEvents(
   state: GameState,
   events: readonly DomainEvent[],
   rules: GameRules,
 ): GameState {
-  if (events.length === 0) return state;
+  if (events.length === 0) return compactGameState(state, rules);
 
   let activitySequence = state.sequences.activity;
   const activities = [...state.recentActivities];
@@ -63,10 +64,10 @@ export function projectEvents(
     history.activitiesArchived += overflow;
   }
 
-  return {
+  return compactGameState({
     ...state,
     sequences: { ...state.sequences, activity: activitySequence },
     recentActivities: activities,
     history,
-  };
+  }, rules);
 }

@@ -1,6 +1,7 @@
 import { useSignal } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
 import { applyCommand } from "../game/actions.ts";
+import { compactGameState } from "../game/compaction.ts";
 import { advanceGame } from "../game/simulation.ts";
 import { DEFAULT_RULES } from "../game/state.ts";
 import { NARRATIVE_CHAPTERS } from "../game/narrative.ts";
@@ -31,7 +32,8 @@ export function useGameStore(initial: GameState) {
 
     saving.current = true;
     saveStatus.value = "saving";
-    const snapshot = game.value;
+    const snapshot = compactGameState(game.value, DEFAULT_RULES);
+    game.value = snapshot;
     try {
       const response = await fetch("/", {
         method: "POST",

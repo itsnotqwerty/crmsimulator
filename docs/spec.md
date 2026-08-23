@@ -194,6 +194,10 @@ priority, due time, owner, related records, and completion state.
 Old detailed activity may be summarized into immutable aggregate history when
 required to keep cookie saves within budget.
 
+Inactive leads, closed deals, completed or cancelled tasks, and companies no
+longer referenced by live CRM records are also bounded and compacted. Active
+work and records referenced by customers or quotes must not be removed.
+
 ## 9. Progression and unlocks
 
 Exact numeric thresholds are balancing data, not hard-coded UI logic. Each

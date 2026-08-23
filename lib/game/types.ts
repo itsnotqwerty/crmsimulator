@@ -706,6 +706,9 @@ export interface GameRules {
   pipelineUnlockCustomers: number;
   maxActiveCampaigns: number;
   maxCampaignRecords: number;
+  maxLeadRecords: number;
+  maxDealRecords: number;
+  maxTaskRecords: number;
   maxSalesReps: number;
   maxQuoteRecords: number;
   customerSuccessUnlockCustomers: number;

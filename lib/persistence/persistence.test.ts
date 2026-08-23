@@ -571,7 +571,33 @@ Deno.test("grown deterministic save remains inside cookie budget", async () => {
   };
   const grown = advanceGame(funded, 60 * 24 * 60).state;
   const bundle = await createCookieBundle(grown, SECRET);
+  const headers = await createSetCookieHeaders(grown, SECRET, { secure: true });
 
+  assert(bundle.manifest.chunks <= 12);
+  assert(bundle.payload.length <= 36_000);
+  assert(
+    headers.every((header) => new TextEncoder().encode(header).length <= 4_096),
+  );
+});
+
+Deno.test("long-running saves compact inactive sales history", async () => {
+  const initial = createInitialState({ seed: 27, now: 1_000 });
+  const funded = {
+    ...initial,
+    company: {
+      ...initial.company,
+      cashCents: 10_000_000_000,
+      baselineMonthlyExpensesCents: 1,
+    },
+  };
+  const grown = advanceGame(funded, 480 * 24 * 60).state;
+  const bundle = await createCookieBundle(grown, SECRET);
+
+  assert(Object.keys(grown.records.leads).length <= 160);
+  assertEquals(
+    Object.keys(grown.records.companies).length,
+    Object.keys(grown.records.leads).length,
+  );
   assert(bundle.manifest.chunks <= 12);
   assert(bundle.payload.length <= 36_000);
 });

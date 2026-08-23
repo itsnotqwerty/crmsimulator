@@ -24,6 +24,9 @@ export const DEFAULT_RULES: GameRules = {
   pipelineUnlockCustomers: 3,
   maxActiveCampaigns: 3,
   maxCampaignRecords: 40,
+  maxLeadRecords: 160,
+  maxDealRecords: 120,
+  maxTaskRecords: 160,
   maxSalesReps: 8,
   maxQuoteRecords: 60,
   customerSuccessUnlockCustomers: 5,
@@ -277,7 +280,6 @@ export function validateGameState(state: GameState): ValidationResult {
   ) {
     issue(issues, "records.campaigns", "Campaign record limit exceeded");
   }
-
   for (const lead of Object.values(state.records.leads)) {
     if (!state.records.companies[lead.companyId]) {
       issue(
