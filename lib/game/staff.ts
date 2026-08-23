@@ -71,7 +71,7 @@ function workSalesRep(
     );
   }
   const readyToQualify = ownedLeads.find((lead) =>
-    lead.status === "contacted" && lead.engagement >= 50 &&
+    lead.status === "contacted" && lead.engagement > 70 &&
     state.clock.gameMinute - lead.lastActivityAt >= 60
   );
   if (readyToQualify) {

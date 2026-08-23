@@ -795,7 +795,7 @@ export function advanceLeadStatusWork(
   if (lead.status === "new" || lead.status === "cold") {
     return outreachLeadWork(state, lead);
   }
-  if (lead.status === "contacted" && lead.engagement >= 50) {
+  if (lead.status === "contacted" && lead.engagement > 70) {
     return qualifyLeadWork(state, lead.id);
   }
   if (lead.status === "contacted") {

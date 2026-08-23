@@ -53,6 +53,18 @@ Deno.test("generated company names use a broad, balanced catalog", () => {
   assert(juniperCount / 2_400 < 0.07);
 });
 
+Deno.test("generated contact names use a broad catalog", () => {
+  let cursor = 0;
+  const names = new Set<string>();
+  for (let sequence = 1; sequence <= 2_400; sequence += 1) {
+    const generated = generateLead(54_321, cursor, sequence, 0);
+    cursor = generated.nextCursor;
+    names.add(`${generated.lead.firstName} ${generated.lead.lastName}`);
+  }
+
+  assert(names.size >= 800);
+});
+
 Deno.test("segmented and batched simulation are equivalent", () => {
   const initial = createInitialState({ seed: 11, now: 1_000 });
   const batched = advanceGame(initial, 60).state;
@@ -1760,6 +1772,44 @@ Deno.test("sales representatives contact and qualify owned leads over time", () 
     assert(ownedDeal);
     assertEquals(ownedDeal.ownerId, "sales_rep_1");
   }
+});
+
+Deno.test("sales representatives wait for intent above 70 before qualifying", () => {
+  let state = createInitialState({ seed: 206, now: 1_000 });
+  state = applyCommand(
+    { ...state, unlocks: ["pipeline"] },
+    {
+      type: "hire_sales_rep",
+      name: "Avery Chen",
+      level: "mid",
+      territory: "all",
+      monthlyTargetCents: 1_500_000,
+    },
+  ).state;
+  state = {
+    ...state,
+    clock: { ...state.clock, gameMinute: 4 * 60 },
+    records: {
+      ...state.records,
+      leads: {
+        ...state.records.leads,
+        lead_1: {
+          ...state.records.leads.lead_1,
+          ownerId: "sales_rep_1",
+          status: "contacted",
+          engagement: 70,
+          lastActivityAt: 0,
+        },
+      },
+    },
+  };
+
+  const worked = advanceGame(state, 60).state;
+  assertEquals(worked.records.leads.lead_1.status, "contacted");
+  assert(worked.records.leads.lead_1.engagement > 70);
+
+  const qualified = advanceGame(worked, 60).state;
+  assertEquals(qualified.records.leads.lead_1.status, "qualified");
 });
 
 Deno.test("sales representatives recover blocked negotiations", () => {
