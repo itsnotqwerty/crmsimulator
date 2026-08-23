@@ -21,6 +21,9 @@ import {
   qualifyLeadWork,
   resolveTicketWork,
   runSuccessPlaybookWork,
+  salesWorkload,
+  successWorkload,
+  supportWorkload,
 } from "./work.ts";
 import type {
   BillingCycle,
@@ -787,6 +790,9 @@ function assignDeal(
   if (deal.ownerId === ownerId) {
     return rejected(state, "Deal owner is unchanged");
   }
+  if (owner && salesWorkload(state, owner.id) >= owner.dealCapacity) {
+    return rejected(state, `${owner.name} is already at full workload`);
+  }
   const nextDeal = { ...deal, updatedAt: state.clock.gameMinute };
   if (ownerId) nextDeal.ownerId = ownerId;
   else delete nextDeal.ownerId;
@@ -1385,6 +1391,9 @@ function assignCustomer(
   if (customer.ownerId === ownerId) {
     return rejected(state, "Account owner is unchanged");
   }
+  if (owner && successWorkload(state, owner.id) >= owner.accountCapacity) {
+    return rejected(state, `${owner.name} is already at full workload`);
+  }
   const updated = { ...customer };
   if (ownerId) updated.ownerId = ownerId;
   else delete updated.ownerId;
@@ -1512,6 +1521,9 @@ function assignTicket(
     return rejected(state, "Support representative does not exist");
   }
   if (ticket.ownerId === ownerId) return rejected(state, "Owner is unchanged");
+  if (owner && supportWorkload(state, owner.id) >= owner.ticketCapacity) {
+    return rejected(state, `${owner.name} is already at full workload`);
+  }
   const updated = { ...ticket };
   if (ownerId) updated.ownerId = ownerId;
   else delete updated.ownerId;
