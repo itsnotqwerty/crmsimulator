@@ -5,6 +5,7 @@ import {
   assertStringIncludes,
   assertThrows,
 } from "$std/assert/mod.ts";
+import { decodeBase64Url, encodeBase64Url } from "$std/encoding/base64url.ts";
 import { applyCommand } from "../game/actions.ts";
 import { advanceGame } from "../game/simulation.ts";
 import { createInitialState } from "../game/state.ts";
@@ -19,6 +20,33 @@ import { migrateGameState } from "./migrations.ts";
 import { parseGameState, SaveValidationError } from "./schema.ts";
 
 const SECRET = "test-cookie-secret-123456";
+
+function copyToBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+async function rewriteEncodedState(
+  encoded: string,
+  rewrite: (compact: Record<string, unknown>) => void,
+): Promise<string> {
+  const decompressed = await new Response(
+    new Blob([copyToBuffer(decodeBase64Url(encoded))]).stream().pipeThrough(
+      new DecompressionStream("gzip"),
+    ),
+  ).arrayBuffer();
+  const compact = JSON.parse(
+    new TextDecoder().decode(decompressed),
+  ) as Record<string, unknown>;
+  rewrite(compact);
+  const compressed = await new Response(
+    new Blob([JSON.stringify(compact)]).stream().pipeThrough(
+      new CompressionStream("gzip"),
+    ),
+  ).arrayBuffer();
+  return encodeBase64Url(compressed);
+}
 
 Deno.test("codec preserves a valid game state", async () => {
   const state = createInitialState({ seed: 21, now: 1_000 });
@@ -424,6 +452,81 @@ Deno.test("codec preserves support tickets and SLA deadlines", async () => {
 
   assertEquals(decoded, state);
   assertEquals(decoded.records.tickets.ticket_1.resolutionDueAt, 12 * 60);
+  assertEquals(
+    decoded.records.customers.customer_1.primaryLeadId,
+    "lead_1",
+  );
+  assertEquals(decoded.preferences.palette, "emerald");
+});
+
+Deno.test("codec reads legacy ambiguous customer and manager keys", async () => {
+  const initial = createInitialState({ seed: 114, now: 1_000 });
+  const state = {
+    ...initial,
+    company: { ...initial.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...initial.records,
+      deals: {
+        deal_1: {
+          id: "deal_1",
+          leadId: "lead_1",
+          companyId: "company_1",
+          stage: "lost" as const,
+          product: "starter" as const,
+          lossReason: "poor_fit" as const,
+          monthlyValueCents: 50_000,
+          probability: 0,
+          expectedCloseAt: 1_440,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      },
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 80,
+          adoption: 70,
+          lifecycle: "active" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+    preferences: { ...initial.preferences, palette: "sapphire" as const },
+    platform: {
+      ...initial.platform,
+      managers: [{
+        id: "manager_sales",
+        name: "Morgan Lee",
+        department: "sales" as const,
+        monthlySalaryCents: 1_200_000,
+        hiredAt: 0,
+        lastReviewedAt: 0,
+        underCapacityReviews: 0,
+      }],
+    },
+  };
+  const legacyEncoded = await rewriteEncodedState(
+    await encodeGameState(state),
+    (compact) => {
+      const preferences = compact.p as Record<string, unknown>;
+      preferences.pl = preferences.pa;
+      delete preferences.pa;
+
+      const platform = compact.pf as Record<string, unknown>;
+      const manager = (platform.mgs as Record<string, unknown>[])[0];
+      manager.lr = manager.lrv;
+      delete manager.lrv;
+    },
+  );
+
+  assertEquals(await decodeGameState(legacyEncoded), state);
 });
 
 Deno.test("modified cookie payload is rejected", async () => {

@@ -141,7 +141,7 @@ const KEY_MAP: Readonly<Record<string, string>> = {
   chapter: "nc",
   pendingBriefing: "np",
   preferences: "p",
-  palette: "pl",
+  palette: "pa",
   reducedMotion: "rm",
   soundEnabled: "se",
   musicEnabled: "mu",
@@ -179,7 +179,7 @@ const KEY_MAP: Readonly<Record<string, string>> = {
   failures: "fl",
   manager: "mg",
   department: "dpt",
-  lastReviewedAt: "lr",
+  lastReviewedAt: "lrv",
   underCapacityReviews: "ucr",
   lastDecision: "ld",
   monthlyBudgetCents: "mb",
@@ -189,9 +189,73 @@ const KEY_MAP: Readonly<Record<string, string>> = {
   completed: "cpd",
 };
 
-const REVERSE_KEY_MAP = Object.fromEntries(
-  Object.entries(KEY_MAP).map(([key, compact]) => [compact, key]),
-);
+function createReverseKeyMap(
+  mapping: Readonly<Record<string, string>>,
+): Readonly<Record<string, string>> {
+  const reverse: Record<string, string> = {};
+  for (const [key, compact] of Object.entries(mapping)) {
+    if (reverse[compact] !== undefined) {
+      throw new Error(
+        `Compact save key "${compact}" is assigned to both "${
+          reverse[compact]
+        }" and "${key}"`,
+      );
+    }
+    reverse[compact] = key;
+  }
+  return reverse;
+}
+
+const REVERSE_KEY_MAP = createReverseKeyMap(KEY_MAP);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function moveCompactKey(
+  record: Record<string, unknown>,
+  legacyKey: string,
+  currentKey: string,
+): Record<string, unknown> {
+  if (!Object.hasOwn(record, legacyKey)) return record;
+  const updated = { ...record };
+  if (!Object.hasOwn(updated, currentKey)) {
+    updated[currentKey] = updated[legacyKey];
+  }
+  delete updated[legacyKey];
+  return updated;
+}
+
+function normalizeLegacyCompactKeys(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const normalized = { ...value };
+
+  const preferencesKey = KEY_MAP.preferences;
+  const preferences = normalized[preferencesKey];
+  if (isRecord(preferences)) {
+    normalized[preferencesKey] = moveCompactKey(
+      preferences,
+      "pl",
+      KEY_MAP.palette,
+    );
+  }
+
+  const platformKey = KEY_MAP.platform;
+  const platform = normalized[platformKey];
+  const managers = isRecord(platform) ? platform[KEY_MAP.managers] : undefined;
+  if (isRecord(platform) && Array.isArray(managers)) {
+    normalized[platformKey] = {
+      ...platform,
+      [KEY_MAP.managers]: managers.map((manager) =>
+        isRecord(manager)
+          ? moveCompactKey(manager, "lr", KEY_MAP.lastReviewedAt)
+          : manager
+      ),
+    };
+  }
+
+  return normalized;
+}
 
 function transformKeys(
   value: unknown,
@@ -241,5 +305,7 @@ export async function decodeGameState(encoded: string): Promise<GameState> {
   const compressed = decodeBase64Url(encoded);
   const json = new TextDecoder().decode(await decompress(compressed));
   const compact: unknown = JSON.parse(json);
-  return migrateGameState(transformKeys(compact, REVERSE_KEY_MAP));
+  return migrateGameState(
+    transformKeys(normalizeLegacyCompactKeys(compact), REVERSE_KEY_MAP),
+  );
 }
