@@ -518,7 +518,10 @@ function CustomerSuccessWorkspace(props: {
         <div>
           <span>Retention operations</span>
           <h1>Customer success</h1>
-          <p>Guide adoption, protect renewals, and expand healthy accounts.</p>
+          <p>
+            Specialists and support agents work assigned accounts and tickets
+            over time.
+          </p>
         </div>
       </div>
       <div class="pipeline-summary" aria-label="Customer health summary">
@@ -1370,7 +1373,10 @@ function PlatformWorkspace(props: {
         <div>
           <span>Systems at scale</span>
           <h1>Automation</h1>
-          <p>Sequences and workflows.</p>
+          <p>
+            Workflows assign owners, send outreach, and advance matching
+            records.
+          </p>
         </div>
       </div>
       <div class="pipeline-summary">
@@ -1441,7 +1447,10 @@ function PlatformWorkspace(props: {
         <div class="panel-heading">
           <div>
             <h2>Workflow builder</h2>
-            <span>Automate a response when a CRM event meets your rules</span>
+            <span>
+              Matching events mutate the live record: outreach, assignment, or
+              status
+            </span>
           </div>
           <span class="record-count">{platform.workflows.length}/20</span>
         </div>
@@ -1478,6 +1487,7 @@ function PlatformWorkspace(props: {
                 trigger.value = event.currentTarget.value as AutomationTrigger}
             >
               <option value="lead_created">Lead created</option>
+              <option value="lead_contacted">Lead contacted</option>
               <option value="lead_qualified">Lead qualified</option>
               <option value="quote_sent">Quote sent</option>
               <option value="deal_won">Deal won</option>
@@ -1490,9 +1500,8 @@ function PlatformWorkspace(props: {
             <span>Only if</span>
             <select
               value={condition.value}
-              onChange={(event) =>
-                condition.value = event.currentTarget
-                  .value as AutomationCondition}
+              onChange={(event) => condition.value = event.currentTarget
+                .value as AutomationCondition}
             >
               <option value="all">Any matching record</option>
               <option value="high_value">Value is high</option>
@@ -1512,7 +1521,7 @@ function PlatformWorkspace(props: {
               <option value="send_outreach">Send outreach</option>
               <option value="assign_owner">Assign owner</option>
               <option value="notify_team">Notify team</option>
-              <option value="update_record">Update record</option>
+              <option value="update_record">Advance record status</option>
               <option value="launch_playbook">Launch playbook</option>
             </select>
           </label>
@@ -1782,7 +1791,10 @@ function PipelineWorkspace(props: {
         <div>
           <span>Sales operations</span>
           <h1>Pipeline</h1>
-          <p>Manage deal progression and forecast recurring revenue.</p>
+          <p>
+            Assigned representatives contact, qualify, and advance their
+            pipeline.
+          </p>
         </div>
         <div class="segmented-control" aria-label="Pipeline view">
           <button
@@ -1873,9 +1885,8 @@ function PipelineWorkspace(props: {
             <span>Territory</span>
             <select
               value={repTerritory.value}
-              onChange={(event) =>
-                repTerritory.value = event.currentTarget
-                  .value as SalesTerritory}
+              onChange={(event) => repTerritory.value = event.currentTarget
+                .value as SalesTerritory}
             >
               <option value="all">All regions</option>
               <option value="North America">North America</option>

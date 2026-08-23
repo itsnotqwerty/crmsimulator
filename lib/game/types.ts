@@ -86,6 +86,7 @@ export type ActivityKind =
   | "customer_feedback_received"
   | "task_created"
   | "task_completed"
+  | "automation_ran"
   | "task_cancelled"
   | "task_overdue"
   | "revenue_accrued"
@@ -102,6 +103,7 @@ export type ActivityKind =
   | "campaign_archived";
 export type AutomationTrigger =
   | "lead_created"
+  | "lead_contacted"
   | "lead_qualified"
   | "quote_sent"
   | "deal_won"

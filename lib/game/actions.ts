@@ -8,13 +8,25 @@ import {
   syncProgressionUnlocks,
 } from "./state.ts";
 import { applyPlatformCommand } from "./platform.ts";
+import { applyAutomations } from "./automation.ts";
+import {
+  acknowledgeTicketWork,
+  advanceDealWork,
+  closeLossRiskPercent,
+  completeOnboardingWork,
+  contactLeadWork,
+  customerCheckInWork,
+  followUpLeadWork,
+  qualifyLeadWork,
+  resolveTicketWork,
+  runSuccessPlaybookWork,
+} from "./work.ts";
 import type {
   BillingCycle,
   CampaignAudience,
   CampaignChannel,
   CommandResult,
   DealProduct,
-  DealStage,
   DomainEvent,
   GameCommand,
   GameRules,
@@ -397,9 +409,9 @@ function accepted(
   events: DomainEvent[],
   rules: GameRules,
 ): CommandResult {
-  const nextState = syncProgressionUnlocks(state, rules);
+  const unlocked = syncProgressionUnlocks(state, rules);
   const unlockPipeline = !state.unlocks.includes("pipeline") &&
-    nextState.unlocks.includes("pipeline");
+    unlocked.unlocks.includes("pipeline");
   const unlockEvents: DomainEvent[] = unlockPipeline
     ? [{
       kind: "unlock_earned",
@@ -407,7 +419,10 @@ function accepted(
       gameMinute: state.clock.gameMinute,
     }]
     : [];
-  const projectedEvents = [...events, ...unlockEvents];
+  const commandEvents = [...events, ...unlockEvents];
+  const automated = applyAutomations(unlocked, commandEvents, rules);
+  const nextState = syncProgressionUnlocks(automated.state, rules);
+  const projectedEvents = [...commandEvents, ...automated.events];
 
   return {
     accepted: true,
@@ -416,22 +431,7 @@ function accepted(
   };
 }
 
-function nextDealStage(stage: DealStage): DealStage | undefined {
-  const stages: DealStage[] = [
-    "qualified",
-    "discovery",
-    "evaluation",
-    "negotiation",
-    "won",
-  ];
-  return stages[stages.indexOf(stage) + 1];
-}
-
-export function closeLossRiskPercent(intent: number): number {
-  const boundedIntent = Math.max(0, Math.min(100, intent));
-  if (boundedIntent >= 70) return 0;
-  return Math.round((70 - boundedIntent) / 70 * 95);
-}
+export { closeLossRiskPercent };
 
 function prospectLead(
   state: GameState,
@@ -515,84 +515,10 @@ function contactLead(
   channel: "call" | "email",
   rules: GameRules,
 ): CommandResult {
-  if (!["new", "contacted", "cold"].includes(lead.status)) {
-    return rejected(state, "This lead can no longer be contacted");
-  }
-
-  const capacityCost = channel === "call" ? 20 : 10;
-  if (state.company.founderCapacityRemaining < capacityCost) {
-    return rejected(state, "Not enough founder capacity");
-  }
-
-  const gameMinute = state.clock.gameMinute;
-  const rapidRepeat = lead.status === "contacted" &&
-    gameMinute - lead.lastActivityAt < 60;
-  const engagementChange = rapidRepeat
-    ? { value: channel === "call" ? -30 : -20, cursor: state.rngCursor }
-    : randomInteger(state.seed, state.rngCursor, 6, 16);
-  const taskSequence = state.sequences.task + 1;
-  const taskId = `task_${taskSequence}`;
-  const nextState: GameState = {
-    ...state,
-    rngCursor: engagementChange.cursor,
-    company: {
-      ...state.company,
-      founderCapacityRemaining: state.company.founderCapacityRemaining -
-        capacityCost,
-    },
-    sequences: { ...state.sequences, task: taskSequence },
-    records: {
-      ...state.records,
-      leads: {
-        ...state.records.leads,
-        [lead.id]: {
-          ...lead,
-          status: "contacted",
-          engagement: Math.max(
-            0,
-            Math.min(100, lead.engagement + engagementChange.value),
-          ),
-          lastActivityAt: gameMinute,
-        },
-      },
-      tasks: {
-        ...state.records.tasks,
-        [taskId]: {
-          id: taskId,
-          kind: "follow_up",
-          status: "open",
-          relatedId: lead.id,
-          title: `Follow up with ${lead.firstName} ${lead.lastName}`,
-          dueAt: gameMinute + 4 * 60,
-          createdAt: gameMinute,
-        },
-      },
-    },
-    onboarding: {
-      ...state.onboarding,
-      step: state.onboarding.step === "inspect_lead" ||
-          state.onboarding.step === "contact_lead"
-        ? "qualify_lead"
-        : state.onboarding.step,
-    },
-  };
-  const events: DomainEvent[] = [{
-    kind: "lead_contacted",
-    summary: rapidRepeat
-      ? `Over-contacted ${lead.firstName} ${lead.lastName}; intent fell sharply`
-      : `${
-        channel === "call" ? "Called" : "Emailed"
-      } ${lead.firstName} ${lead.lastName}`,
-    relatedId: lead.id,
-    gameMinute,
-  }, {
-    kind: "task_created",
-    summary: `Follow-up task created for ${lead.firstName} ${lead.lastName}`,
-    relatedId: taskId,
-    gameMinute,
-  }];
-
-  return accepted(nextState, events, rules);
+  const result = contactLeadWork(state, lead.id, channel, true);
+  return result.ok
+    ? accepted(result.state, result.events, rules)
+    : rejected(state, result.reason);
 }
 
 function qualifyLead(
@@ -600,60 +526,10 @@ function qualifyLead(
   lead: Lead,
   rules: GameRules,
 ): CommandResult {
-  if (lead.status !== "contacted") {
-    return rejected(state, "Contact the lead before qualifying it");
-  }
-
-  const dealSequence = state.sequences.deal + 1;
-  const dealId = `deal_${dealSequence}`;
-  const gameMinute = state.clock.gameMinute;
-  const monthlyValueCents = 15_000 + lead.fit * 500;
-  const product = lead.fit >= 75
-    ? "scale"
-    : lead.fit >= 40
-    ? "growth"
-    : "starter";
-  const nextState: GameState = {
-    ...state,
-    sequences: { ...state.sequences, deal: dealSequence },
-    records: {
-      ...state.records,
-      leads: {
-        ...state.records.leads,
-        [lead.id]: { ...lead, status: "qualified", lastActivityAt: gameMinute },
-      },
-      deals: {
-        ...state.records.deals,
-        [dealId]: {
-          id: dealId,
-          leadId: lead.id,
-          companyId: lead.companyId,
-          stage: "qualified",
-          product,
-          ...(lead.ownerId ? { ownerId: lead.ownerId } : {}),
-          monthlyValueCents,
-          probability: 25,
-          expectedCloseAt: gameMinute + 5 * 24 * 60,
-          createdAt: gameMinute,
-          updatedAt: gameMinute,
-        },
-      },
-    },
-    onboarding: { ...state.onboarding, step: "close_deal" },
-  };
-  const events: DomainEvent[] = [{
-    kind: "lead_qualified",
-    summary: `${lead.firstName} ${lead.lastName} qualified`,
-    relatedId: lead.id,
-    gameMinute,
-  }, {
-    kind: "deal_created",
-    summary: `New deal worth $${(monthlyValueCents / 100).toFixed(0)} MRR`,
-    relatedId: dealId,
-    gameMinute,
-  }];
-
-  return accepted(nextState, events, rules);
+  const result = qualifyLeadWork(state, lead.id);
+  return result.ok
+    ? accepted(result.state, result.events, rules)
+    : rejected(state, result.reason);
 }
 
 function updateDeal(
@@ -1271,51 +1147,10 @@ function completeCustomerOnboarding(
   customerId: string,
   rules: GameRules,
 ): CommandResult {
-  const customer = state.records.customers[customerId];
-  if (!customer) return rejected(state, "Customer does not exist");
-  if (customer.lifecycle !== "onboarding") {
-    return rejected(state, "Customer onboarding is already complete");
-  }
-  const task = Object.values(state.records.tasks).find((entry) =>
-    entry.kind === "onboarding" && entry.relatedId === customer.id &&
-    entry.status === "open"
-  );
-  if (!task) return rejected(state, "Customer has no open onboarding task");
-  const gameMinute = state.clock.gameMinute;
-  return accepted({
-    ...state,
-    records: {
-      ...state.records,
-      customers: {
-        ...state.records.customers,
-        [customer.id]: {
-          ...customer,
-          health: Math.min(100, customer.health + 15),
-          adoption: Math.min(100, customer.adoption + 35),
-          lifecycle: "active",
-          lastSuccessAt: gameMinute,
-        },
-      },
-      tasks: {
-        ...state.records.tasks,
-        [task.id]: {
-          ...task,
-          status: "completed",
-          completedAt: gameMinute,
-        },
-      },
-    },
-  }, [{
-    kind: "customer_onboarded",
-    summary: "Customer onboarding completed",
-    relatedId: customer.id,
-    gameMinute,
-  }, {
-    kind: "task_completed",
-    summary: task.title,
-    relatedId: task.id,
-    gameMinute,
-  }], rules);
+  const result = completeOnboardingWork(state, customerId);
+  return result.ok
+    ? accepted(result.state, result.events, rules)
+    : rejected(state, result.reason);
 }
 
 function customerCheckIn(
@@ -1323,41 +1158,10 @@ function customerCheckIn(
   customerId: string,
   rules: GameRules,
 ): CommandResult {
-  const customer = state.records.customers[customerId];
-  if (!customer) return rejected(state, "Customer does not exist");
-  const capacityCost = 30;
-  if (state.company.founderCapacityRemaining < capacityCost) {
-    return rejected(state, "Not enough founder capacity");
-  }
-  const gameMinute = state.clock.gameMinute;
-  return accepted({
-    ...state,
-    company: {
-      ...state.company,
-      founderCapacityRemaining: state.company.founderCapacityRemaining -
-        capacityCost,
-    },
-    records: {
-      ...state.records,
-      customers: {
-        ...state.records.customers,
-        [customer.id]: {
-          ...customer,
-          health: Math.min(100, customer.health + 12),
-          adoption: Math.min(100, customer.adoption + 8),
-          lifecycle: customer.lifecycle === "onboarding"
-            ? "onboarding"
-            : "active",
-          lastSuccessAt: gameMinute,
-        },
-      },
-    },
-  }, [{
-    kind: "customer_check_in",
-    summary: "Success check-in improved account health",
-    relatedId: customer.id,
-    gameMinute,
-  }], rules);
+  const result = customerCheckInWork(state, customerId, true);
+  return result.ok
+    ? accepted(result.state, result.events, rules)
+    : rejected(state, result.reason);
 }
 
 function renewCustomer(
@@ -1572,57 +1376,10 @@ function runSuccessPlaybook(
   playbook: "onboarding" | "adoption" | "recovery",
   rules: GameRules,
 ): CommandResult {
-  const customer = state.records.customers[customerId];
-  if (!customer) return rejected(state, "Customer does not exist");
-  const owner = customer.ownerId
-    ? state.records.successReps[customer.ownerId]
-    : undefined;
-  const capacityCost = owner ? 0 : 35;
-  if (state.company.founderCapacityRemaining < capacityCost) {
-    return rejected(state, "Not enough founder capacity");
-  }
-  const base = {
-    onboarding: { health: 10, adoption: 25 },
-    adoption: { health: 5, adoption: 15 },
-    recovery: { health: 20, adoption: 5 },
-  }[playbook];
-  const skillBonus = owner
-    ? Math.floor((owner.skill - owner.burnout / 2) / 20)
-    : 0;
-  const health = Math.min(100, customer.health + base.health + skillBonus);
-  const adoption = Math.min(
-    100,
-    customer.adoption + base.adoption + skillBonus,
-  );
-  const lifecycle = adoption >= 50 && health >= 45
-    ? "active" as const
-    : customer.lifecycle;
-  return accepted({
-    ...state,
-    company: {
-      ...state.company,
-      founderCapacityRemaining: state.company.founderCapacityRemaining -
-        capacityCost,
-    },
-    records: {
-      ...state.records,
-      customers: {
-        ...state.records.customers,
-        [customer.id]: {
-          ...customer,
-          health,
-          adoption,
-          lifecycle,
-          lastSuccessAt: state.clock.gameMinute,
-        },
-      },
-    },
-  }, [{
-    kind: "success_playbook_run",
-    summary: `${statusLabelForEvent(playbook)} playbook completed`,
-    relatedId: customer.id,
-    gameMinute: state.clock.gameMinute,
-  }], rules);
+  const result = runSuccessPlaybookWork(state, customerId, playbook, true);
+  return result.ok
+    ? accepted(result.state, result.events, rules)
+    : rejected(state, result.reason);
 }
 
 function sendNpsSurvey(
@@ -1792,30 +1549,10 @@ function acknowledgeTicket(
   ticketId: string,
   rules: GameRules,
 ): CommandResult {
-  const ticket = state.records.tickets[ticketId];
-  if (!ticket) return rejected(state, "Ticket does not exist");
-  if (ticket.status !== "open") {
-    return rejected(state, "Only open tickets can be acknowledged");
-  }
-  return accepted({
-    ...state,
-    records: {
-      ...state.records,
-      tickets: {
-        ...state.records.tickets,
-        [ticket.id]: {
-          ...ticket,
-          status: "acknowledged",
-          acknowledgedAt: state.clock.gameMinute,
-        },
-      },
-    },
-  }, [{
-    kind: "ticket_acknowledged",
-    summary: `Support acknowledged: ${ticket.title}`,
-    relatedId: ticket.id,
-    gameMinute: state.clock.gameMinute,
-  }], rules);
+  const result = acknowledgeTicketWork(state, ticketId);
+  return result.ok
+    ? accepted(result.state, result.events, rules)
+    : rejected(state, result.reason);
 }
 
 function resolveTicket(
@@ -1823,70 +1560,10 @@ function resolveTicket(
   ticketId: string,
   rules: GameRules,
 ): CommandResult {
-  const ticket = state.records.tickets[ticketId];
-  if (!ticket) return rejected(state, "Ticket does not exist");
-  if (ticket.status !== "acknowledged") {
-    return rejected(state, "Acknowledge the ticket before resolving it");
-  }
-  const owner = ticket.ownerId
-    ? state.records.supportReps[ticket.ownerId]
-    : undefined;
-  const resolutionQuality = Math.max(
-    0,
-    Math.min(
-      100,
-      Math.round(
-        (owner ? owner.skill - owner.burnout / 2 : 35) +
-          (ticket.escalated ? 10 : 0) -
-          (ticket.responseBreachedAt === undefined ? 0 : 15) -
-          (ticket.resolutionBreachedAt === undefined ? 0 : 25),
-      ),
-    ),
-  );
-  const customer = state.records.customers[ticket.customerId];
-  const healthChange = resolutionQuality >= 80
-    ? 5
-    : resolutionQuality >= 60
-    ? 2
-    : resolutionQuality < 40
-    ? -10
-    : -4;
-  return accepted({
-    ...state,
-    history: {
-      ...state.history,
-      ticketsResolved: state.history.ticketsResolved + 1,
-      ticketResolutionMinutes: state.history.ticketResolutionMinutes +
-        state.clock.gameMinute - ticket.createdAt,
-    },
-    records: {
-      ...state.records,
-      tickets: {
-        ...state.records.tickets,
-        [ticket.id]: {
-          ...ticket,
-          status: "resolved",
-          resolvedAt: state.clock.gameMinute,
-          resolutionQuality,
-        },
-      },
-      customers: customer
-        ? {
-          ...state.records.customers,
-          [customer.id]: {
-            ...customer,
-            health: Math.max(0, Math.min(100, customer.health + healthChange)),
-          },
-        }
-        : state.records.customers,
-    },
-  }, [{
-    kind: "ticket_resolved",
-    summary:
-      `Support resolved at ${resolutionQuality}% quality: ${ticket.title}`,
-    relatedId: ticket.id,
-    gameMinute: state.clock.gameMinute,
-  }], rules);
+  const result = resolveTicketWork(state, ticketId);
+  return result.ok
+    ? accepted(result.state, result.events, rules)
+    : rejected(state, result.reason);
 }
 
 function hireSupportRep(
@@ -2091,55 +1768,15 @@ function resolveIncident(
   }], rules);
 }
 
-function statusLabelForEvent(value: string): string {
-  return value.replaceAll("_", " ").replace(
-    /^./,
-    (letter) => letter.toUpperCase(),
-  );
-}
-
 function followUpLead(
   state: GameState,
   lead: Lead,
   rules: GameRules,
 ): CommandResult {
-  if (lead.status !== "contacted" && lead.status !== "cold") {
-    return rejected(state, "Only contacted or cold leads need follow-up");
-  }
-  const capacityCost = 15;
-  if (state.company.founderCapacityRemaining < capacityCost) {
-    return rejected(state, "Not enough founder capacity");
-  }
-
-  const engagementGain = randomInteger(state.seed, state.rngCursor, 8, 18);
-  const gameMinute = state.clock.gameMinute;
-  const nextState: GameState = {
-    ...state,
-    rngCursor: engagementGain.cursor,
-    company: {
-      ...state.company,
-      founderCapacityRemaining: state.company.founderCapacityRemaining -
-        capacityCost,
-    },
-    records: {
-      ...state.records,
-      leads: {
-        ...state.records.leads,
-        [lead.id]: {
-          ...lead,
-          status: "contacted",
-          engagement: Math.min(100, lead.engagement + engagementGain.value),
-          lastActivityAt: gameMinute,
-        },
-      },
-    },
-  };
-  return accepted(nextState, [{
-    kind: "lead_contacted",
-    summary: `Followed up with ${lead.firstName} ${lead.lastName}`,
-    relatedId: lead.id,
-    gameMinute,
-  }], rules);
+  const result = followUpLeadWork(state, lead.id, true);
+  return result.ok
+    ? accepted(result.state, result.events, rules)
+    : rejected(state, result.reason);
 }
 
 function disqualifyLead(
@@ -2241,202 +1878,9 @@ function advanceDeal(
   dealId: string,
   rules: GameRules,
 ): CommandResult {
-  const deal = state.records.deals[dealId];
-  if (!deal) return rejected(state, "Deal does not exist");
-  if (deal.stage === "won" || deal.stage === "lost") {
-    return rejected(state, "This deal is already closed");
-  }
-
-  const stage = nextDealStage(deal.stage);
-  if (!stage) return rejected(state, "Deal cannot advance");
-  const gameMinute = state.clock.gameMinute;
-  const owner = deal.ownerId
-    ? state.records.salesReps[deal.ownerId]
-    : undefined;
-  const ownerWorkload = owner
-    ? Object.values(state.records.deals).filter((entry) =>
-      entry.ownerId === owner.id && entry.stage !== "won" &&
-      entry.stage !== "lost"
-    ).length
-    : 0;
-  const skillAdjustment = owner ? Math.floor((owner.skill - 50) / 10) * 2 : 0;
-  const burnoutPenalty = owner ? Math.floor(owner.burnout / 20) * 3 : 0;
-  const overloadPenalty = owner
-    ? Math.max(0, ownerWorkload - owner.dealCapacity) * 8
-    : 0;
-  const probability = Math.min(
-    95,
-    Math.max(
-      5,
-      deal.probability + 20 + skillAdjustment - overloadPenalty -
-        burnoutPenalty,
-    ),
-  );
-
-  if (stage !== "won") {
-    const nextState: GameState = {
-      ...state,
-      records: {
-        ...state.records,
-        deals: {
-          ...state.records.deals,
-          [deal.id]: { ...deal, stage, probability, updatedAt: gameMinute },
-        },
-      },
-    };
-    return accepted(nextState, [{
-      kind: "deal_advanced",
-      summary: `Deal advanced to ${stage}`,
-      relatedId: deal.id,
-      gameMinute,
-    }], rules);
-  }
-
-  const lead = state.records.leads[deal.leadId];
-  const closeRisk = closeLossRiskPercent(lead.engagement);
-  if (closeRisk > 0) {
-    const roll = randomInteger(state.seed, state.rngCursor, 1, 100);
-    if (roll.value <= closeRisk) {
-      const lostState: GameState = {
-        ...state,
-        rngCursor: roll.cursor,
-        records: {
-          ...state.records,
-          leads: {
-            ...state.records.leads,
-            [lead.id]: {
-              ...lead,
-              status: "cold",
-              lastActivityAt: gameMinute,
-            },
-          },
-          deals: {
-            ...state.records.deals,
-            [deal.id]: {
-              ...deal,
-              stage: "lost",
-              probability: 0,
-              lossReason: "no_decision",
-              updatedAt: gameMinute,
-            },
-          },
-        },
-      };
-      return accepted(lostState, [{
-        kind: "deal_lost",
-        summary:
-          `Close pushed too early; ${lead.firstName} ${lead.lastName} walked away`,
-        relatedId: deal.id,
-        gameMinute,
-      }], rules);
-    }
-    state = { ...state, rngCursor: roll.cursor };
-  }
-
-  const customerSequence = state.sequences.customer + 1;
-  const customerId = `customer_${customerSequence}`;
-  const taskSequence = state.sequences.task + 1;
-  const taskId = `task_${taskSequence}`;
-  const customerCount = state.company.customerCount + 1;
-  const mrrCents = state.company.mrrCents + deal.monthlyValueCents;
-  const unlockMarketing = customerCount >= rules.marketingUnlockCustomers &&
-    !state.unlocks.includes("marketing");
-  const unlockCustomerSuccess =
-    customerCount >= rules.customerSuccessUnlockCustomers &&
-    !state.unlocks.includes("customer_success");
-  const events: DomainEvent[] = [{
-    kind: "deal_won",
-    summary: `Deal won for $${(deal.monthlyValueCents / 100).toFixed(0)} MRR`,
-    relatedId: deal.id,
-    gameMinute,
-  }, {
-    kind: "task_created",
-    summary: "Customer onboarding task created",
-    relatedId: taskId,
-    gameMinute,
-  }];
-  if (unlockMarketing) {
-    events.push({
-      kind: "unlock_earned",
-      summary: "Marketing workspace unlocked",
-      gameMinute,
-    });
-  }
-  if (unlockCustomerSuccess) {
-    events.push({
-      kind: "unlock_earned",
-      summary: "Customer success workspace unlocked",
-      gameMinute,
-    });
-  }
-
-  const nextState: GameState = {
-    ...state,
-    company: {
-      ...state.company,
-      customerCount,
-      mrrCents,
-      peakMrrCents: Math.max(state.company.peakMrrCents, mrrCents),
-    },
-    sequences: {
-      ...state.sequences,
-      customer: customerSequence,
-      task: taskSequence,
-    },
-    records: {
-      ...state.records,
-      leads: {
-        ...state.records.leads,
-        [lead.id]: { ...lead, status: "converted", lastActivityAt: gameMinute },
-      },
-      deals: {
-        ...state.records.deals,
-        [deal.id]: {
-          ...deal,
-          stage: "won",
-          probability: 100,
-          updatedAt: gameMinute,
-        },
-      },
-      customers: {
-        ...state.records.customers,
-        [customerId]: {
-          id: customerId,
-          companyId: deal.companyId,
-          primaryLeadId: deal.leadId,
-          monthlyValueCents: deal.monthlyValueCents,
-          health: 80,
-          adoption: 25,
-          lifecycle: "onboarding",
-          startedAt: gameMinute,
-          nextBillingAt: gameMinute + rules.billingIntervalMinutes,
-          renewalAt: gameMinute + rules.customerRenewalIntervalMinutes,
-          lastSuccessAt: gameMinute,
-          expansions: 0,
-        },
-      },
-      tasks: {
-        ...state.records.tasks,
-        [taskId]: {
-          id: taskId,
-          kind: "onboarding",
-          status: "open",
-          relatedId: customerId,
-          title: "Complete customer onboarding",
-          dueAt: gameMinute + 24 * 60,
-          createdAt: gameMinute,
-        },
-      },
-    },
-    unlocks: [
-      ...state.unlocks,
-      ...(unlockMarketing ? ["marketing" as const] : []),
-      ...(unlockCustomerSuccess ? ["customer_success" as const] : []),
-    ],
-    onboarding: { ...state.onboarding, step: "complete" },
-  };
-
-  return accepted(nextState, events, rules);
+  const result = advanceDealWork(state, dealId, rules);
+  if (result.ok) return accepted(result.state, result.events, rules);
+  return rejected(state, result.reason);
 }
 
 export function applyCommand(

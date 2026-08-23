@@ -298,31 +298,6 @@ export function advancePlatform(
   if (Math.floor(startMinute / 1_440) === Math.floor(endMinute / 1_440)) {
     return state;
   }
-  const day = Math.floor(endMinute / 1_440);
-  const maxRuns = 20;
-  let runs = 0, errors = 0;
-  const workflows = state.platform.workflows.map((workflow) => {
-    if (!workflow.enabled || runs >= maxRuns) return workflow;
-    runs += 1;
-    const failed = (state.seed + day + workflow.runs) % 11 === 0;
-    if (failed) errors += 1;
-    return {
-      ...workflow,
-      runs: workflow.runs + 1,
-      errors: workflow.errors + Number(failed),
-      lastRunAt: endMinute,
-    };
-  });
-  const sequences = state.platform.sequences.map((sequence) =>
-    sequence.enabled
-      ? {
-        ...sequence,
-        enrolled: sequence.enrolled + 1,
-        completed: sequence.completed +
-          Number((day + sequence.enrolled) % 3 === 0),
-      }
-      : sequence
-  );
   const departments = state.platform.departments.map((department) => ({
     ...department,
     burnout: Math.max(
@@ -338,12 +313,7 @@ export function advancePlatform(
     ...state,
     platform: {
       ...state.platform,
-      workflows,
-      sequences,
       departments,
-      automationRunsArchived: state.platform.automationRunsArchived + runs,
-      automationErrorsArchived: state.platform.automationErrorsArchived +
-        errors,
     },
   };
 }

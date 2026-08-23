@@ -2,6 +2,8 @@ import { generateLead } from "./catalog.ts";
 import { projectEvents } from "./events.ts";
 import { DEFAULT_RULES, syncProgressionUnlocks } from "./state.ts";
 import { advancePlatform } from "./platform.ts";
+import { advanceSequences, applyAutomations } from "./automation.ts";
+import { applyStaffWork } from "./staff.ts";
 import { syncNarrative } from "./narrative.ts";
 import type {
   AdvanceResult,
@@ -545,31 +547,40 @@ function processStep(
     customers[customer.id] = updated;
   }
 
-  nextState = advancePlatform(
-    {
-      ...nextState,
-      company: {
-        ...nextState.company,
-        mrrCents: Math.max(0, nextState.company.mrrCents - churnedMrrCents),
-        customerCount: Math.max(
-          0,
-          nextState.company.customerCount - customersLost,
-        ),
-      },
-      records: {
-        ...nextState.records,
-        leads,
-        quotes,
-        salesReps,
-        successReps,
-        supportReps,
-        customers,
-        tickets,
-      },
+  nextState = {
+    ...nextState,
+    company: {
+      ...nextState.company,
+      mrrCents: Math.max(0, nextState.company.mrrCents - churnedMrrCents),
+      customerCount: Math.max(
+        0,
+        nextState.company.customerCount - customersLost,
+      ),
     },
-    startMinute,
-    endMinute,
-  );
+    records: {
+      ...nextState.records,
+      leads,
+      quotes,
+      salesReps,
+      successReps,
+      supportReps,
+      customers,
+      tickets,
+    },
+  };
+  const automated = applyAutomations(nextState, events, rules);
+  nextState = automated.state;
+  events.push(...automated.events);
+  const staffed = applyStaffWork(nextState, startMinute, endMinute, rules);
+  nextState = staffed.state;
+  events.push(...staffed.events);
+  const staffAutomated = applyAutomations(nextState, staffed.events, rules);
+  nextState = staffAutomated.state;
+  events.push(...staffAutomated.events);
+  const sequenced = advanceSequences(nextState, startMinute, endMinute);
+  nextState = sequenced.state;
+  events.push(...sequenced.events);
+  nextState = advancePlatform(nextState, startMinute, endMinute);
 
   if (nextCashCents < nextState.company.bankruptcyThresholdCents) {
     const bankruptcyEvent: DomainEvent = {

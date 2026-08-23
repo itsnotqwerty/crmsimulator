@@ -468,8 +468,12 @@ Deno.test("automation sequences and workflows replay deterministically", () => {
   const first = advanceGame(state, 24 * 60).state;
   const replay = advanceGame(state, 24 * 60).state;
   assertEquals(first, replay);
-  assertEquals(first.platform.automationRunsArchived, 1);
-  assertEquals(first.platform.sequences[0].enrolled, 1);
+  assert(first.platform.sequences[0].enrolled >= 1);
+  assertEquals(
+    first.records.leads.lead_1.status === "new" ||
+      first.records.leads.lead_1.status === "contacted",
+    true,
+  );
 });
 
 Deno.test("workflows support expanded rules and safe removal", () => {
@@ -1572,4 +1576,205 @@ Deno.test("simulation speed preference controls offline game time", () => {
 
   assertEquals(advanceOffline(normal, now).state.clock.gameMinute, 10);
   assertEquals(advanceOffline(fast, now).state.clock.gameMinute, 40);
+});
+
+Deno.test("sales representatives contact and qualify owned leads over time", () => {
+  let state = createInitialState({ seed: 201, now: 1_000 });
+  state = { ...state, unlocks: ["pipeline"] };
+  state = applyCommand(state, {
+    type: "hire_sales_rep",
+    name: "Avery Chen",
+    level: "senior",
+    territory: "all",
+    monthlyTargetCents: 1_500_000,
+  }).state;
+  state = {
+    ...state,
+    records: {
+      ...state.records,
+      leads: {
+        ...state.records.leads,
+        lead_1: { ...state.records.leads.lead_1, ownerId: "sales_rep_1" },
+      },
+    },
+  };
+  const capacity = state.company.founderCapacityRemaining;
+  const worked = advanceGame(state, 60).state;
+
+  assertEquals(worked.records.leads.lead_1.ownerId, "sales_rep_1");
+  assertEquals(worked.records.leads.lead_1.status, "contacted");
+  assertEquals(worked.company.founderCapacityRemaining, capacity);
+
+  const later = advanceGame(worked, 8 * 60).state;
+  assert(
+    later.records.leads.lead_1.status === "contacted" ||
+      later.records.leads.lead_1.status === "qualified",
+  );
+  if (later.records.leads.lead_1.status === "qualified") {
+    const ownedDeal = Object.values(later.records.deals).find((deal) =>
+      deal.leadId === "lead_1"
+    );
+    assert(ownedDeal);
+    assertEquals(ownedDeal.ownerId, "sales_rep_1");
+  }
+});
+
+Deno.test("success and support staff work owned records without founder capacity", () => {
+  let state = createInitialState({ seed: 202, now: 1_000 });
+  state = {
+    ...state,
+    unlocks: ["customer_success"],
+    company: { ...state.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...state.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 40,
+          adoption: 30,
+          lifecycle: "at_risk" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+  state = applyCommand(state, {
+    type: "hire_success_rep",
+    name: "Morgan Lee",
+    level: "mid",
+  }).state;
+  state = applyCommand(state, {
+    type: "assign_customer",
+    customerId: "customer_1",
+    ownerId: "success_rep_1",
+  }).state;
+  state = applyCommand(state, {
+    type: "hire_support_rep",
+    name: "Jordan Bell",
+    level: "mid",
+  }).state;
+  state = applyCommand(state, {
+    type: "create_ticket",
+    customerId: "customer_1",
+    channel: "email",
+    priority: "normal",
+    title: "Login loop on reports",
+  }).state;
+  state = applyCommand(state, {
+    type: "assign_ticket",
+    ticketId: "ticket_1",
+    ownerId: "support_rep_1",
+  }).state;
+  const capacity = state.company.founderCapacityRemaining;
+  const afterHour = advanceGame(state, 60).state;
+
+  assert(
+    afterHour.records.customers.customer_1.health >
+      state.records.customers.customer_1.health,
+  );
+  assertEquals(afterHour.records.tickets.ticket_1.status, "acknowledged");
+  assertEquals(afterHour.company.founderCapacityRemaining, capacity);
+
+  const afterShift = advanceGame(afterHour, 3 * 60).state;
+  assertEquals(afterShift.records.tickets.ticket_1.status, "resolved");
+  assertEquals(afterShift.company.founderCapacityRemaining, capacity);
+});
+
+Deno.test("workflows assign owners and advance lead status from live events", () => {
+  let state = createInitialState({ seed: 203, now: 1_000 });
+  state = { ...state, unlocks: ["pipeline"] };
+  state = applyCommand(state, {
+    type: "hire_sales_rep",
+    name: "Avery Chen",
+    level: "mid",
+    territory: "all",
+    monthlyTargetCents: 1_500_000,
+  }).state;
+  state = applyCommand(state, {
+    type: "create_workflow",
+    name: "Own inbound leads",
+    trigger: "lead_created",
+    condition: "unassigned",
+    action: "assign_owner",
+  }).state;
+  state = applyCommand(state, {
+    type: "create_workflow",
+    name: "First touch",
+    trigger: "lead_created",
+    condition: "all",
+    action: "send_outreach",
+  }).state;
+
+  const prospected = applyCommand(state, { type: "prospect_lead" });
+  assert(prospected.accepted);
+  const lead = Object.values(prospected.state.records.leads).find((entry) =>
+    entry.id !== "lead_1"
+  );
+  assert(lead);
+  assertEquals(lead.ownerId, "sales_rep_1");
+  assertEquals(lead.status, "contacted");
+  assert(prospected.state.platform.automationRunsArchived >= 2);
+
+  const touched = applyCommand(prospected.state, {
+    type: "create_workflow",
+    name: "Promote ready leads",
+    trigger: "lead_qualified",
+    condition: "all",
+    action: "create_task",
+  }).state;
+  const qualified = applyCommand(touched, {
+    type: "qualify_lead",
+    leadId: lead.id,
+  });
+  assert(qualified.accepted);
+  assertEquals(qualified.state.records.leads[lead.id].status, "qualified");
+  assert(
+    Object.values(qualified.state.records.tasks).some((task) =>
+      task.title.includes("Follow up") || task.relatedId === lead.id ||
+      task.kind === "follow_up"
+    ),
+  );
+});
+
+Deno.test("update_record workflows qualify contacted high-intent leads", () => {
+  let state = createInitialState({ seed: 204, now: 1_000 });
+  state = applyCommand(state, {
+    type: "create_workflow",
+    name: "First touch",
+    trigger: "lead_created",
+    condition: "all",
+    action: "send_outreach",
+  }).state;
+  state = applyCommand(state, {
+    type: "create_workflow",
+    name: "Promote engaged leads",
+    trigger: "lead_contacted",
+    condition: "high_intent",
+    action: "update_record",
+  }).state;
+
+  const inbound = applyCommand(state, { type: "prospect_lead" });
+  const created = Object.values(inbound.state.records.leads).find((lead) =>
+    lead.id !== "lead_1"
+  );
+  assert(created);
+  assertEquals(
+    created.status === "contacted" || created.status === "qualified",
+    true,
+  );
+  if (created.engagement >= 70) {
+    assertEquals(created.status, "qualified");
+    assert(
+      Object.values(inbound.state.records.deals).some((deal) =>
+        deal.leadId === created.id
+      ),
+    );
+  }
 });
