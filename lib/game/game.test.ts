@@ -480,6 +480,47 @@ Deno.test("automation and simulated integrations replay deterministically", () =
   );
 });
 
+Deno.test("workflows support expanded rules and safe removal", () => {
+  const initial = createInitialState({ seed: 57, now: 1_000 });
+  const first = applyCommand(initial, {
+    type: "create_workflow",
+    name: "Escalate SLA failures",
+    trigger: "ticket_sla_breached",
+    condition: "overdue",
+    action: "notify_team",
+  });
+  const second = applyCommand(first.state, {
+    type: "create_workflow",
+    name: "Launch recovery",
+    trigger: "customer_at_risk",
+    condition: "high_value",
+    action: "launch_playbook",
+  });
+  const removed = applyCommand(second.state, {
+    type: "delete_workflow",
+    workflowId: "workflow_1",
+  });
+
+  assert(removed.accepted);
+  assertEquals(removed.state.platform.workflows.length, 1);
+  assertEquals(removed.state.platform.workflows[0].id, "workflow_2");
+  const replacement = applyCommand(removed.state, {
+    type: "create_workflow",
+    name: "Update hot leads",
+    trigger: "lead_qualified",
+    condition: "high_intent",
+    action: "update_record",
+  });
+  assertEquals(replacement.state.platform.workflows[1].id, "workflow_3");
+
+  const missing = applyCommand(replacement.state, {
+    type: "delete_workflow",
+    workflowId: "workflow_missing",
+  });
+  assertEquals(missing.accepted, false);
+  assertStrictEquals(missing.state, replacement.state);
+});
+
 Deno.test("mature operations enforce plans and escalating goals", () => {
   let state = createInitialState({ seed: 56, now: 1_000 });
   state = {
@@ -720,12 +761,16 @@ Deno.test("escalated incidents resolve with staffed service quality", () => {
   );
 });
 
-Deno.test("pipeline unlock requires sustained MRR and open deal volume", () => {
+Deno.test("pipeline unlock follows the three-customer campaign milestone", () => {
   const initial = createInitialState({ seed: 41, now: 1_000 });
   const lead = initial.records.leads.lead_1;
   const prepared = {
     ...initial,
-    company: { ...initial.company, mrrCents: 100_000 },
+    company: {
+      ...initial.company,
+      customerCount: 3,
+      mrrCents: 100_000,
+    },
     records: {
       ...initial.records,
       leads: {

@@ -105,6 +105,49 @@ Deno.test("root GET loads cookies and advances offline time", async () => {
   assert(loaded.setCookies.length > 0);
 });
 
+Deno.test("root GET repairs a pipeline unlock after requirements are met", async () => {
+  const initial = createInitialState({ seed: 79, now: 1_000 });
+  const lead = initial.records.leads.lead_1;
+  const customer = (id: string) => ({
+    id,
+    companyId: lead.companyId,
+    primaryLeadId: lead.id,
+    monthlyValueCents: 50_000,
+    health: 80,
+    adoption: 50,
+    lifecycle: "active" as const,
+    startedAt: 0,
+    nextBillingAt: 43_200,
+    renewalAt: 43_200,
+    lastSuccessAt: 0,
+    expansions: 0,
+  });
+  const eligible = {
+    ...initial,
+    company: {
+      ...initial.company,
+      customerCount: 3,
+      mrrCents: 150_000,
+    },
+    records: {
+      ...initial.records,
+      customers: {
+        customer_1: customer("customer_1"),
+        customer_2: customer("customer_2"),
+        customer_3: customer("customer_3"),
+      },
+    },
+    sequences: { ...initial.sequences, customer: 3 },
+  };
+  const cookies = await createSetCookieHeaders(eligible, SECRET, {
+    secure: true,
+  });
+  const loaded = await loadRoot(requestWithCookies(cookies), config(1_000));
+
+  assertEquals(loaded.data.game.unlocks.includes("pipeline"), true);
+  assert(loaded.setCookies.length > 0);
+});
+
 Deno.test("root GET preserves corrupt save cookies", async () => {
   const initial = createInitialState({ seed: 73, now: 1_000 });
   const cookies = await createSetCookieHeaders(initial, SECRET, {

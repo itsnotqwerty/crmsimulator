@@ -1415,6 +1415,363 @@ td small {
   padding: 0 20px 20px;
 }
 
+.workflow-panel,
+.data-panel {
+  margin-top: 16px;
+  overflow: hidden;
+}
+
+.workflow-builder-form {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 13px;
+  padding: 17px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.workflow-builder-form label {
+  display: grid;
+  grid-column: span 4;
+  min-width: 0;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.workflow-builder-form .workflow-name-field {
+  grid-column: span 12;
+}
+
+.workflow-builder-form input,
+.workflow-builder-form select,
+.data-tool input,
+.data-tool select {
+  width: 100%;
+  min-width: 0;
+  height: 43px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  background: white;
+  font: inherit;
+}
+
+.workflow-preview {
+  display: flex;
+  grid-column: span 9;
+  min-width: 0;
+  min-height: 43px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  overflow: hidden;
+  border: 1px solid #cfe0da;
+  border-radius: 6px;
+  background: white;
+}
+
+.workflow-preview > span {
+  flex: 0 0 auto;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.workflow-preview > strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-preview > svg {
+  flex: 0 0 auto;
+  color: var(--faint);
+}
+
+.workflow-publish {
+  grid-column: span 3;
+}
+
+.workflow-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  background: #f6f8f7;
+}
+
+.workflow-card {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 1px 3px rgb(23 32 29 / 4%);
+}
+
+.workflow-card.paused {
+  background: #fafbfa;
+  opacity: 0.78;
+}
+
+.workflow-card > header,
+.workflow-card > header > div,
+.workflow-card > footer,
+.workflow-card > footer > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workflow-card > header,
+.workflow-card > footer {
+  justify-content: space-between;
+}
+
+.workflow-card > header strong {
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-card > header small,
+.workflow-card > footer > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workflow-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.workflow-flow > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 9px;
+  overflow: hidden;
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface-soft);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-flow small {
+  color: var(--green);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.workflow-flow > svg {
+  color: var(--faint);
+}
+
+.workflow-card > footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.workflow-remove {
+  color: #8a4537;
+}
+
+.automation-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 18px;
+  color: var(--muted);
+}
+
+.automation-empty > div {
+  display: grid;
+  gap: 3px;
+}
+
+.automation-empty strong {
+  color: var(--ink);
+}
+
+.automation-empty span {
+  font-size: 14px;
+}
+
+.data-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  background: #f6f8f7;
+}
+
+.data-tool {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 15px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.data-tool.integration-tool {
+  grid-column: 1 / -1;
+}
+
+.data-tool > header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.data-tool > header > span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.data-tool > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.data-tool > header strong {
+  font-size: 16px;
+}
+
+.data-tool > header small,
+.integration-list > span,
+.data-chip-list > span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.data-tool form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.integration-tool form {
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+}
+
+.data-tool label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.integration-list {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.integration-list > span {
+  padding-top: 12px;
+}
+
+.integration-list > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto auto;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.integration-list > div:last-child {
+  border-bottom: 0;
+}
+
+.integration-list > div > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.integration-list strong,
+.integration-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.integration-list small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.data-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.data-chip-list b {
+  padding: 5px 8px;
+  border: 1px solid #cee0da;
+  border-radius: 99px;
+  color: var(--green-dark);
+  background: var(--green-soft);
+  font-size: 12px;
+}
+
+.duplicate-summary {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px;
+  border-radius: 7px;
+  background: var(--surface-soft);
+}
+
+.duplicate-summary > div {
+  display: grid;
+  gap: 2px;
+}
+
+.duplicate-summary > div strong {
+  font-size: 24px;
+}
+
+.duplicate-summary span,
+.duplicate-summary > small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .pipeline-summary span {
   color: var(--muted);
   font-size: 14px;
@@ -1479,38 +1836,292 @@ td small {
   padding: 15px 17px;
 }
 
-.quote-form {
-  display: grid;
-  grid-template-columns: minmax(180px, 1.6fr) repeat(5, minmax(110px, 1fr))
-    auto;
-  gap: 12px;
-  align-items: end;
+.quotes-panel {
+  overflow: hidden;
 }
 
-.quote-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 16px;
+.quote-builder {
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
 }
 
-.quote-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(120px, auto) auto auto;
-  gap: 16px;
+.quote-builder-heading {
+  display: flex;
   align-items: center;
-  padding: 12px 0;
-  border-top: 1px solid var(--border);
+  gap: 11px;
+  margin-bottom: 15px;
 }
 
-.quote-row > span:first-child {
+.quote-builder-heading > div {
   display: grid;
   gap: 2px;
 }
 
+.quote-builder-heading > div > strong {
+  font-size: 17px;
+}
+
+.quote-builder-heading > div > span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.quote-builder-icon,
+.quote-identity > span {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.quote-builder-icon {
+  width: 38px;
+  height: 38px;
+}
+
+.quote-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.quote-fields {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-content: start;
+  gap: 13px;
+}
+
+.quote-fields label {
+  display: grid;
+  grid-column: span 4;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.quote-fields .quote-deal-field {
+  grid-column: span 6;
+}
+
+.quote-fields .quote-plan-field {
+  grid-column: span 4;
+}
+
+.quote-fields .quote-deal-field + .quote-plan-field + label {
+  grid-column: span 2;
+}
+
+.quote-fields input,
+.quote-fields select {
+  width: 100%;
+  min-width: 0;
+  height: 43px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  background: white;
+  font: inherit;
+}
+
+.input-suffix {
+  position: relative;
+}
+
+.input-suffix input {
+  padding-right: 48px;
+}
+
+.input-suffix > span {
+  position: absolute;
+  top: 50%;
+  right: 11px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.quote-preview {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding: 15px;
+  border: 1px solid #b8d3c9;
+  border-radius: 8px;
+  background: white;
+}
+
+.quote-preview > span,
+.quote-value > span:first-child {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.quote-preview > strong {
+  color: var(--green-dark);
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.quote-preview > strong small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.quote-preview dl,
+.quote-terms {
+  margin: 0;
+}
+
+.quote-preview dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 3px 0 5px;
+}
+
+.quote-preview dl > div {
+  display: grid;
+  gap: 2px;
+}
+
+.quote-preview dt,
+.quote-terms dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quote-preview dd,
+.quote-terms dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.quote-list {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  background: #f6f8f7;
+}
+
+.quote-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(370px, 1.8fr) 145px auto;
+  align-items: center;
+  gap: 18px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 1px 3px rgb(23 32 29 / 4%);
+}
+
+.quote-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.quote-identity > span {
+  width: 36px;
+  height: 36px;
+}
+
+.quote-identity > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.quote-identity strong,
+.quote-identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quote-identity strong {
+  font-size: 16px;
+}
+
+.quote-identity small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quote-terms {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quote-terms > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.quote-terms dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quote-value {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+
+.quote-value > strong {
+  color: var(--green-dark);
+  font-size: 18px;
+}
+
 .quote-actions {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 7px;
+}
+
+.quote-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 18px;
+  color: var(--muted);
+}
+
+.quote-empty > svg {
+  color: #91a49c;
+}
+
+.quote-empty > div {
+  display: grid;
+  gap: 3px;
+}
+
+.quote-empty strong {
+  color: var(--ink);
+}
+
+.quote-empty span {
+  font-size: 14px;
 }
 
 .bulk-actions {
@@ -3141,16 +3752,45 @@ table,
   }
 
   .quote-form {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .quote-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
+  .quote-terms {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .quote-value {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
   .quote-actions {
     grid-column: 1 / -1;
+    grid-row: 3;
     justify-content: flex-start;
+  }
+
+  .workflow-list,
+  .data-tools-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .data-tool.integration-tool {
+    grid-column: 1;
+  }
+
+  .integration-tool form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .integration-tool form button {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
   .sales-team-list > div {
@@ -3576,14 +4216,122 @@ table,
     display: none;
   }
 
-  .quote-form,
+  .quote-fields,
   .quote-row {
     grid-template-columns: 1fr;
   }
 
+  .quote-builder {
+    padding: 14px;
+  }
+
+  .quote-fields label,
+  .quote-fields .quote-deal-field,
+  .quote-fields .quote-plan-field,
+  .quote-fields .quote-deal-field + .quote-plan-field + label {
+    grid-column: 1;
+  }
+
+  .quote-list {
+    padding: 10px;
+  }
+
+  .quote-terms {
+    grid-column: 1;
+    grid-row: auto;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .quote-value {
+    grid-column: 1;
+    grid-row: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+
   .quote-actions {
+    grid-column: 1;
+    grid-row: auto;
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .quote-actions .close-risk-inline {
+    grid-column: 1 / -1;
+  }
+
+  .workflow-builder-form {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-builder-form label,
+  .workflow-builder-form .workflow-name-field,
+  .workflow-preview,
+  .workflow-publish {
+    grid-column: 1;
+  }
+
+  .workflow-preview {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .workflow-preview > svg {
+    display: none;
+  }
+
+  .workflow-publish,
+  .data-tool form button {
+    width: 100%;
+  }
+
+  .workflow-flow {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-flow > svg {
+    display: none;
+  }
+
+  .workflow-card > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workflow-card > footer > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .workflow-card > footer button {
+    justify-content: center;
+  }
+
+  .data-tools-grid,
+  .workflow-list {
+    padding: 10px;
+  }
+
+  .data-tool form,
+  .integration-tool form {
+    grid-template-columns: 1fr;
+  }
+
+  .integration-tool form button {
+    grid-column: 1;
+  }
+
+  .integration-list > div {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .integration-list > div > small {
+    grid-column: 1;
+  }
+
+  .duplicate-summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .quote-actions button {

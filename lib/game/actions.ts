@@ -2,7 +2,11 @@ import { projectEvents } from "./events.ts";
 import { generateLead } from "./catalog.ts";
 import { randomInteger } from "./rng.ts";
 import { syncNarrative } from "./narrative.ts";
-import { createInitialState, DEFAULT_RULES } from "./state.ts";
+import {
+  createInitialState,
+  DEFAULT_RULES,
+  syncProgressionUnlocks,
+} from "./state.ts";
 import { applyPlatformCommand } from "./platform.ts";
 import type {
   BillingCycle,
@@ -393,13 +397,9 @@ function accepted(
   events: DomainEvent[],
   rules: GameRules,
 ): CommandResult {
-  const openDealCount =
-    Object.values(state.records.deals).filter((deal) =>
-      deal.stage !== "won" && deal.stage !== "lost"
-    ).length;
+  const nextState = syncProgressionUnlocks(state, rules);
   const unlockPipeline = !state.unlocks.includes("pipeline") &&
-    state.company.mrrCents >= rules.pipelineUnlockMrrCents &&
-    openDealCount >= rules.pipelineUnlockOpenDeals;
+    nextState.unlocks.includes("pipeline");
   const unlockEvents: DomainEvent[] = unlockPipeline
     ? [{
       kind: "unlock_earned",
@@ -407,9 +407,6 @@ function accepted(
       gameMinute: state.clock.gameMinute,
     }]
     : [];
-  const nextState = unlockPipeline
-    ? { ...state, unlocks: [...state.unlocks, "pipeline" as const] }
-    : state;
   const projectedEvents = [...events, ...unlockEvents];
 
   return {
@@ -440,7 +437,9 @@ function prospectLead(
   state: GameState,
   rules: GameRules,
 ): CommandResult {
-  if (state.company.founderCapacityRemaining < rules.prospectingCapacityMinutes) {
+  if (
+    state.company.founderCapacityRemaining < rules.prospectingCapacityMinutes
+  ) {
     return rejected(state, "Not enough founder capacity to prospect a lead");
   }
 
@@ -1526,7 +1525,8 @@ function fireSuccessRep(
     records: { ...state.records, successReps, customers },
   }, [{
     kind: "success_rep_fired",
-    summary: `${rep.name} left customer success; their accounts were unassigned`,
+    summary:
+      `${rep.name} left customer success; their accounts were unassigned`,
     relatedId: rep.id,
     gameMinute: state.clock.gameMinute,
   }], rules);

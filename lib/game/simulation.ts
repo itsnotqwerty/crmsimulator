@@ -1,6 +1,6 @@
 import { generateLead } from "./catalog.ts";
 import { projectEvents } from "./events.ts";
-import { DEFAULT_RULES } from "./state.ts";
+import { DEFAULT_RULES, syncProgressionUnlocks } from "./state.ts";
 import { advancePlatform } from "./platform.ts";
 import { syncNarrative } from "./narrative.ts";
 import type {
@@ -607,7 +607,7 @@ export function advanceGame(
 
   const summary = emptySummary();
   const events: DomainEvent[] = [];
-  let nextState = state;
+  let nextState = syncProgressionUnlocks(state, rules);
   let remainingMinutes = elapsedGameMinutes;
 
   while (remainingMinutes > 0 && nextState.clock.status === "active") {
@@ -639,7 +639,11 @@ export function advanceGame(
     if (result.stopped) break;
   }
 
-  return { state: nextState, events, summary };
+  return {
+    state: syncProgressionUnlocks(nextState, rules),
+    events,
+    summary,
+  };
 }
 
 export function advanceOffline(

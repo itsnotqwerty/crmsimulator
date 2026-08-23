@@ -102,9 +102,25 @@ export type ActivityKind =
   | "campaign_archived";
 export type AutomationTrigger =
   | "lead_created"
+  | "lead_qualified"
+  | "quote_sent"
   | "deal_won"
-  | "customer_at_risk";
-export type AutomationAction = "create_task" | "send_outreach" | "assign_owner";
+  | "customer_at_risk"
+  | "ticket_created"
+  | "ticket_sla_breached";
+export type AutomationCondition =
+  | "all"
+  | "high_value"
+  | "unassigned"
+  | "high_intent"
+  | "overdue";
+export type AutomationAction =
+  | "create_task"
+  | "send_outreach"
+  | "assign_owner"
+  | "notify_team"
+  | "update_record"
+  | "launch_playbook";
 
 export interface SequenceAutomation {
   id: EntityId;
@@ -119,7 +135,7 @@ export interface WorkflowAutomation {
   id: EntityId;
   name: string;
   trigger: AutomationTrigger;
-  condition: "all" | "high_value" | "unassigned";
+  condition: AutomationCondition;
   action: AutomationAction;
   enabled: boolean;
   runs: number;
@@ -599,10 +615,11 @@ export type GameCommand =
     type: "create_workflow";
     name: string;
     trigger: AutomationTrigger;
-    condition: "all" | "high_value" | "unassigned";
+    condition: AutomationCondition;
     action: AutomationAction;
   }
   | { type: "toggle_workflow"; workflowId: EntityId }
+  | { type: "delete_workflow"; workflowId: EntityId }
   | { type: "connect_integration"; name: string; mapping: string }
   | { type: "retry_integration"; integrationId: EntityId }
   | { type: "add_custom_field"; name: string }
@@ -672,7 +689,7 @@ export interface GameRules {
   maxRecentActivities: number;
   marketingUnlockCustomers: number;
   pipelineUnlockMrrCents: number;
-  pipelineUnlockOpenDeals: number;
+  pipelineUnlockCustomers: number;
   maxActiveCampaigns: number;
   maxCampaignRecords: number;
   maxSalesReps: number;

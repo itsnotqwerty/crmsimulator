@@ -20,7 +20,7 @@ export const DEFAULT_RULES: GameRules = {
   maxRecentActivities: 100,
   marketingUnlockCustomers: 3,
   pipelineUnlockMrrCents: 100_000,
-  pipelineUnlockOpenDeals: 3,
+  pipelineUnlockCustomers: 3,
   maxActiveCampaigns: 3,
   maxCampaignRecords: 40,
   maxSalesReps: 8,
@@ -33,6 +33,32 @@ export const DEFAULT_RULES: GameRules = {
   maxSupportReps: 12,
   maxIncidentRecords: 30,
 };
+
+export function syncProgressionUnlocks(
+  state: GameState,
+  rules: GameRules = DEFAULT_RULES,
+): GameState {
+  const additions: GameState["unlocks"] = [];
+  if (
+    state.company.customerCount >= rules.marketingUnlockCustomers &&
+    !state.unlocks.includes("marketing")
+  ) additions.push("marketing");
+
+  if (
+    state.company.mrrCents >= rules.pipelineUnlockMrrCents &&
+    state.company.customerCount >= rules.pipelineUnlockCustomers &&
+    !state.unlocks.includes("pipeline")
+  ) additions.push("pipeline");
+
+  if (
+    state.company.customerCount >= rules.customerSuccessUnlockCustomers &&
+    !state.unlocks.includes("customer_success")
+  ) additions.push("customer_success");
+
+  return additions.length === 0
+    ? state
+    : { ...state, unlocks: [...state.unlocks, ...additions] };
+}
 
 export interface InitialStateOptions {
   seed: number;

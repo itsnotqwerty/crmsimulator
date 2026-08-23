@@ -89,7 +89,13 @@ export function applyPlatformCommand(
         return reject(state, "Workflow name or limit is invalid");
       }
       const workflow = {
-        id: `workflow_${platform.workflows.length + 1}`,
+        id: `workflow_${
+          platform.workflows.reduce(
+            (highest, item) =>
+              Math.max(highest, Number(item.id.replace("workflow_", "")) || 0),
+            0,
+          ) + 1
+        }`,
         name,
         trigger: command.trigger,
         condition: command.condition,
@@ -128,6 +134,25 @@ export function applyPlatformCommand(
         },
         rules,
         "Workflow status changed",
+      );
+    }
+    case "delete_workflow": {
+      const workflow = platform.workflows.find((item) =>
+        item.id === command.workflowId
+      );
+      if (!workflow) return reject(state, "Workflow does not exist");
+      return accept(
+        {
+          ...state,
+          platform: {
+            ...platform,
+            workflows: platform.workflows.filter((item) =>
+              item.id !== command.workflowId
+            ),
+          },
+        },
+        rules,
+        `Workflow removed: ${workflow.name}`,
       );
     }
     case "connect_integration": {

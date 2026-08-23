@@ -40,7 +40,10 @@ import type { JSX } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import { notificationToneFor, SoundDesign } from "../lib/client/audio.ts";
 import { useGameStore } from "../lib/client/gameStore.ts";
-import { closeLossRiskPercent } from "../lib/game/actions.ts";
+import {
+  closeLossRiskPercent,
+  quoteMonthlyValueCents,
+} from "../lib/game/actions.ts";
 import { campaignSaturation } from "../lib/game/simulation.ts";
 import { analyticsReport, retentionReport } from "../lib/game/reports.ts";
 import {
@@ -49,6 +52,9 @@ import {
 } from "../lib/game/narrative.ts";
 import type {
   AdvanceSummary,
+  AutomationAction,
+  AutomationCondition,
+  AutomationTrigger,
   BillingCycle,
   CampaignAudience,
   CampaignChannel,
@@ -1167,16 +1173,17 @@ function CustomerSuccessWorkspace(props: {
 function PlatformWorkspace(props: {
   game: GameState;
   mode: "automation" | "analytics" | "operations";
-  dispatch: (command: GameCommand) => void;
+  dispatch: (command: GameCommand) => boolean;
 }) {
   const name = useSignal("");
   const secondary = useSignal("");
-  const trigger = useSignal<"lead_created" | "deal_won" | "customer_at_risk">(
-    "lead_created",
-  );
-  const action = useSignal<"create_task" | "send_outreach" | "assign_owner">(
-    "create_task",
-  );
+  const trigger = useSignal<AutomationTrigger>("lead_created");
+  const condition = useSignal<AutomationCondition>("all");
+  const action = useSignal<AutomationAction>("create_task");
+  const integrationName = useSignal("");
+  const integrationMapping = useSignal("company → account");
+  const customFieldName = useSignal("");
+  const savedViewName = useSignal("");
   const report = analyticsReport(props.game);
   const platform = props.game.platform;
   if (props.mode === "analytics") {
@@ -1441,136 +1448,413 @@ function PlatformWorkspace(props: {
           ))}
         </div>
       </section>
-      <section class="panel">
+      <section class="panel workflow-panel">
         <div class="panel-heading">
           <div>
             <h2>Workflow builder</h2>
-            <span>Trigger → condition → action</span>
+            <span>Automate a response when a CRM event meets your rules</span>
           </div>
+          <span class="record-count">{platform.workflows.length}/20</span>
         </div>
         <form
-          class="support-hire-form"
+          class="workflow-builder-form"
           onSubmit={(event) => {
             event.preventDefault();
-            props.dispatch({
+            const accepted = props.dispatch({
               type: "create_workflow",
               name: secondary.value,
               trigger: trigger.value,
-              condition: "all",
+              condition: condition.value,
               action: action.value,
             });
-            secondary.value = "";
+            if (accepted) secondary.value = "";
           }}
         >
-          <label>
-            <span>Name</span>
+          <label class="workflow-name-field">
+            <span>Workflow name</span>
             <input
               required
               minLength={2}
+              maxLength={60}
+              placeholder="Route urgent renewals"
               value={secondary.value}
               onInput={(event) => secondary.value = event.currentTarget.value}
             />
           </label>
           <label>
-            <span>Trigger</span>
+            <span>When this happens</span>
             <select
               value={trigger.value}
               onChange={(event) =>
-                trigger.value = event.currentTarget
-                  .value as typeof trigger.value}
+                trigger.value = event.currentTarget.value as AutomationTrigger}
             >
               <option value="lead_created">Lead created</option>
+              <option value="lead_qualified">Lead qualified</option>
+              <option value="quote_sent">Quote sent</option>
               <option value="deal_won">Deal won</option>
               <option value="customer_at_risk">Customer at risk</option>
+              <option value="ticket_created">Support ticket created</option>
+              <option value="ticket_sla_breached">Ticket SLA breached</option>
             </select>
           </label>
           <label>
-            <span>Action</span>
+            <span>Only if</span>
+            <select
+              value={condition.value}
+              onChange={(event) =>
+                condition.value = event.currentTarget
+                  .value as AutomationCondition}
+            >
+              <option value="all">Any matching record</option>
+              <option value="high_value">Value is high</option>
+              <option value="unassigned">Owner is unassigned</option>
+              <option value="high_intent">Intent is at least 70%</option>
+              <option value="overdue">Record is overdue</option>
+            </select>
+          </label>
+          <label>
+            <span>Then do this</span>
             <select
               value={action.value}
               onChange={(event) =>
-                action.value = event.currentTarget.value as typeof action.value}
+                action.value = event.currentTarget.value as AutomationAction}
             >
               <option value="create_task">Create task</option>
               <option value="send_outreach">Send outreach</option>
               <option value="assign_owner">Assign owner</option>
+              <option value="notify_team">Notify team</option>
+              <option value="update_record">Update record</option>
+              <option value="launch_playbook">Launch playbook</option>
             </select>
           </label>
-          <button class="primary" type="submit">
-            <Activity size={16} />Publish
+          <div class="workflow-preview">
+            <span>WHEN</span>
+            <strong>{statusLabel(trigger.value)}</strong>
+            <ChevronRight size={15} />
+            <span>IF</span>
+            <strong>{statusLabel(condition.value)}</strong>
+            <ChevronRight size={15} />
+            <span>THEN</span>
+            <strong>{statusLabel(action.value)}</strong>
+          </div>
+          <button
+            class="primary workflow-publish"
+            type="submit"
+            disabled={platform.workflows.length >= 20}
+          >
+            <Activity size={16} />Publish workflow
           </button>
         </form>
-        <div class="tag-list">
-          {platform.workflows.map((workflow) => (
-            <button
-              key={workflow.id}
-              type="button"
-              class="secondary"
-              onClick={() =>
-                props.dispatch({
-                  type: "toggle_workflow",
-                  workflowId: workflow.id,
-                })}
-            >
-              {workflow.name} · {workflow.runs} runs · {workflow.errors} errors
-            </button>
-          ))}
-        </div>
+        {platform.workflows.length > 0
+          ? (
+            <div class="workflow-list">
+              {platform.workflows.map((workflow) => (
+                <article
+                  key={workflow.id}
+                  class={`workflow-card ${workflow.enabled ? "" : "paused"}`}
+                >
+                  <header>
+                    <div>
+                      <strong>{workflow.name}</strong>
+                      <span
+                        class={`status ${
+                          workflow.enabled ? "active" : "paused"
+                        }`}
+                      >
+                        {workflow.enabled ? "Active" : "Paused"}
+                      </span>
+                    </div>
+                    <small>
+                      {workflow.runs} runs · {workflow.errors} errors
+                    </small>
+                  </header>
+                  <div class="workflow-flow">
+                    <span>
+                      <small>WHEN</small>
+                      {statusLabel(workflow.trigger)}
+                    </span>
+                    <ChevronRight size={15} />
+                    <span>
+                      <small>IF</small>
+                      {statusLabel(workflow.condition)}
+                    </span>
+                    <ChevronRight size={15} />
+                    <span>
+                      <small>THEN</small>
+                      {statusLabel(workflow.action)}
+                    </span>
+                  </div>
+                  <footer>
+                    <span>
+                      {workflow.lastRunAt === undefined
+                        ? "Has not run yet"
+                        : `Last ran ${gameDate(workflow.lastRunAt)}`}
+                    </span>
+                    <div>
+                      <button
+                        type="button"
+                        class="secondary"
+                        onClick={() =>
+                          props.dispatch({
+                            type: "toggle_workflow",
+                            workflowId: workflow.id,
+                          })}
+                      >
+                        {workflow.enabled ? "Pause" : "Resume"}
+                      </button>
+                      <button
+                        type="button"
+                        class="text-button workflow-remove"
+                        onClick={() => {
+                          if (globalThis.confirm(`Remove ${workflow.name}?`)) {
+                            props.dispatch({
+                              type: "delete_workflow",
+                              workflowId: workflow.id,
+                            });
+                          }
+                        }}
+                      >
+                        <X size={15} />Remove
+                      </button>
+                    </div>
+                  </footer>
+                </article>
+              ))}
+            </div>
+          )
+          : (
+            <div class="automation-empty">
+              <Activity size={22} />
+              <div>
+                <strong>No workflows published</strong>
+                <span>Choose an event, rule, and response above.</span>
+              </div>
+            </div>
+          )}
       </section>
-      <section class="panel">
+      <section class="panel data-panel">
         <div class="panel-heading">
           <div>
             <h2>Data and integrations</h2>
             <span>
-              {platform.integrations.length} simulated connections ·{" "}
-              {platform.customFields.length} custom fields
+              Configure simulated data operations and inspect their results
             </span>
           </div>
         </div>
-        <div class="customer-actions">
-          <button
-            class="secondary"
-            type="button"
-            disabled={platform.integrations.length >= 8}
-            onClick={() =>
-              props.dispatch({
-                type: "connect_integration",
-                name: `Warehouse ${platform.integrations.length + 1}`,
-                mapping: "company → account",
-              })}
-          >
-            <RefreshCw size={15} />Add simulated sync
-          </button>
-          <button
-            class="secondary"
-            type="button"
-            onClick={() =>
-              props.dispatch({
-                type: "add_custom_field",
-                name: `Lifecycle field ${platform.customFields.length + 1}`,
-              })}
-          >
-            <SlidersHorizontal size={15} />Add custom field
-          </button>
-          <button
-            class="secondary"
-            type="button"
-            onClick={() =>
-              props.dispatch({
-                type: "save_view",
-                name: `Operations view ${platform.savedViews.length + 1}`,
-              })}
-          >
-            <Columns3 size={15} />Save view
-          </button>
-          <button
-            class="primary"
-            type="button"
-            disabled={!platform.duplicateReviews}
-            onClick={() => props.dispatch({ type: "merge_duplicates" })}
-          >
-            <Check size={15} />Merge duplicates
-          </button>
+        <div class="data-tools-grid">
+          <article class="data-tool integration-tool">
+            <header>
+              <span>
+                <RefreshCw size={18} />
+              </span>
+              <div>
+                <strong>Integration sync</strong>
+                <small>
+                  Simulates importing 25 mapped records on the next game day.
+                </small>
+              </div>
+            </header>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const accepted = props.dispatch({
+                  type: "connect_integration",
+                  name: integrationName.value,
+                  mapping: integrationMapping.value,
+                });
+                if (accepted) integrationName.value = "";
+              }}
+            >
+              <label>
+                <span>Connection name</span>
+                <input
+                  required
+                  minLength={2}
+                  maxLength={60}
+                  placeholder="Finance warehouse"
+                  value={integrationName.value}
+                  onInput={(event) =>
+                    integrationName.value = event.currentTarget.value}
+                />
+              </label>
+              <label>
+                <span>Record mapping</span>
+                <select
+                  value={integrationMapping.value}
+                  onChange={(event) =>
+                    integrationMapping.value = event.currentTarget.value}
+                >
+                  <option value="company → account">Company → Account</option>
+                  <option value="contact → person">Contact → Person</option>
+                  <option value="deal → opportunity">Deal → Opportunity</option>
+                  <option value="ticket → case">Ticket → Case</option>
+                </select>
+              </label>
+              <button
+                class="secondary"
+                type="submit"
+                disabled={platform.integrations.length >= 8}
+              >
+                <RefreshCw size={15} />Connect sync
+              </button>
+            </form>
+            <div class="integration-list">
+              {platform.integrations.length === 0
+                ? <span>No connections configured.</span>
+                : platform.integrations.map((integration) => (
+                  <div key={integration.id}>
+                    <div>
+                      <strong>{integration.name}</strong>
+                      <small>{integration.mapping}</small>
+                    </div>
+                    <span class={`status ${integration.status}`}>
+                      {statusLabel(integration.status)}
+                    </span>
+                    <small>
+                      {integration.recordsSynced} records ·{" "}
+                      {integration.failures} failures
+                    </small>
+                    {integration.status === "failed" && (
+                      <button
+                        type="button"
+                        class="text-button"
+                        onClick={() =>
+                          props.dispatch({
+                            type: "retry_integration",
+                            integrationId: integration.id,
+                          })}
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </article>
+
+          <article class="data-tool">
+            <header>
+              <span>
+                <SlidersHorizontal size={18} />
+              </span>
+              <div>
+                <strong>Custom fields</strong>
+                <small>Add a reusable attribute to your CRM data model.</small>
+              </div>
+            </header>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const accepted = props.dispatch({
+                  type: "add_custom_field",
+                  name: customFieldName.value,
+                });
+                if (accepted) customFieldName.value = "";
+              }}
+            >
+              <label>
+                <span>Field name</span>
+                <input
+                  required
+                  minLength={2}
+                  maxLength={60}
+                  placeholder="Renewal priority"
+                  value={customFieldName.value}
+                  onInput={(event) =>
+                    customFieldName.value = event.currentTarget.value}
+                />
+              </label>
+              <button
+                class="secondary"
+                type="submit"
+                disabled={platform.customFields.length >= 20}
+              >
+                <SlidersHorizontal size={15} />Add field
+              </button>
+            </form>
+            <div class="data-chip-list">
+              {platform.customFields.length === 0
+                ? <span>No custom fields added.</span>
+                : platform.customFields.map((field) => <b>{field}</b>)}
+            </div>
+          </article>
+
+          <article class="data-tool">
+            <header>
+              <span>
+                <Columns3 size={18} />
+              </span>
+              <div>
+                <strong>Saved views</strong>
+                <small>Store a named operations preset for reporting.</small>
+              </div>
+            </header>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const accepted = props.dispatch({
+                  type: "save_view",
+                  name: savedViewName.value,
+                });
+                if (accepted) savedViewName.value = "";
+              }}
+            >
+              <label>
+                <span>View name</span>
+                <input
+                  required
+                  minLength={2}
+                  maxLength={60}
+                  placeholder="At-risk accounts"
+                  value={savedViewName.value}
+                  onInput={(event) =>
+                    savedViewName.value = event.currentTarget.value}
+                />
+              </label>
+              <button
+                class="secondary"
+                type="submit"
+                disabled={platform.savedViews.length >= 12}
+              >
+                <Columns3 size={15} />Save view
+              </button>
+            </form>
+            <div class="data-chip-list">
+              {platform.savedViews.length === 0
+                ? <span>No views saved.</span>
+                : platform.savedViews.map((viewName) => <b>{viewName}</b>)}
+            </div>
+          </article>
+
+          <article class="data-tool duplicate-tool">
+            <header>
+              <span>
+                <Copy size={18} />
+              </span>
+              <div>
+                <strong>Duplicate review</strong>
+                <small>
+                  The simulator periodically detects records that may represent
+                  the same account.
+                </small>
+              </div>
+            </header>
+            <div class="duplicate-summary">
+              <div>
+                <strong>{platform.duplicateReviews}</strong>
+                <span>records awaiting review</span>
+              </div>
+              <small>{platform.duplicatesMerged} records merged to date</small>
+            </div>
+            <button
+              class="primary full"
+              type="button"
+              disabled={!platform.duplicateReviews}
+              onClick={() => props.dispatch({ type: "merge_duplicates" })}
+            >
+              <Check size={15} />Merge reviewed duplicates
+            </button>
+          </article>
         </div>
       </section>
     </>
@@ -1613,6 +1897,23 @@ function PipelineWorkspace(props: {
   const quotes = Object.values(props.game.records.quotes).sort((a, b) =>
     b.updatedAt - a.updatedAt
   );
+  const quoteSeatCount = Number(quoteSeats.value);
+  const quoteDiscountPercent = Number(quoteDiscount.value);
+  const quoteValidityDays = Number(quoteValidDays.value);
+  const quoteTermsValid = Number.isInteger(quoteSeatCount) &&
+    quoteSeatCount >= 1 && quoteSeatCount <= 500 &&
+    Number.isInteger(quoteDiscountPercent) &&
+    quoteDiscountPercent >= 0 && quoteDiscountPercent <= 30 &&
+    Number.isInteger(quoteValidityDays) && quoteValidityDays >= 1 &&
+    quoteValidityDays <= 30;
+  const quotePreviewCents = quoteTermsValid
+    ? quoteMonthlyValueCents(
+      quoteProduct.value,
+      quoteBilling.value,
+      quoteSeatCount,
+      quoteDiscountPercent,
+    )
+    : undefined;
   const monthlyPayrollCents = salesReps.reduce(
     (total, rep) => total + rep.monthlySalaryCents,
     0,
@@ -1692,7 +1993,7 @@ function PipelineWorkspace(props: {
   const createQuote = (event: SubmitEvent) => {
     event.preventDefault();
     if (!quoteDealId.value) return;
-    props.dispatch({
+    const accepted = props.dispatch({
       type: "create_quote",
       dealId: quoteDealId.value,
       product: quoteProduct.value,
@@ -1701,6 +2002,7 @@ function PipelineWorkspace(props: {
       discountPercent: Number(quoteDiscount.value),
       validDays: Number(quoteValidDays.value),
     });
+    if (accepted) quoteDealId.value = "";
   };
   const toggleDeal = (dealId: string) => {
     const next = new Set(selectedDeals.value);
@@ -1933,171 +2235,263 @@ function PipelineWorkspace(props: {
           </div>
           <span class="record-count">{quotes.length} records</span>
         </div>
-        <form class="quote-form" onSubmit={createQuote}>
-          <label>
-            <span>Deal</span>
-            <select
-              required
-              value={quoteDealId.value}
-              onChange={(event) =>
-                quoteDealId.value = event.currentTarget.value}
-            >
-              <option value="">Select a deal</option>
-              {openDeals.map((deal) => (
-                <option value={deal.id}>
-                  {detail(deal).company?.name ?? "Unknown company"} ·{" "}
-                  {statusLabel(deal.stage)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Plan</span>
-            <select
-              value={quoteProduct.value}
-              onChange={(event) =>
-                quoteProduct.value = event.currentTarget.value as DealProduct}
-            >
-              <option value="starter">Starter · $200 + $10/seat</option>
-              <option value="growth">Growth · $450 + $15/seat</option>
-              <option value="scale">Scale · $800 + $25/seat</option>
-            </select>
-          </label>
-          <label>
-            <span>Billing</span>
-            <select
-              value={quoteBilling.value}
-              onChange={(event) =>
-                quoteBilling.value = event.currentTarget.value as BillingCycle}
-            >
-              <option value="monthly">Monthly</option>
-              <option value="annual">Annual · 10% savings</option>
-            </select>
-          </label>
-          <label>
-            <span>Seats</span>
-            <input
-              type="number"
-              min="1"
-              max="500"
-              required
-              value={quoteSeats.value}
-              onInput={(event) => quoteSeats.value = event.currentTarget.value}
-            />
-          </label>
-          <label>
-            <span>Discount</span>
-            <input
-              type="number"
-              min="0"
-              max="30"
-              required
-              value={quoteDiscount.value}
-              onInput={(event) =>
-                quoteDiscount.value = event.currentTarget.value}
-            />
-          </label>
-          <label>
-            <span>Valid days</span>
-            <input
-              type="number"
-              min="1"
-              max="30"
-              required
-              value={quoteValidDays.value}
-              onInput={(event) =>
-                quoteValidDays.value = event.currentTarget.value}
-            />
-          </label>
-          <button type="submit" class="primary">
-            <FileText size={16} />Create quote
-          </button>
-        </form>
-        {quotes.length > 0 && (
-          <div class="quote-list">
-            {quotes.map((quote) => {
-              const deal = props.game.records.deals[quote.dealId];
-              const lead = deal
-                ? props.game.records.leads[deal.leadId]
-                : undefined;
-              const closeRisk = deal?.stage === "negotiation" && lead
-                ? closeLossRiskPercent(lead.engagement)
-                : 0;
-              const company = deal
-                ? props.game.records.companies[deal.companyId]
-                : undefined;
-              return (
-                <div class="quote-row">
-                  <span>
-                    <strong>{company?.name ?? "Unknown company"}</strong>
-                    <small>
-                      {statusLabel(quote.product)} · {quote.seats} seats ·{" "}
-                      {statusLabel(quote.billingCycle)}
-                    </small>
-                  </span>
-                  <strong>
-                    {money.format(quote.monthlyValueCents / 100)} MRR
-                  </strong>
-                  <span class={`status ${quote.status}`}>
-                    {statusLabel(quote.status)}
-                  </span>
-                  <div class="quote-actions">
-                    {quote.status === "sent" && closeRisk > 0 && (
-                      <small class="close-risk-inline">
-                        {closeRisk}% loss risk
-                      </small>
-                    )}
-                    {quote.status === "draft" && (
-                      <button
-                        type="button"
-                        class="secondary"
-                        onClick={() =>
-                          props.dispatch({
-                            type: "set_quote_status",
-                            quoteId: quote.id,
-                            status: "sent",
-                          })}
-                      >
-                        <Send size={15} />Send
-                      </button>
-                    )}
-                    {quote.status === "sent" && (
-                      <button
-                        type="button"
-                        class="primary"
-                        disabled={deal?.stage !== "negotiation"}
-                        title={deal?.stage === "negotiation"
-                          ? "Accept quote"
-                          : "Advance deal to negotiation first"}
-                        onClick={() =>
-                          props.dispatch({
-                            type: "accept_quote",
-                            quoteId: quote.id,
-                          })}
-                      >
-                        <Check size={15} />Accept
-                      </button>
-                    )}
-                    {(quote.status === "draft" || quote.status === "sent") && (
-                      <button
-                        type="button"
-                        class="secondary"
-                        onClick={() =>
-                          props.dispatch({
-                            type: "set_quote_status",
-                            quoteId: quote.id,
-                            status: "expired",
-                          })}
-                      >
-                        Expire
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+        <div class="quote-builder">
+          <div class="quote-builder-heading">
+            <span class="quote-builder-icon">
+              <FileText size={18} />
+            </span>
+            <div>
+              <strong>New commercial proposal</strong>
+              <span>Configure the terms before sending them to a buyer.</span>
+            </div>
           </div>
-        )}
+          <form class="quote-form" onSubmit={createQuote}>
+            <div class="quote-fields">
+              <label class="quote-deal-field">
+                <span>Deal</span>
+                <select
+                  required
+                  value={quoteDealId.value}
+                  onChange={(event) =>
+                    quoteDealId.value = event.currentTarget.value}
+                >
+                  <option value="">Select an open deal</option>
+                  {openDeals.map((deal) => (
+                    <option value={deal.id}>
+                      {detail(deal).company?.name ?? "Unknown company"} ·{" "}
+                      {statusLabel(deal.stage)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label class="quote-plan-field">
+                <span>Plan</span>
+                <select
+                  value={quoteProduct.value}
+                  onChange={(event) =>
+                    quoteProduct.value = event.currentTarget
+                      .value as DealProduct}
+                >
+                  <option value="starter">Starter · $200 + $10/seat</option>
+                  <option value="growth">Growth · $450 + $15/seat</option>
+                  <option value="scale">Scale · $800 + $25/seat</option>
+                </select>
+              </label>
+              <label>
+                <span>Billing</span>
+                <select
+                  value={quoteBilling.value}
+                  onChange={(event) =>
+                    quoteBilling.value = event.currentTarget
+                      .value as BillingCycle}
+                >
+                  <option value="monthly">Monthly</option>
+                  <option value="annual">Annual · 10% savings</option>
+                </select>
+              </label>
+              <label>
+                <span>Seats</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  required
+                  value={quoteSeats.value}
+                  onInput={(event) =>
+                    quoteSeats.value = event.currentTarget.value}
+                />
+              </label>
+              <label>
+                <span>Discount</span>
+                <div class="input-suffix">
+                  <input
+                    type="number"
+                    min="0"
+                    max="30"
+                    required
+                    value={quoteDiscount.value}
+                    onInput={(event) =>
+                      quoteDiscount.value = event.currentTarget.value}
+                  />
+                  <span>%</span>
+                </div>
+              </label>
+              <label>
+                <span>Valid for</span>
+                <div class="input-suffix">
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    required
+                    value={quoteValidDays.value}
+                    onInput={(event) =>
+                      quoteValidDays.value = event.currentTarget.value}
+                  />
+                  <span>days</span>
+                </div>
+              </label>
+            </div>
+            <aside class="quote-preview" aria-live="polite">
+              <span>Draft economics</span>
+              <strong>
+                {quotePreviewCents === undefined
+                  ? "—"
+                  : money.format(quotePreviewCents / 100)}
+                <small>MRR</small>
+              </strong>
+              <dl>
+                <div>
+                  <dt>Annualized</dt>
+                  <dd>
+                    {quotePreviewCents === undefined
+                      ? "—"
+                      : money.format(quotePreviewCents * 12 / 100)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Buyer discount</dt>
+                  <dd>{quoteTermsValid ? `${quoteDiscountPercent}%` : "—"}</dd>
+                </div>
+              </dl>
+              <button
+                type="submit"
+                class="primary full"
+                disabled={!quoteTermsValid || !quoteDealId.value}
+              >
+                <FileText size={16} />Create draft
+              </button>
+            </aside>
+          </form>
+        </div>
+        {quotes.length > 0
+          ? (
+            <div class="quote-list">
+              {quotes.map((quote) => {
+                const deal = props.game.records.deals[quote.dealId];
+                const lead = deal
+                  ? props.game.records.leads[deal.leadId]
+                  : undefined;
+                const closeRisk = deal?.stage === "negotiation" && lead
+                  ? closeLossRiskPercent(lead.engagement)
+                  : 0;
+                const company = deal
+                  ? props.game.records.companies[deal.companyId]
+                  : undefined;
+                return (
+                  <article class="quote-row">
+                    <div class="quote-identity">
+                      <span>
+                        <FileText size={17} />
+                      </span>
+                      <div>
+                        <strong>{company?.name ?? "Unknown company"}</strong>
+                        <small>
+                          Quote {quote.id.replace("quote_", "#")} · Updated{" "}
+                          {gameDate(quote.updatedAt)}
+                        </small>
+                      </div>
+                    </div>
+                    <dl class="quote-terms">
+                      <div>
+                        <dt>Plan</dt>
+                        <dd>{statusLabel(quote.product)}</dd>
+                      </div>
+                      <div>
+                        <dt>Seats</dt>
+                        <dd>{quote.seats}</dd>
+                      </div>
+                      <div>
+                        <dt>Billing</dt>
+                        <dd>{statusLabel(quote.billingCycle)}</dd>
+                      </div>
+                      <div>
+                        <dt>Discount</dt>
+                        <dd>{quote.discountPercent}%</dd>
+                      </div>
+                      <div>
+                        <dt>Valid until</dt>
+                        <dd>{gameDate(quote.validUntil)}</dd>
+                      </div>
+                    </dl>
+                    <div class="quote-value">
+                      <span>Monthly value</span>
+                      <strong>
+                        {money.format(quote.monthlyValueCents / 100)}
+                      </strong>
+                      <span class={`status ${quote.status}`}>
+                        {statusLabel(quote.status)}
+                      </span>
+                    </div>
+                    <div class="quote-actions">
+                      {quote.status === "sent" && closeRisk > 0 && (
+                        <small class="close-risk-inline">
+                          {closeRisk}% loss risk
+                        </small>
+                      )}
+                      {quote.status === "draft" && (
+                        <button
+                          type="button"
+                          class="secondary"
+                          onClick={() =>
+                            props.dispatch({
+                              type: "set_quote_status",
+                              quoteId: quote.id,
+                              status: "sent",
+                            })}
+                        >
+                          <Send size={15} />Send
+                        </button>
+                      )}
+                      {quote.status === "sent" && (
+                        <button
+                          type="button"
+                          class="primary"
+                          disabled={deal?.stage !== "negotiation"}
+                          title={deal?.stage === "negotiation"
+                            ? "Accept quote"
+                            : "Advance deal to negotiation first"}
+                          onClick={() =>
+                            props.dispatch({
+                              type: "accept_quote",
+                              quoteId: quote.id,
+                            })}
+                        >
+                          <Check size={15} />Accept
+                        </button>
+                      )}
+                      {(quote.status === "draft" || quote.status === "sent") &&
+                        (
+                          <button
+                            type="button"
+                            class="secondary"
+                            onClick={() =>
+                              props.dispatch({
+                                type: "set_quote_status",
+                                quoteId: quote.id,
+                                status: "expired",
+                              })}
+                          >
+                            Expire
+                          </button>
+                        )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )
+          : (
+            <div class="quote-empty">
+              <FileText size={22} />
+              <div>
+                <strong>No quotes yet</strong>
+                <span>
+                  Create a draft to begin negotiating commercial terms.
+                </span>
+              </div>
+            </div>
+          )}
       </section>
       {editingDeal && (
         <section class="panel deal-editor">
@@ -3053,7 +3447,7 @@ export default function CrmApp(props: CrmAppProps) {
                 ? "Forecast and manage every open deal."
                 : `${
                   money.format(DEFAULT_RULES.pipelineUnlockMrrCents / 100)
-                } MRR and ${DEFAULT_RULES.pipelineUnlockOpenDeals} open deals required.`}
+                } MRR and ${DEFAULT_RULES.pipelineUnlockCustomers} customers required.`}
             </span>
           </div>
         </div>
