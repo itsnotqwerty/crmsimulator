@@ -35,6 +35,68 @@ const LOUNGE_NOTES = [
   [98, 196, 246.94, 293.66],
   [110, 164.81, 207.65, 293.66],
 ] as const;
+const EIGHTH_NOTE_SECONDS = 60 / 78 / 2;
+
+function addMusicTone(
+  samples: Float32Array,
+  sampleRate: number,
+  frequency: number,
+  start: number,
+  duration: number,
+  level: number,
+  type: "sine" | "triangle",
+): void {
+  const frameCount = Math.ceil(duration * sampleRate);
+  const attackFrames = Math.max(1, Math.round(0.025 * sampleRate));
+  const startFrame = Math.round(start * sampleRate);
+  for (let offset = 0; offset < frameCount; offset += 1) {
+    const progress = offset / frameCount;
+    const envelope = offset < attackFrames
+      ? offset / attackFrames
+      : (1 - progress) ** 2;
+    const phase = 2 * Math.PI * frequency * offset / sampleRate;
+    const wave = type === "triangle"
+      ? 2 / Math.PI * Math.asin(Math.sin(phase))
+      : Math.sin(phase);
+    const index = (startFrame + offset) % samples.length;
+    samples[index] += wave * envelope * level;
+  }
+}
+
+export function renderMusicLoop(sampleRate: number): Float32Array {
+  const steps = LOUNGE_NOTES.length * 8;
+  const samples = new Float32Array(
+    Math.ceil(steps * EIGHTH_NOTE_SECONDS * sampleRate),
+  );
+  for (let step = 0; step < steps; step += 1) {
+    const chord = LOUNGE_NOTES[Math.floor(step / 8) % LOUNGE_NOTES.length];
+    const start = step * EIGHTH_NOTE_SECONDS;
+    addMusicTone(
+      samples,
+      sampleRate,
+      chord[step % chord.length],
+      start,
+      EIGHTH_NOTE_SECONDS * 1.6,
+      0.12,
+      "triangle",
+    );
+    if (step % 4 === 0) {
+      addMusicTone(
+        samples,
+        sampleRate,
+        chord[0] / 2,
+        start,
+        EIGHTH_NOTE_SECONDS * 2.8,
+        0.16,
+        "sine",
+      );
+    }
+  }
+  for (let index = 0; index < samples.length; index += 1) {
+    samples[index] = Math.tanh(samples[index]);
+  }
+  return samples;
+}
 
 export function musicGainForVolume(volume: number): number {
   const normalized = Math.max(0, Math.min(100, volume)) / 100;
@@ -46,9 +108,7 @@ export function musicGainForVolume(volume: number): number {
 export class SoundDesign {
   #context?: AudioContext;
   #musicGain?: GainNode;
-  #timer?: ReturnType<typeof setInterval>;
-  #nextNoteAt = 0;
-  #step = 0;
+  #musicSource?: AudioBufferSourceNode;
   #musicEnabled = false;
   #musicVolume = 35;
 
@@ -96,12 +156,7 @@ export class SoundDesign {
       this.#context.currentTime,
       0.8,
     );
-    this.#nextNoteAt = this.#context.currentTime + 0.05;
-    this.#step = 0;
-    this.#scheduleMusic();
-    if (this.#timer === undefined) {
-      this.#timer = globalThis.setInterval(() => this.#scheduleMusic(), 250);
-    }
+    this.#startMusicLoop();
   }
 
   setMusicVolume(volume: number): void {
@@ -116,12 +171,8 @@ export class SoundDesign {
   }
 
   async setPageVisible(visible: boolean): Promise<void> {
-    if (!this.#context) return;
-    if (!visible) {
-      await this.#context.suspend();
-    } else if (this.#musicEnabled) {
+    if (visible && this.#context && this.#musicEnabled) {
       await this.#context.resume();
-      this.#nextNoteAt = this.#context.currentTime + 0.05;
     }
   }
 
@@ -132,34 +183,21 @@ export class SoundDesign {
     this.#musicGain = undefined;
   }
 
-  #scheduleMusic(): void {
-    if (!this.#musicEnabled || !this.#context || !this.#musicGain) return;
-    const eighthNote = 60 / 78 / 2;
-    while (this.#nextNoteAt < this.#context.currentTime + 0.5) {
-      const chord =
-        LOUNGE_NOTES[Math.floor(this.#step / 8) % LOUNGE_NOTES.length];
-      const note = chord[this.#step % chord.length];
-      this.#playTone(
-        note,
-        this.#nextNoteAt,
-        eighthNote * 1.6,
-        0.12,
-        "triangle",
-        this.#musicGain,
-      );
-      if (this.#step % 4 === 0) {
-        this.#playTone(
-          chord[0] / 2,
-          this.#nextNoteAt,
-          eighthNote * 2.8,
-          0.16,
-          "sine",
-          this.#musicGain,
-        );
-      }
-      this.#nextNoteAt += eighthNote;
-      this.#step += 1;
-    }
+  #startMusicLoop(): void {
+    if (this.#musicSource || !this.#context || !this.#musicGain) return;
+    const samples = renderMusicLoop(this.#context.sampleRate);
+    const buffer = this.#context.createBuffer(
+      1,
+      samples.length,
+      this.#context.sampleRate,
+    );
+    buffer.getChannelData(0).set(samples);
+    const source = this.#context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(this.#musicGain);
+    source.start();
+    this.#musicSource = source;
   }
 
   #playTone(
@@ -185,10 +223,6 @@ export class SoundDesign {
   }
 
   #stopMusic(): void {
-    if (this.#timer !== undefined) {
-      clearInterval(this.#timer);
-      this.#timer = undefined;
-    }
     if (this.#context && this.#musicGain) {
       this.#musicGain.gain.cancelScheduledValues(this.#context.currentTime);
       this.#musicGain.gain.setTargetAtTime(
