@@ -289,7 +289,8 @@ victory state.
 - [x] Add recurring operational incidents and resilience investments.
 - [x] Add simulated roles, permissions, and approval workflows without real
       auth.
-- [x] Add quarterly planning and efficiency targets.
+- [x] Add automatic 30-day operating reviews with growth, efficiency, and
+      retention targets that affect cash rewards and burnout pressure.
 - [x] Add advanced data hygiene, audit summaries, and archive controls.
 - [x] Add escalating endless goals for growth, efficiency, retention, and
       resilience.

@@ -2105,6 +2105,54 @@ td small {
   white-space: nowrap;
 }
 
+.operations-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.operations-plan-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 17px;
+  border-right: 1px solid var(--line);
+}
+
+.operations-plan-grid > div:last-child {
+  border-right: 0;
+}
+
+.operations-plan-grid span,
+.operations-plan-grid small,
+.operations-plan-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.operations-plan-grid strong {
+  font-size: 22px;
+}
+
+.operations-plan-grid b {
+  width: fit-content;
+  font-size: 12px;
+}
+
+.operations-plan-grid .target-met b {
+  color: var(--green-dark);
+}
+
+.operations-plan-grid .target-open b {
+  color: var(--coral);
+}
+
+.operations-plan-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 17px;
+}
+
 @media (max-width: 900px) {
   .operations-manager-form {
     grid-template-columns: 1fr 1fr;
@@ -2141,6 +2189,25 @@ td small {
   .operations-manager-metric:nth-of-type(3),
   .operations-manager-decision {
     grid-column: 2 / 3;
+  }
+
+  .operations-plan-panel .panel-heading,
+  .operations-plan-note {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .operations-plan-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .operations-plan-grid > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .operations-plan-grid > div:last-child {
+    border-bottom: 0;
   }
 }
 

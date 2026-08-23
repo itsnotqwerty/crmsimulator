@@ -101,7 +101,9 @@ export type ActivityKind =
   | "campaign_paused"
   | "campaign_resumed"
   | "campaign_completed"
-  | "campaign_archived";
+  | "campaign_archived"
+  | "quarter_completed"
+  | "operating_goal_reached";
 export type AutomationTrigger =
   | "lead_created"
   | "lead_contacted"
@@ -643,14 +645,7 @@ export type GameCommand =
   }
   | { type: "fire_manager"; department: ManagerDepartment }
   | { type: "set_approval_threshold"; amountCents: number }
-  | {
-    type: "set_quarterly_plan";
-    growthTargetCents: number;
-    efficiencyTargetPercent: number;
-    retentionTargetPercent: number;
-  }
   | { type: "invest_resilience" }
-  | { type: "advance_endless_goal" }
   | { type: "acknowledge_narrative" }
   | { type: "resume_crisis" }
   | { type: "new_company"; seed: number; now: number; companyName?: string };

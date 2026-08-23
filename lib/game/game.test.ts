@@ -546,10 +546,60 @@ Deno.test("mature operations enforce plans and escalating goals", () => {
     type: "hire_department_staff",
     departmentId: "department_1",
   }).state;
-  const goal = applyCommand(state, { type: "advance_endless_goal" });
-  assert(goal.accepted);
-  assertEquals(goal.state.platform.departments[0].headcount, 2);
-  assertEquals(goal.state.platform.endlessGoal, 2);
+  state = advanceGame(state, 10).state;
+  assertEquals(state.platform.departments[0].headcount, 2);
+  assertEquals(state.platform.endlessGoal, 2);
+});
+
+Deno.test("quarters close automatically with target rewards", () => {
+  const initial = createInitialState({ seed: 561, now: 1_000 });
+  const state: GameState = {
+    ...initial,
+    clock: { ...initial.clock, gameMinute: 30 * 24 * 60 - 10 },
+    company: {
+      ...initial.company,
+      mrrCents: 1_000_000,
+      customerCount: 1,
+    },
+    platform: {
+      ...initial.platform,
+      growthTargetCents: 500_000,
+      efficiencyTargetPercent: 50,
+      retentionTargetPercent: 90,
+    },
+  };
+
+  const advanced = advanceGame(state, 10);
+  const quarterEvent = advanced.events.find((event) =>
+    event.kind === "quarter_completed"
+  );
+  assert(quarterEvent);
+  assertEquals(quarterEvent.amountCents, 750_000);
+  assertEquals(advanced.state.platform.quarter, 2);
+  assert(advanced.state.platform.growthTargetCents > 500_000);
+  assertEquals(advanced.state.platform.endlessGoal, 2);
+});
+
+Deno.test("resilience reduces automatic quarter miss pressure", () => {
+  let state: GameState = {
+    ...createInitialState({ seed: 562, now: 1_000 }),
+    clock: { gameMinute: 30 * 24 * 60 - 10, status: "active" },
+    unlocks: ["pipeline"],
+  };
+  state = applyCommand(state, {
+    type: "hire_sales_rep",
+    name: "Avery Chen",
+    level: "mid",
+    territory: "all",
+    monthlyTargetCents: 1_500_000,
+  }).state;
+  state = {
+    ...state,
+    platform: { ...state.platform, resilienceLevel: 2 },
+  };
+
+  const advanced = advanceGame(state, 10).state;
+  assertEquals(advanced.records.salesReps.sales_rep_1.burnout, 6);
 });
 
 Deno.test("operations hires one manager per unlocked department", () => {

@@ -2,6 +2,7 @@ import { projectEvents } from "./events.ts";
 import { syncNarrative } from "./narrative.ts";
 import type {
   CommandResult,
+  DomainEvent,
   GameCommand,
   GameRules,
   GameState,
@@ -31,6 +32,47 @@ function accept(
 }
 const clean = (value: string) => value.trim().replaceAll(/\s+/g, " ");
 const MANAGER_MONTHLY_SALARY_CENTS = 1_200_000;
+const QUARTER_MINUTES = 30 * 24 * 60;
+const TARGET_REWARD_CENTS = 250_000;
+
+export interface OperatingMetrics {
+  mrrCents: number;
+  efficiencyPercent: number;
+  retentionPercent: number;
+  monthlyOperatingCostCents: number;
+}
+
+export function operatingMetrics(state: GameState): OperatingMetrics {
+  const payrollCents = [
+    ...Object.values(state.records.salesReps),
+    ...Object.values(state.records.successReps),
+    ...Object.values(state.records.supportReps),
+    ...state.platform.managers,
+  ].reduce((total, staff) => total + staff.monthlySalaryCents, 0);
+  const campaignRunRateCents = Object.values(state.records.campaigns).filter(
+    (campaign) => campaign.status === "active",
+  ).reduce((total, campaign) => total + campaign.dailyBudgetCents * 30, 0);
+  const monthlyOperatingCostCents = state.company.baselineMonthlyExpensesCents +
+    payrollCents +
+    campaignRunRateCents;
+  const retained = state.company.customerCount;
+  const retentionBase = retained + state.history.customersLost;
+  return {
+    mrrCents: state.company.mrrCents,
+    efficiencyPercent: monthlyOperatingCostCents > 0
+      ? Math.round(state.company.mrrCents / monthlyOperatingCostCents * 100)
+      : 100,
+    retentionPercent: retentionBase > 0
+      ? Math.round(retained / retentionBase * 100)
+      : 100,
+    monthlyOperatingCostCents,
+  };
+}
+
+export function quarterDaysRemaining(gameMinute: number): number {
+  const elapsed = gameMinute % QUARTER_MINUTES;
+  return Math.ceil((QUARTER_MINUTES - elapsed) / (24 * 60));
+}
 
 export function applyPlatformCommand(
   state: GameState,
@@ -307,27 +349,6 @@ export function applyPlatformCommand(
         rules,
         "Approval policy updated",
       );
-    case "set_quarterly_plan":
-      if (
-        command.growthTargetCents < 1 || command.efficiencyTargetPercent < 1 ||
-        command.efficiencyTargetPercent > 100 ||
-        command.retentionTargetPercent < 1 ||
-        command.retentionTargetPercent > 100
-      ) return reject(state, "Quarterly targets are invalid");
-      return accept(
-        {
-          ...state,
-          platform: {
-            ...platform,
-            quarter: platform.quarter + 1,
-            growthTargetCents: command.growthTargetCents,
-            efficiencyTargetPercent: command.efficiencyTargetPercent,
-            retentionTargetPercent: command.retentionTargetPercent,
-          },
-        },
-        rules,
-        "Quarterly plan approved",
-      );
     case "invest_resilience": {
       const cost = (platform.resilienceLevel + 1) * 100_000;
       if (state.company.cashCents < cost) {
@@ -349,47 +370,136 @@ export function applyPlatformCommand(
         "Operational resilience improved",
       );
     }
-    case "advance_endless_goal":
-      if (state.company.mrrCents < platform.endlessGoal * 1_000_000) {
-        return reject(state, "Current growth goal has not been reached");
-      }
-      return accept(
-        {
-          ...state,
-          platform: { ...platform, endlessGoal: platform.endlessGoal + 1 },
-        },
-        rules,
-        "Next operating goal unlocked",
-      );
     default:
       return undefined;
   }
+}
+
+function applyBurnoutPressure(state: GameState, pressure: number): GameState {
+  if (pressure === 0) return state;
+  const addPressure = <T extends { burnout: number }>(staff: T): T => ({
+    ...staff,
+    burnout: Math.min(100, staff.burnout + pressure),
+  });
+  return {
+    ...state,
+    records: {
+      ...state.records,
+      salesReps: Object.fromEntries(
+        Object.entries(state.records.salesReps).map(([id, rep]) => [
+          id,
+          addPressure(rep),
+        ]),
+      ),
+      successReps: Object.fromEntries(
+        Object.entries(state.records.successReps).map(([id, rep]) => [
+          id,
+          addPressure(rep),
+        ]),
+      ),
+      supportReps: Object.fromEntries(
+        Object.entries(state.records.supportReps).map(([id, rep]) => [
+          id,
+          addPressure(rep),
+        ]),
+      ),
+    },
+  };
 }
 
 export function advancePlatform(
   state: GameState,
   startMinute: number,
   endMinute: number,
-): GameState {
-  if (Math.floor(startMinute / 1_440) === Math.floor(endMinute / 1_440)) {
-    return state;
+): { state: GameState; events: DomainEvent[] } {
+  let current = state;
+  const events: DomainEvent[] = [];
+  if (Math.floor(startMinute / 1_440) !== Math.floor(endMinute / 1_440)) {
+    current = {
+      ...current,
+      platform: {
+        ...current.platform,
+        departments: current.platform.departments.map((department) => ({
+          ...department,
+          burnout: Math.max(
+            0,
+            Math.min(
+              100,
+              department.burnout +
+                (department.headcount < department.headcountPlan ? 2 : -1),
+            ),
+          ),
+        })),
+      },
+    };
   }
-  const departments = state.platform.departments.map((department) => ({
-    ...department,
-    burnout: Math.max(
+
+  while (
+    current.company.mrrCents >= current.platform.endlessGoal * 1_000_000
+  ) {
+    const reachedGoal = current.platform.endlessGoal;
+    current = {
+      ...current,
+      platform: {
+        ...current.platform,
+        endlessGoal: reachedGoal + 1,
+      },
+    };
+    events.push({
+      kind: "operating_goal_reached",
+      summary: `$${reachedGoal * 10_000} MRR operating goal reached`,
+      gameMinute: endMinute,
+    });
+  }
+
+  const quartersCrossed = Math.floor(endMinute / QUARTER_MINUTES) -
+    Math.floor(startMinute / QUARTER_MINUTES);
+  for (let index = 0; index < quartersCrossed; index += 1) {
+    const metrics = operatingMetrics(current);
+    const targetsMet = [
+      metrics.mrrCents >= current.platform.growthTargetCents,
+      metrics.efficiencyPercent >= current.platform.efficiencyTargetPercent,
+      metrics.retentionPercent >= current.platform.retentionTargetPercent,
+    ];
+    const score = targetsMet.filter(Boolean).length;
+    const rewardCents = score * TARGET_REWARD_CENTS;
+    const misses = targetsMet.length - score;
+    const pressure = misses * Math.max(
       0,
-      Math.min(
-        100,
-        department.burnout +
-          (department.headcount < department.headcountPlan ? 2 : -1),
-      ),
-    ),
-  }));
-  return {
-    ...state,
-    platform: {
-      ...state.platform,
-      departments,
-    },
-  };
+      5 - current.platform.resilienceLevel,
+    );
+    current = applyBurnoutPressure(current, pressure);
+    const nextGrowthTarget = Math.max(
+      current.platform.growthTargetCents + 250_000,
+      Math.ceil(current.company.mrrCents * 1.15 / 50_000) * 50_000,
+    );
+    current = {
+      ...current,
+      company: {
+        ...current.company,
+        cashCents: current.company.cashCents + rewardCents,
+      },
+      platform: {
+        ...current.platform,
+        quarter: current.platform.quarter + 1,
+        growthTargetCents: nextGrowthTarget,
+        efficiencyTargetPercent: targetsMet[1]
+          ? Math.min(100, current.platform.efficiencyTargetPercent + 2)
+          : Math.max(50, current.platform.efficiencyTargetPercent - 2),
+        retentionTargetPercent: targetsMet[2]
+          ? Math.min(99, current.platform.retentionTargetPercent + 1)
+          : Math.max(75, current.platform.retentionTargetPercent - 1),
+        auditEntriesArchived: current.platform.auditEntriesArchived + 1,
+      },
+    };
+    events.push({
+      kind: "quarter_completed",
+      summary: `Q${
+        current.platform.quarter - 1
+      } closed: ${score}/3 targets met`,
+      gameMinute: endMinute,
+      amountCents: rewardCents,
+    });
+  }
+  return { state: current, events };
 }

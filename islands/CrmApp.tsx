@@ -45,6 +45,10 @@ import {
   quoteMonthlyValueCents,
 } from "../lib/game/actions.ts";
 import { campaignSaturation } from "../lib/game/simulation.ts";
+import {
+  operatingMetrics,
+  quarterDaysRemaining,
+} from "../lib/game/platform.ts";
 import { analyticsReport, retentionReport } from "../lib/game/reports.ts";
 import {
   NARRATIVE_CHAPTERS,
@@ -1236,6 +1240,8 @@ function PlatformWorkspace(props: {
     );
   }
   if (props.mode === "operations") {
+    const operating = operatingMetrics(props.game);
+    const daysRemaining = quarterDaysRemaining(props.game.clock.gameMinute);
     const marketing = platform.departments.find((department) =>
       department.id === "department_marketing"
     );
@@ -1432,30 +1438,15 @@ function PlatformWorkspace(props: {
             })}
           </div>
         </section>
-        <section class="panel">
+        <section class="panel operations-plan-panel">
           <div class="panel-heading">
             <div>
-              <h2>Planning and controls</h2>
+              <h2>Quarterly operating plan</h2>
               <span>
-                Approvals above{" "}
-                {money.format(platform.approvalThresholdCents / 100)}
+                Closes automatically in {daysRemaining} day
+                {daysRemaining === 1 ? "" : "s"}
               </span>
             </div>
-          </div>
-          <div class="customer-actions">
-            <button
-              class="secondary"
-              type="button"
-              onClick={() =>
-                props.dispatch({
-                  type: "set_quarterly_plan",
-                  growthTargetCents: platform.growthTargetCents + 250_000,
-                  efficiencyTargetPercent: platform.efficiencyTargetPercent,
-                  retentionTargetPercent: platform.retentionTargetPercent,
-                })}
-            >
-              <Target size={15} />Approve next quarter
-            </button>
             <button
               class="secondary"
               type="button"
@@ -1463,13 +1454,45 @@ function PlatformWorkspace(props: {
             >
               <Gauge size={15} />Invest in resilience
             </button>
-            <button
-              class="primary"
-              type="button"
-              onClick={() => props.dispatch({ type: "advance_endless_goal" })}
-            >
-              <ChevronRight size={15} />Claim goal
-            </button>
+          </div>
+          <div class="operations-plan-grid">
+            {[
+              [
+                "MRR",
+                money.format(operating.mrrCents / 100),
+                money.format(platform.growthTargetCents / 100),
+                operating.mrrCents >= platform.growthTargetCents,
+              ],
+              [
+                "Efficiency",
+                `${operating.efficiencyPercent}%`,
+                `${platform.efficiencyTargetPercent}%`,
+                operating.efficiencyPercent >=
+                  platform.efficiencyTargetPercent,
+              ],
+              [
+                "Retention",
+                `${operating.retentionPercent}%`,
+                `${platform.retentionTargetPercent}%`,
+                operating.retentionPercent >= platform.retentionTargetPercent,
+              ],
+            ].map(([label, current, target, met]) => (
+              <div class={met ? "target-met" : "target-open"} key={label}>
+                <span>{label}</span>
+                <strong>{current}</strong>
+                <small>Target {target}</small>
+                <b>{met ? "On target" : "Needs attention"}</b>
+              </div>
+            ))}
+          </div>
+          <div class="operations-plan-note">
+            <span>$2,500 cash for each target met</span>
+            <span>
+              Miss pressure reduction: {Math.min(
+                platform.resilienceLevel,
+                5,
+              )} burnout per target
+            </span>
           </div>
         </section>
       </>

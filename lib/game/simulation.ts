@@ -763,7 +763,9 @@ function processStep(
   const sequenced = advanceSequences(nextState, startMinute, endMinute);
   nextState = sequenced.state;
   events.push(...sequenced.events);
-  nextState = advancePlatform(nextState, startMinute, endMinute);
+  const platformAdvanced = advancePlatform(nextState, startMinute, endMinute);
+  nextState = platformAdvanced.state;
+  events.push(...platformAdvanced.events);
 
   if (nextCashCents < nextState.company.bankruptcyThresholdCents) {
     const bankruptcyEvent: DomainEvent = {
