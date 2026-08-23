@@ -1973,13 +1973,15 @@ td small {
   min-width: 1160px;
 }
 
-.customer-portfolio-scroll {
+.customer-portfolio-scroll,
+.support-ticket-scroll {
   max-height: min(68dvh, 720px);
   overflow: auto;
   overscroll-behavior: contain;
 }
 
-.customer-portfolio-scroll th {
+.customer-portfolio-scroll th,
+.support-ticket-scroll th {
   position: sticky;
   z-index: 1;
   top: 0;

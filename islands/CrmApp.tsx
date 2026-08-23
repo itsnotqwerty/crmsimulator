@@ -818,7 +818,7 @@ function CustomerSuccessWorkspace(props: {
             />
           )
           : (
-            <div class="table-scroll">
+            <div class="table-scroll support-ticket-scroll">
               <table class="support-table">
                 <thead>
                   <tr>
