@@ -306,6 +306,54 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       },
     };
   },
+  24: (save) => {
+    const records = save.records as Record<string, unknown>;
+    const customers = records.customers as Record<
+      string,
+      Record<string, unknown>
+    >;
+    return {
+      ...save,
+      records: {
+        ...records,
+        customers: Object.fromEntries(
+          Object.entries(customers).map(([id, customer]) => [
+            id,
+            { ...customer, accountPlan: "balanced" },
+          ]),
+        ),
+      },
+    };
+  },
+  25: (save) => {
+    const records = save.records as Record<string, unknown>;
+    const campaigns = records.campaigns as Record<
+      string,
+      Record<string, unknown>
+    >;
+    return {
+      ...save,
+      records: {
+        ...records,
+        campaigns: Object.fromEntries(
+          Object.entries(campaigns).map(([id, campaign]) => [
+            id,
+            { ...campaign, objective: "balanced" },
+          ]),
+        ),
+      },
+    };
+  },
+  26: (save) => ({
+    ...save,
+    platform: {
+      ...(save.platform as Record<string, unknown>),
+      initiativeSequence: 0,
+      initiatives: [],
+      initiativesCompleted: 0,
+      quarterInitiativeCompleted: false,
+    },
+  }),
 };
 
 export function migrateGameState(value: unknown): GameState {

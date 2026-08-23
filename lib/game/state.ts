@@ -16,6 +16,8 @@ export const DEFAULT_RULES: GameRules = {
   leadArrivalIntervalMinutes: 4 * 60,
   prospectingCapacityMinutes: 45,
   leadCoolingMinutes: 3 * 24 * 60,
+  safeCloseIntent: 70,
+  maximumCloseLossChancePercent: 95,
   capacityResetIntervalMinutes: 24 * 60,
   billingIntervalMinutes: 30 * 24 * 60,
   maxRecentActivities: 100,
@@ -194,6 +196,10 @@ export function createInitialState(options: InitialStateOptions): GameState {
       retentionTargetPercent: 90,
       resilienceLevel: 0,
       endlessGoal: 1,
+      initiativeSequence: 0,
+      initiatives: [],
+      initiativesCompleted: 0,
+      quarterInitiativeCompleted: false,
     },
   };
 }
@@ -270,7 +276,11 @@ export function validateGameState(state: GameState): ValidationResult {
   if (
     state.platform.sequences.length > 12 ||
     state.platform.workflows.length > 20 ||
-    state.platform.departments.length > 8
+    state.platform.departments.length > 8 ||
+    state.platform.initiatives.length > 4 ||
+    state.platform.initiatives.filter((initiative) =>
+        initiative.status === "active"
+      ).length > 1
   ) {
     issue(issues, "platform", "Platform collection limit exceeded");
   }

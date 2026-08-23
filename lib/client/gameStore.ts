@@ -14,6 +14,8 @@ export function useGameStore(initial: GameState) {
   const game = useSignal(initial);
   const now = useSignal(initial.lastSimulatedAt);
   const saveStatus = useSignal<SaveStatus>("saved");
+  const lastSuccessfulSaveAt = useSignal<number | undefined>(initial.savedAt);
+  const consecutiveSaveFailures = useSignal(0);
   const operationStatus = useSignal<OperationStatus>("idle");
   const notice = useSignal<string | undefined>(undefined);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -22,6 +24,20 @@ export function useGameStore(initial: GameState) {
   const saving = useRef(false);
   const queued = useRef(false);
   const mounted = useRef(true);
+  const saveGeneration = useRef(0);
+  const saveFailureNotice = useRef<string | undefined>(undefined);
+
+  const recordSaveSuccess = (savedAt: number) => {
+    lastSuccessfulSaveAt.value = savedAt;
+    consecutiveSaveFailures.value = 0;
+    if (
+      saveFailureNotice.current !== undefined &&
+      notice.value === saveFailureNotice.current
+    ) {
+      notice.value = undefined;
+    }
+    saveFailureNotice.current = undefined;
+  };
 
   const saveNow = async () => {
     if (saving.current) {
@@ -34,6 +50,7 @@ export function useGameStore(initial: GameState) {
     saveStatus.value = "saving";
     const snapshot = compactGameState(game.value, DEFAULT_RULES);
     game.value = snapshot;
+    const generation = saveGeneration.current;
     try {
       const response = await fetch("/", {
         method: "POST",
@@ -42,17 +59,24 @@ export function useGameStore(initial: GameState) {
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Save failed");
-      if (!mounted.current) return;
-      game.value = {
-        ...game.value,
-        revision: body.game.revision,
-        savedAt: body.game.savedAt,
-      };
+      if (!mounted.current || generation !== saveGeneration.current) return;
+      game.value = queued.current
+        ? {
+          ...compactGameState(game.value, DEFAULT_RULES),
+          revision: body.game.revision,
+          savedAt: body.game.savedAt,
+        }
+        : body.game;
+      recordSaveSuccess(body.game.savedAt);
       saveStatus.value = queued.current ? "unsaved" : "saved";
     } catch (error) {
-      if (!mounted.current) return;
+      if (!mounted.current || generation !== saveGeneration.current) return;
       saveStatus.value = "error";
-      notice.value = error instanceof Error ? error.message : "Save failed";
+      consecutiveSaveFailures.value++;
+      saveFailureNotice.current = error instanceof Error
+        ? error.message
+        : "Save failed";
+      notice.value = saveFailureNotice.current;
     } finally {
       saving.current = false;
       if (queued.current && mounted.current) {
@@ -66,6 +90,10 @@ export function useGameStore(initial: GameState) {
   const queueSave = () => {
     saveStatus.value = "unsaved";
     if (saveTimer.current !== undefined) clearTimeout(saveTimer.current);
+    if (saving.current) {
+      queued.current = true;
+      return;
+    }
     saveTimer.current = globalThis.setTimeout(() => void saveNow(), 500);
   };
 
@@ -139,8 +167,10 @@ export function useGameStore(initial: GameState) {
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Reset failed");
+      saveGeneration.current++;
       game.value = body.game;
       now.value = body.game.lastSimulatedAt;
+      recordSaveSuccess(body.game.savedAt);
       saveStatus.value = "unsaved";
       queueSave();
     } finally {
@@ -158,8 +188,12 @@ export function useGameStore(initial: GameState) {
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Import failed");
+      saveGeneration.current++;
+      queued.current = false;
+      if (saveTimer.current !== undefined) clearTimeout(saveTimer.current);
       game.value = body.game;
       now.value = body.game.lastSimulatedAt;
+      recordSaveSuccess(body.game.savedAt);
       saveStatus.value = "saved";
     } finally {
       operationStatus.value = "idle";
@@ -217,6 +251,8 @@ export function useGameStore(initial: GameState) {
     game,
     now,
     saveStatus,
+    lastSuccessfulSaveAt,
+    consecutiveSaveFailures,
     operationStatus,
     notice,
     dispatch,

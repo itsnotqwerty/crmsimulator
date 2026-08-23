@@ -44,12 +44,19 @@ import {
   closeLossRiskPercent,
   quoteMonthlyValueCents,
 } from "../lib/game/actions.ts";
+import { selectGuidance } from "../lib/game/guidance.ts";
 import { campaignSaturation } from "../lib/game/simulation.ts";
 import {
+  INITIATIVE_DEFINITIONS,
+  initiativeDefinition,
   operatingMetrics,
   quarterDaysRemaining,
 } from "../lib/game/platform.ts";
-import { analyticsReport, retentionReport } from "../lib/game/reports.ts";
+import {
+  analyticsReport,
+  campaignOutcomeSummary,
+  retentionReport,
+} from "../lib/game/reports.ts";
 import {
   NARRATIVE_CHAPTERS,
   narrativeObjectives,
@@ -62,12 +69,16 @@ import type {
   BillingCycle,
   CampaignAudience,
   CampaignChannel,
+  CampaignObjective,
   ColorPalette,
+  CustomerAccountPlan,
   Deal,
   DealLossReason,
+  DealNegotiationApproach,
   DealProduct,
   GameCommand,
   GameState,
+  InitiativeType,
   Lead,
   ManagerDepartment,
   SalesRepLevel,
@@ -75,6 +86,7 @@ import type {
   Task,
   TicketChannel,
   TicketPriority,
+  TicketResolutionApproach,
 } from "../lib/game/types.ts";
 import { DEFAULT_RULES } from "../lib/game/state.ts";
 import type { LoadStatus } from "../lib/server/root.ts";
@@ -132,6 +144,16 @@ function statusLabel(value: string): string {
     /^./,
     (letter) => letter.toUpperCase(),
   );
+}
+
+function savedAtLabel(savedAt: number | undefined, now: number): string {
+  if (savedAt === undefined) return "Not saved yet";
+  const elapsedMinutes = Math.max(0, Math.floor((now - savedAt) / 60_000));
+  if (elapsedMinutes < 1) return "Saved just now";
+  if (elapsedMinutes < 60) return `Saved ${elapsedMinutes}m ago`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `Saved ${elapsedHours}h ago`;
+  return `Saved ${Math.floor(elapsedHours / 24)}d ago`;
 }
 
 function initials(value: string): string {
@@ -432,6 +454,160 @@ const PIPELINE_STAGES = [
   "evaluation",
   "negotiation",
 ] as const;
+
+const CUSTOMER_ACCOUNT_PLANS: ReadonlyArray<{
+  value: CustomerAccountPlan;
+  label: string;
+}> = [
+  { value: "balanced", label: "Balanced" },
+  { value: "adoption", label: "Adoption" },
+  { value: "relationship", label: "Relationship" },
+  { value: "expansion", label: "Expansion" },
+  { value: "stabilization", label: "Stabilization" },
+];
+
+const DEAL_NEGOTIATION_CHOICES: ReadonlyArray<{
+  value: DealNegotiationApproach;
+  label: string;
+  consequence: string;
+}> = [
+  {
+    value: "discount",
+    label: "Offer discount",
+    consequence:
+      "30m capacity · +18 close momentum · −15% MRR · weaker starting health",
+  },
+  {
+    value: "value_proof",
+    label: "Prove the value",
+    consequence:
+      "90m capacity · $150 spend · +12 forecast · +5% MRR · healthier account",
+  },
+  {
+    value: "pilot",
+    label: "Run paid pilot",
+    consequence:
+      "60m capacity · $400 spend · +22 forecast · −5% MRR · lowest account risk",
+  },
+];
+
+const TICKET_RESOLUTION_CHOICES: ReadonlyArray<{
+  value: TicketResolutionApproach;
+  label: string;
+  consequence: string;
+}> = [
+  {
+    value: "fast_workaround",
+    label: "Fast workaround",
+    consequence:
+      "15m capacity · lower quality and health · creates follow-up debt",
+  },
+  {
+    value: "thorough_fix",
+    label: "Thorough fix",
+    consequence:
+      "90m capacity · $100 spend · highest quality and health · low recurrence",
+  },
+  {
+    value: "specialist_escalation",
+    label: "Escalate specialist",
+    consequence:
+      "30m capacity · $350 spend · strong quality · reduced recurrence risk",
+  },
+];
+
+function DealNegotiationControls(props: {
+  dealId: string;
+  capacity: number;
+  cashCents: number;
+  dispatch: (command: GameCommand) => void;
+}) {
+  return (
+    <div class="decision-fork" aria-label="Negotiation approach">
+      <div>
+        <strong>Choose negotiation approach</strong>
+        <span>The decision closes the deal and shapes the new account.</span>
+      </div>
+      <div class="decision-options">
+        {DEAL_NEGOTIATION_CHOICES.map((choice) => {
+          const capacity = choice.value === "discount"
+            ? 30
+            : choice.value === "value_proof"
+            ? 90
+            : 60;
+          const cash = choice.value === "value_proof"
+            ? 15_000
+            : choice.value === "pilot"
+            ? 40_000
+            : 0;
+          return (
+            <button
+              type="button"
+              class="decision-option"
+              disabled={props.capacity < capacity || props.cashCents < cash}
+              onClick={() =>
+                props.dispatch({
+                  type: "negotiate_deal",
+                  dealId: props.dealId,
+                  approach: choice.value,
+                })}
+            >
+              <strong>{choice.label}</strong>
+              <span>{choice.consequence}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TicketResolutionControls(props: {
+  ticketId: string;
+  title: string;
+  capacity: number;
+  cashCents: number;
+  dispatch: (command: GameCommand) => void;
+}) {
+  return (
+    <article class="decision-fork ticket-decision">
+      <div>
+        <strong>{props.title}</strong>
+        <span>Choose how support resolves this acknowledged ticket.</span>
+      </div>
+      <div class="decision-options">
+        {TICKET_RESOLUTION_CHOICES.map((choice) => {
+          const capacity = choice.value === "fast_workaround"
+            ? 15
+            : choice.value === "thorough_fix"
+            ? 90
+            : 30;
+          const cash = choice.value === "thorough_fix"
+            ? 10_000
+            : choice.value === "specialist_escalation"
+            ? 35_000
+            : 0;
+          return (
+            <button
+              type="button"
+              class="decision-option"
+              disabled={props.capacity < capacity || props.cashCents < cash}
+              onClick={() =>
+                props.dispatch({
+                  type: "resolve_ticket_with_approach",
+                  ticketId: props.ticketId,
+                  approach: choice.value,
+                })}
+            >
+              <strong>{choice.label}</strong>
+              <span>{choice.consequence}</span>
+            </button>
+          );
+        })}
+      </div>
+    </article>
+  );
+}
 
 function CustomerSuccessWorkspace(props: {
   game: GameState;
@@ -811,6 +987,21 @@ function CustomerSuccessWorkspace(props: {
             <Inbox size={16} />Create ticket
           </button>
         </form>
+        {tickets.some((ticket) => ticket.status === "acknowledged") && (
+          <div class="ticket-decision-list" aria-label="Ticket details">
+            {tickets.filter((ticket) =>
+              ticket.status === "acknowledged"
+            ).map((ticket) => (
+              <TicketResolutionControls
+                ticketId={ticket.id}
+                title={ticket.title}
+                capacity={props.game.company.founderCapacityRemaining}
+                cashCents={props.game.company.cashCents}
+                dispatch={props.dispatch}
+              />
+            ))}
+          </div>
+        )}
         {tickets.length === 0
           ? (
             <EmptyState
@@ -846,7 +1037,7 @@ function CustomerSuccessWorkspace(props: {
                       ? ticket.responseDueAt
                       : ticket.resolutionDueAt;
                     return (
-                      <tr>
+                      <tr id={`record-${ticket.id}`} tabIndex={-1}>
                         <td>
                           <strong>{ticket.title}</strong>
                           <small>{ticket.id}</small>
@@ -901,19 +1092,6 @@ function CustomerSuccessWorkspace(props: {
                                   })}
                               >
                                 <Check size={15} />Acknowledge
-                              </button>
-                            )}
-                            {ticket.status === "acknowledged" && (
-                              <button
-                                type="button"
-                                class="primary"
-                                onClick={() =>
-                                  props.dispatch({
-                                    type: "resolve_ticket",
-                                    ticketId: ticket.id,
-                                  })}
-                              >
-                                <Check size={15} />Resolve
                               </button>
                             )}
                             {ticket.status !== "resolved" &&
@@ -1026,6 +1204,7 @@ function CustomerSuccessWorkspace(props: {
                     <th>Health</th>
                     <th>Adoption</th>
                     <th>MRR</th>
+                    <th>Plan</th>
                     <th>Owner</th>
                     <th>Renewal</th>
                     <th>NPS</th>
@@ -1041,7 +1220,7 @@ function CustomerSuccessWorkspace(props: {
                     const expansionReady = customer.lifecycle === "active" &&
                       customer.health >= 70 && customer.adoption >= 70;
                     return (
-                      <tr>
+                      <tr id={`record-${customer.id}`} tabIndex={-1}>
                         <td>
                           <strong>{company?.name ?? "Unknown company"}</strong>
                           <small>{customer.expansions} expansions</small>
@@ -1060,6 +1239,25 @@ function CustomerSuccessWorkspace(props: {
                         <td>{customer.adoption}%</td>
                         <td>
                           {money.format(customer.monthlyValueCents / 100)}
+                        </td>
+                        <td>
+                          <select
+                            aria-label={`Account plan for ${
+                              company?.name ?? "account"
+                            }`}
+                            value={customer.accountPlan}
+                            onChange={(event) =>
+                              props.dispatch({
+                                type: "set_customer_plan",
+                                customerId: customer.id,
+                                accountPlan: event.currentTarget
+                                  .value as CustomerAccountPlan,
+                              })}
+                          >
+                            {CUSTOMER_ACCOUNT_PLANS.map((plan) => (
+                              <option value={plan.value}>{plan.label}</option>
+                            ))}
+                          </select>
                         </td>
                         <td>
                           <select
@@ -1198,6 +1396,7 @@ function PlatformWorkspace(props: {
   const condition = useSignal<AutomationCondition>("all");
   const action = useSignal<AutomationAction>("create_task");
   const managerDepartment = useSignal<ManagerDepartment>("sales");
+  const initiativeType = useSignal<InitiativeType>("growth");
   const report = analyticsReport(props.game);
   const platform = props.game.platform;
   if (props.mode === "analytics") {
@@ -1246,6 +1445,12 @@ function PlatformWorkspace(props: {
     const marketing = platform.departments.find((department) =>
       department.id === "department_marketing"
     );
+    const activeInitiative = platform.initiatives.find((initiative) =>
+      initiative.status === "active"
+    );
+    const recentInitiatives = platform.initiatives.filter((initiative) =>
+      initiative.status === "completed"
+    ).slice(-3).reverse();
     const managerDepartments: Array<{
       id: ManagerDepartment;
       label: string;
@@ -1324,6 +1529,139 @@ function PlatformWorkspace(props: {
             <strong>{money.format(platform.endlessGoal * 10_000)}</strong>
           </div>
         </div>
+        <section class="panel initiative-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Company initiatives</h2>
+              <span>
+                One active project · {platform.initiativesCompleted}{" "}
+                completed · rewards scale with the endless goal
+              </span>
+            </div>
+          </div>
+          {activeInitiative
+            ? (() => {
+              const definition = initiativeDefinition(activeInitiative.type);
+              const nextMilestone = activeInitiative.decisions.length;
+              const ready = activeInitiative.promptedMilestone > nextMilestone;
+              return (
+                <div class="initiative-active">
+                  <div>
+                    <span class="status-chip active">Active</span>
+                    <h3>{definition.name}</h3>
+                    <p>{definition.summary}</p>
+                    <small>
+                      Milestone {Math.min(3, nextMilestone + 1)} of 3 ·{" "}
+                      {Math.max(
+                        0,
+                        Math.ceil(
+                          (activeInitiative.milestoneAt[
+                            Math.min(2, nextMilestone)
+                          ] - props.game.clock.gameMinute) / 1_440,
+                        ),
+                      )} days remaining
+                    </small>
+                  </div>
+                  <div class="initiative-progress">
+                    {[0, 1, 2].map((index) => (
+                      <span
+                        class={index < activeInitiative.decisions.length
+                          ? "complete"
+                          : index === nextMilestone
+                          ? "current"
+                          : ""}
+                        key={index}
+                      >
+                        {index + 1}
+                      </span>
+                    ))}
+                  </div>
+                  {ready
+                    ? (
+                      <div class="initiative-decisions">
+                        <button
+                          class="primary"
+                          type="button"
+                          onClick={() =>
+                            props.dispatch({
+                              type: "decide_initiative_milestone",
+                              initiativeId: activeInitiative.id,
+                              approach: "accelerate",
+                            })}
+                        >
+                          {definition.accelerateLabel}
+                        </button>
+                        <button
+                          class="secondary"
+                          type="button"
+                          onClick={() =>
+                            props.dispatch({
+                              type: "decide_initiative_milestone",
+                              initiativeId: activeInitiative.id,
+                              approach: "stabilize",
+                            })}
+                        >
+                          {definition.stabilizeLabel}
+                        </button>
+                      </div>
+                    )
+                    : (
+                      <span class="initiative-waiting">
+                        Work pauses at every milestone for an operating choice.
+                      </span>
+                    )}
+                </div>
+              );
+            })()
+            : (
+              <>
+                <div class="initiative-catalog">
+                  {INITIATIVE_DEFINITIONS.map((definition) => (
+                    <button
+                      class={initiativeType.value === definition.type
+                        ? "selected"
+                        : ""}
+                      type="button"
+                      key={definition.type}
+                      onClick={() => initiativeType.value = definition.type}
+                    >
+                      <strong>{definition.name}</strong>
+                      <span>{definition.summary}</span>
+                      <small>
+                        {money.format(definition.startCostCents / 100)} ·{" "}
+                        {definition.durationDays} days · 3 decisions
+                      </small>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  class="primary"
+                  type="button"
+                  onClick={() =>
+                    props.dispatch({
+                      type: "start_initiative",
+                      initiativeType: initiativeType.value,
+                    })}
+                >
+                  <Target size={15} />Start{" "}
+                  {initiativeDefinition(initiativeType.value).name}
+                </button>
+              </>
+            )}
+          {recentInitiatives.length > 0 && (
+            <div class="initiative-history">
+              {recentInitiatives.map((initiative) => (
+                <div key={initiative.id}>
+                  <strong>{initiativeDefinition(initiative.type).name}</strong>
+                  <span>{initiative.outcome}</span>
+                  <small>
+                    {money.format((initiative.rewardCents ?? 0) / 100)} reward
+                  </small>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
         <section class="panel">
           <div class="panel-heading">
             <div>
@@ -1796,6 +2134,9 @@ function PipelineWorkspace(props: {
   const openDeals = deals.filter((deal) =>
     deal.stage !== "won" && deal.stage !== "lost"
   );
+  const negotiationDeals = openDeals.filter((deal) =>
+    deal.stage === "negotiation"
+  );
   const salesReps = Object.values(props.game.records.salesReps).sort((a, b) =>
     a.hiredAt - b.hiredAt
   );
@@ -1928,6 +2269,30 @@ function PipelineWorkspace(props: {
             pipeline.
           </p>
         </div>
+        {negotiationDeals.length > 0 && (
+          <section
+            class="panel negotiation-decisions"
+            aria-label="Deal details"
+          >
+            {negotiationDeals.map((deal) => {
+              const { company } = detail(deal);
+              return (
+                <div>
+                  <span class="decision-record-name">
+                    {company?.name ?? "Unknown company"} ·{" "}
+                    {money.format(deal.monthlyValueCents / 100)} MRR
+                  </span>
+                  <DealNegotiationControls
+                    dealId={deal.id}
+                    capacity={props.game.company.founderCapacityRemaining}
+                    cashCents={props.game.company.cashCents}
+                    dispatch={props.dispatch}
+                  />
+                </div>
+              );
+            })}
+          </section>
+        )}
         <div class="segmented-control" aria-label="Pipeline view">
           <button
             type="button"
@@ -2581,11 +2946,12 @@ function PipelineWorkspace(props: {
                       ? closeLossRiskPercent(lead.engagement)
                       : 0;
                     return (
-                      <tr>
+                      <tr id={`record-${deal.id}`} tabIndex={-1}>
                         <td>
                           <input
                             type="checkbox"
                             aria-label={`Select ${company?.name ?? "deal"}`}
+                            disabled={deal.stage === "negotiation"}
                             checked={selectedDeals.value.has(deal.id)}
                             onChange={() => toggleDeal(deal.id)}
                           />
@@ -2642,13 +3008,16 @@ function PipelineWorkspace(props: {
                             <button
                               type="button"
                               class="secondary pipeline-advance"
+                              disabled={deal.stage === "negotiation"}
                               onClick={() =>
                                 props.dispatch({
                                   type: "advance_deal",
                                   dealId: deal.id,
                                 })}
                             >
-                              Advance <ChevronRight size={15} />
+                              {deal.stage === "negotiation"
+                                ? "Decision needed"
+                                : "Advance"} <ChevronRight size={15} />
                             </button>
                           </div>
                         </td>
@@ -2750,13 +3119,16 @@ function PipelineWorkspace(props: {
                             <button
                               type="button"
                               class="secondary"
+                              disabled={deal.stage === "negotiation"}
                               onClick={() =>
                                 props.dispatch({
                                   type: "advance_deal",
                                   dealId: deal.id,
                                 })}
                             >
-                              Advance <ChevronRight size={15} />
+                              {deal.stage === "negotiation"
+                                ? "Decision needed"
+                                : "Advance"} <ChevronRight size={15} />
                             </button>
                           </div>
                         </article>
@@ -2788,6 +3160,7 @@ export default function CrmApp(props: CrmAppProps) {
   const campaignName = useSignal("");
   const campaignChannel = useSignal<CampaignChannel>("email");
   const campaignAudience = useSignal<CampaignAudience>("mid_market");
+  const campaignObjective = useSignal<CampaignObjective>("balanced");
   const campaignBudget = useSignal("50");
   const campaignDuration = useSignal("7");
   const campaignMessage = useSignal("");
@@ -2812,6 +3185,8 @@ export default function CrmApp(props: CrmAppProps) {
   const leadTapOrigin = useRef<
     { pointerId: number; x: number; y: number; moved: boolean } | undefined
   >(undefined);
+  const leadReturnFocus = useRef<HTMLElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   if (!soundDesign.current) soundDesign.current = new SoundDesign();
 
   useEffect(() => {
@@ -3012,6 +3387,11 @@ export default function CrmApp(props: CrmAppProps) {
         game.preferences.timeScale,
     ),
   );
+  const guidance = selectGuidance(game);
+  const saveDetail = savedAtLabel(
+    store.lastSuccessfulSaveAt.value,
+    store.now.value,
+  );
 
   const navigate = (next: View) => {
     if (next === "contacts") selectedLeadId.value = undefined;
@@ -3032,10 +3412,50 @@ export default function CrmApp(props: CrmAppProps) {
     });
   };
 
-  const openSearchResult = (leadId: string) => {
-    selectedLeadId.value = leadId;
+  const openSearchResult = (leadId: string, trigger: HTMLElement) => {
+    openLead(leadId, trigger);
     searchQuery.value = "";
     navigate("leads");
+  };
+
+  const openGuidance = (trigger?: HTMLElement) => {
+    navigate(guidance.workspace);
+    if (
+      guidance.workspace === "leads" &&
+      game.records.leads[guidance.targetId]
+    ) {
+      globalThis.requestAnimationFrame(() =>
+        openLead(guidance.targetId, trigger)
+      );
+      return;
+    }
+    globalThis.requestAnimationFrame(() => {
+      globalThis.requestAnimationFrame(() => {
+        const target = document.getElementById(`record-${guidance.targetId}`);
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+        target?.focus({ preventScroll: true });
+      });
+    });
+  };
+
+  const openLead = (leadId: string, trigger?: HTMLElement) => {
+    const activeElement = document.activeElement;
+    leadReturnFocus.current = trigger ??
+      (activeElement instanceof HTMLElement ? activeElement : null);
+    selectedLeadId.value = leadId;
+  };
+
+  const closeLead = () => {
+    selectedLeadId.value = undefined;
+    const returnTarget = leadReturnFocus.current;
+    leadReturnFocus.current = null;
+    globalThis.requestAnimationFrame(() => {
+      if (returnTarget?.isConnected) {
+        returnTarget.focus();
+        return;
+      }
+      searchInputRef.current?.focus();
+    });
   };
 
   const beginLeadTap = (
@@ -3073,7 +3493,7 @@ export default function CrmApp(props: CrmAppProps) {
       !origin || origin.pointerId !== event.pointerId || origin.moved ||
       (event.target as Element).closest("button")
     ) return;
-    selectedLeadId.value = leadId;
+    openLead(leadId, event.currentTarget);
   };
 
   const cancelLeadTap = () => {
@@ -3086,7 +3506,7 @@ export default function CrmApp(props: CrmAppProps) {
   ) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    selectedLeadId.value = leadId;
+    openLead(leadId, event.currentTarget);
   };
 
   const dispatch = (command: GameCommand) => {
@@ -3110,6 +3530,7 @@ export default function CrmApp(props: CrmAppProps) {
     campaignName.value = "";
     campaignChannel.value = "email";
     campaignAudience.value = "mid_market";
+    campaignObjective.value = "balanced";
     campaignBudget.value = "50";
     campaignDuration.value = "7";
     campaignMessage.value = "";
@@ -3121,6 +3542,7 @@ export default function CrmApp(props: CrmAppProps) {
     campaignName.value = campaign.name;
     campaignChannel.value = campaign.channel;
     campaignAudience.value = campaign.audience;
+    campaignObjective.value = campaign.objective;
     campaignBudget.value = String(campaign.dailyBudgetCents / 100);
     campaignDuration.value = String(
       Math.max(
@@ -3137,6 +3559,7 @@ export default function CrmApp(props: CrmAppProps) {
       name: campaignName.value,
       channel: campaignChannel.value,
       audience: campaignAudience.value,
+      objective: campaignObjective.value,
       dailyBudgetCents: Math.round(Number(campaignBudget.value) * 100),
       durationDays: Number(campaignDuration.value),
       message: campaignMessage.value,
@@ -3149,6 +3572,17 @@ export default function CrmApp(props: CrmAppProps) {
       })
       : dispatch({ type: "create_campaign", ...values });
     if (accepted) resetCampaignForm();
+  };
+
+  const iterateCampaign = (campaignId: string) => {
+    const nextCampaignId = `campaign_${game.sequences.campaign + 1}`;
+    if (dispatch({ type: "duplicate_campaign", campaignId })) {
+      editCampaign(nextCampaignId);
+      document.querySelector(".campaign-builder")?.scrollIntoView({
+        behavior: game.preferences.reducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    }
   };
 
   const importFile = async (event: Event) => {
@@ -3391,6 +3825,7 @@ export default function CrmApp(props: CrmAppProps) {
             <div class="search">
               <Search size={16} />
               <input
+                ref={searchInputRef}
                 aria-label="Search CRM"
                 placeholder="Search contacts and companies"
                 value={searchQuery.value}
@@ -3412,7 +3847,8 @@ export default function CrmApp(props: CrmAppProps) {
                 {searchResults.map((lead) => (
                   <button
                     type="button"
-                    onClick={() => openSearchResult(lead.id)}
+                    onClick={(event) =>
+                      openSearchResult(lead.id, event.currentTarget)}
                   >
                     <Users size={17} />
                     <span>
@@ -3430,6 +3866,76 @@ export default function CrmApp(props: CrmAppProps) {
               </div>
             )}
           </div>
+          <span
+            class={`save-state mobile-save-state ${store.saveStatus.value}`}
+            role="status"
+            aria-live="polite"
+            title={saveDetail}
+          >
+            {store.saveStatus.value === "saving" && <RefreshCw size={13} />}
+            {statusLabel(store.saveStatus.value)}
+          </span>
+          <details class="mobile-topbar-overflow">
+            <summary class="icon-button" aria-label="More workspace controls">
+              <SlidersHorizontal size={18} />
+            </summary>
+            <div class="mobile-topbar-menu">
+              <div class="mobile-topbar-clock">
+                <Clock3 size={15} />
+                <span>
+                  <small>Simulation time</small>
+                  <strong>{gameDate(effectiveMinute)}</strong>
+                </span>
+              </div>
+              <div class="mobile-speed-control">
+                <span>Simulation speed</span>
+                <div
+                  class="time-controls"
+                  role="group"
+                  aria-label="Simulation speed"
+                >
+                  {([1, 2, 4] as const).map((timeScale) => (
+                    <button
+                      type="button"
+                      class={game.preferences.timeScale === timeScale
+                        ? "active"
+                        : ""}
+                      aria-pressed={game.preferences.timeScale === timeScale}
+                      onClick={() =>
+                        dispatch({ type: "set_time_scale", timeScale })}
+                    >
+                      {timeScale}×
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.currentTarget.closest("details")?.removeAttribute(
+                    "open",
+                  );
+                  navigate("tasks");
+                }}
+              >
+                <Bell size={16} />
+                <span>Notifications</span>
+                <b>{openTasks.length}</b>
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.currentTarget.closest("details")?.removeAttribute(
+                    "open",
+                  );
+                  navigate("settings");
+                }}
+              >
+                <Settings size={16} />
+                <span>Workspace settings</span>
+              </button>
+            </div>
+          </details>
           <div class="topbar-meta">
             <div
               class="time-controls"
@@ -3450,10 +3956,17 @@ export default function CrmApp(props: CrmAppProps) {
                 </button>
               ))}
             </div>
-            <span class={`save-state ${store.saveStatus.value}`}>
+            <span
+              class={`save-state ${store.saveStatus.value}`}
+              role="status"
+              aria-live="polite"
+              title={saveDetail}
+            >
               {store.saveStatus.value === "saving" && <RefreshCw size={13} />}
-              {" "}
-              {statusLabel(store.saveStatus.value)}
+              <span>
+                {statusLabel(store.saveStatus.value)}
+                <small>{saveDetail}</small>
+              </span>
             </span>
             <span class="game-clock">
               <Clock3 size={14} />
@@ -3530,7 +4043,10 @@ export default function CrmApp(props: CrmAppProps) {
           <div class="inline-alert error" role="alert">
             <span>
               <strong>Changes are not saved.</strong>
-              Your browser could not update the company cookie.
+              Your previous browser save remains intact. {saveDetail}.
+              {store.consecutiveSaveFailures.value > 1
+                ? ` Save has failed ${store.consecutiveSaveFailures.value} times; export a backup after retrying.`
+                : " Retry without closing this tab."}
             </span>
             <button
               type="button"
@@ -3562,6 +4078,23 @@ export default function CrmApp(props: CrmAppProps) {
                   <Inbox size={16} />Work leads
                 </button>
               </div>
+              <section class="guidance-card" aria-labelledby="guidance-title">
+                <div class="guidance-icon">
+                  <Target size={20} />
+                </div>
+                <div>
+                  <span>Next best action</span>
+                  <h2 id="guidance-title">{guidance.actionLabel}</h2>
+                  <p>{guidance.reason}</p>
+                </div>
+                <button
+                  type="button"
+                  class="primary"
+                  onClick={(event) => openGuidance(event.currentTarget)}
+                >
+                  Open work <ChevronRight size={15} />
+                </button>
+              </section>
               <div class="kpi-grid">
                 <Kpi
                   label="Cash"
@@ -3699,8 +4232,9 @@ export default function CrmApp(props: CrmAppProps) {
                     title={prospectingBlockedReason}
                     onClick={() => {
                       if (dispatch({ type: "prospect_lead" })) {
-                        selectedLeadId.value =
-                          `lead_${store.game.value.sequences.lead}`;
+                        openLead(
+                          `lead_${store.game.value.sequences.lead}`,
+                        );
                       }
                     }}
                   >
@@ -3720,13 +4254,35 @@ export default function CrmApp(props: CrmAppProps) {
                     type="button"
                     class="secondary"
                     disabled={actionableLeads.length === 0}
-                    onClick={() =>
-                      selectedLeadId.value = actionableLeads[0]?.id}
+                    onClick={(event) => {
+                      const leadId = actionableLeads[0]?.id;
+                      if (leadId) openLead(leadId, event.currentTarget);
+                    }}
                   >
                     <Target size={16} />Next lead
                   </button>
                 </div>
               </div>
+              <section
+                class="guidance-card compact"
+                aria-labelledby="lead-guidance-title"
+              >
+                <div class="guidance-icon">
+                  <Target size={18} />
+                </div>
+                <div>
+                  <span>Recommended now</span>
+                  <h2 id="lead-guidance-title">{guidance.actionLabel}</h2>
+                  <p>{guidance.reason}</p>
+                </div>
+                <button
+                  type="button"
+                  class="secondary"
+                  onClick={(event) => openGuidance(event.currentTarget)}
+                >
+                  Go <ChevronRight size={14} />
+                </button>
+              </section>
               {showLeadFilters.value && (
                 <div class="filter-bar">
                   <label>
@@ -3790,7 +4346,7 @@ export default function CrmApp(props: CrmAppProps) {
                           <th>Status</th>
                           <th>Fit</th>
                           <th>Intent</th>
-                          <th class="mobile-actions-heading">Actions</th>
+                          <th class="mobile-actions-heading">Open</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3837,6 +4393,17 @@ export default function CrmApp(props: CrmAppProps) {
                                 <small>{lead.engagement}%</small>
                               </td>
                               <td class="mobile-actions-cell">
+                                <button
+                                  type="button"
+                                  class="record-open-button"
+                                  aria-label={`Open details for ${lead.firstName} ${lead.lastName}`}
+                                  aria-haspopup="dialog"
+                                  onClick={(event) =>
+                                    openLead(lead.id, event.currentTarget)}
+                                >
+                                  <span>Open</span>
+                                  <ChevronRight size={15} />
+                                </button>
                                 <MobileLeadActions
                                   lead={lead}
                                   dispatch={dispatch}
@@ -3862,13 +4429,13 @@ export default function CrmApp(props: CrmAppProps) {
                         type="button"
                         class="lead-detail-scrim"
                         aria-label="Close lead details"
-                        onClick={() => selectedLeadId.value = undefined}
+                        onClick={closeLead}
                       />
                       <LeadPanel
                         lead={selectedLead}
                         game={game}
                         dispatch={dispatch}
-                        onClose={() => selectedLeadId.value = undefined}
+                        onClose={closeLead}
                       />
                     </>
                   )
@@ -3907,7 +4474,7 @@ export default function CrmApp(props: CrmAppProps) {
                           <th>Email</th>
                           <th>Lifecycle</th>
                           <th>Last activity</th>
-                          <th class="mobile-actions-heading">Actions</th>
+                          <th class="mobile-actions-heading">Open</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3938,6 +4505,17 @@ export default function CrmApp(props: CrmAppProps) {
                             </td>
                             <td>{gameDate(lead.lastActivityAt)}</td>
                             <td class="mobile-actions-cell">
+                              <button
+                                type="button"
+                                class="record-open-button"
+                                aria-label={`Open details for ${lead.firstName} ${lead.lastName}`}
+                                aria-haspopup="dialog"
+                                onClick={(event) =>
+                                  openLead(lead.id, event.currentTarget)}
+                              >
+                                <span>Open</span>
+                                <ChevronRight size={15} />
+                              </button>
                               <MobileLeadActions
                                 lead={lead}
                                 dispatch={dispatch}
@@ -3955,13 +4533,13 @@ export default function CrmApp(props: CrmAppProps) {
                       type="button"
                       class="lead-detail-scrim"
                       aria-label="Close contact details"
-                      onClick={() => selectedLeadId.value = undefined}
+                      onClick={closeLead}
                     />
                     <LeadPanel
                       lead={selectedLead}
                       game={game}
                       dispatch={dispatch}
-                      onClose={() => selectedLeadId.value = undefined}
+                      onClose={closeLead}
                     />
                   </>
                 )}
@@ -4200,6 +4778,32 @@ export default function CrmApp(props: CrmAppProps) {
                         </select>
                       </label>
                     </div>
+                    <label>
+                      <span>Objective / hypothesis</span>
+                      <select
+                        value={campaignObjective.value}
+                        onChange={(event) =>
+                          campaignObjective.value = event.currentTarget
+                            .value as CampaignObjective}
+                      >
+                        <option value="balanced">
+                          Balanced — neutral benchmark
+                        </option>
+                        <option value="reach">
+                          Reach — more leads, lower fit, higher spend
+                        </option>
+                        <option value="quality">
+                          Quality — fewer leads, stronger fit, higher spend
+                        </option>
+                        <option value="efficiency">
+                          Efficiency — lower spend, slower lead flow
+                        </option>
+                      </select>
+                      <small>
+                        Persist this hypothesis so completed results can guide
+                        the next iteration.
+                      </small>
+                    </label>
                     <div class="form-row">
                       <label>
                         <span>Daily budget</span>
@@ -4329,7 +4933,8 @@ export default function CrmApp(props: CrmAppProps) {
                               <strong>{campaign.name}</strong>
                               <small>
                                 {statusLabel(campaign.channel)} ·{" "}
-                                {statusLabel(campaign.audience)}
+                                {statusLabel(campaign.audience)} ·{" "}
+                                {statusLabel(campaign.objective)}
                               </small>
                             </span>
                             <dl>
@@ -4385,16 +4990,12 @@ export default function CrmApp(props: CrmAppProps) {
                               )}
                               <button
                                 type="button"
-                                class="icon-button"
-                                aria-label={`Duplicate ${campaign.name}`}
-                                title="Duplicate campaign"
-                                onClick={() =>
-                                  dispatch({
-                                    type: "duplicate_campaign",
-                                    campaignId: campaign.id,
-                                  })}
+                                class="secondary"
+                                aria-label={`Iterate on ${campaign.name}`}
+                                title="Duplicate and edit as a new iteration"
+                                onClick={() => iterateCampaign(campaign.id)}
                               >
-                                <Copy size={16} />
+                                <Copy size={16} /> Iterate
                               </button>
                               {campaign.status !== "active" && (
                                 <button
@@ -4412,6 +5013,43 @@ export default function CrmApp(props: CrmAppProps) {
                                 </button>
                               )}
                             </div>
+                            {(campaign.status === "completed" ||
+                              campaign.status === "archived") &&
+                              (() => {
+                                const outcome = campaignOutcomeSummary(
+                                  game,
+                                  campaign,
+                                );
+                                return (
+                                  <div class="campaign-outcome">
+                                    <strong>Outcome summary</strong>
+                                    <span>
+                                      {outcome.deals} deals ·{" "}
+                                      {outcome.customers} customers ·{" "}
+                                      {money.format(
+                                        outcome.openPipelineCents / 100,
+                                      )} open pipeline ·{" "}
+                                      {money.format(outcome.wonMrrCents / 100)}
+                                      {" "}
+                                      MRR
+                                    </span>
+                                    <span>
+                                      CPL {outcome.costPerLeadCents === null
+                                        ? "—"
+                                        : money.format(
+                                          outcome.costPerLeadCents / 100,
+                                        )} · CAC {outcome
+                                          .customerAcquisitionCostCents === null
+                                        ? "—"
+                                        : money.format(
+                                          outcome
+                                            .customerAcquisitionCostCents /
+                                            100,
+                                        )}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                           </div>
                         ))}
                       </div>
@@ -4478,7 +5116,8 @@ export default function CrmApp(props: CrmAppProps) {
                         {referralLeads.slice(0, 6).map((lead) => (
                           <button
                             type="button"
-                            onClick={() => openSearchResult(lead.id)}
+                            onClick={(event) =>
+                              openSearchResult(lead.id, event.currentTarget)}
                           >
                             <span>
                               <strong>{lead.firstName} {lead.lastName}</strong>
@@ -5028,11 +5667,25 @@ function LeadPanel(
   },
 ) {
   const company = props.game.records.companies[props.lead.companyId];
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const titleId = `lead-detail-title-${props.lead.id}`;
   const deal = Object.values(props.game.records.deals).find((entry) =>
     entry.leadId === props.lead.id
   );
+  useEffect(() => {
+    closeButton.current?.focus();
+  }, [props.lead.id]);
   return (
-    <aside class="panel record-detail lead-detail">
+    <aside
+      class="panel record-detail lead-detail"
+      role="dialog"
+      aria-labelledby={titleId}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        props.onClose();
+      }}
+    >
       <div class="detail-heading">
         <div class="contact-avatar">
           {props.lead.firstName[0]}
@@ -5040,14 +5693,15 @@ function LeadPanel(
         </div>
         <div>
           <span>{statusLabel(props.lead.status)}</span>
-          <h2>{props.lead.firstName} {props.lead.lastName}</h2>
+          <h2 id={titleId}>{props.lead.firstName} {props.lead.lastName}</h2>
           <p>{props.lead.role} at {company.name}</p>
         </div>
         <button
           type="button"
           class="icon-button"
+          ref={closeButton}
           onClick={props.onClose}
-          aria-label="Close record"
+          aria-label={`Close details for ${props.lead.firstName} ${props.lead.lastName}`}
         >
           <X size={17} />
         </button>
@@ -5120,6 +5774,8 @@ function LeadPanel(
           <DealCard
             deal={deal}
             intent={props.lead.engagement}
+            capacity={props.game.company.founderCapacityRemaining}
+            cashCents={props.game.company.cashCents}
             dispatch={props.dispatch}
           />
         )
@@ -5155,6 +5811,8 @@ function DealCard(
   props: {
     deal: Deal;
     intent: number;
+    capacity: number;
+    cashCents: number;
     dispatch: (command: GameCommand) => void;
   },
 ) {
@@ -5182,16 +5840,28 @@ function DealCard(
               Closing now has a {closeRisk}% chance of losing this client.
             </p>
           )}
-          <button
-            type="button"
-            class="primary full"
-            onClick={() =>
-              props.dispatch({ type: "advance_deal", dealId: props.deal.id })}
-          >
-            {props.deal.stage === "negotiation"
-              ? "Attempt close"
-              : "Advance deal"} <ChevronRight size={15} />
-          </button>
+          {props.deal.stage === "negotiation"
+            ? (
+              <DealNegotiationControls
+                dealId={props.deal.id}
+                capacity={props.capacity}
+                cashCents={props.cashCents}
+                dispatch={props.dispatch}
+              />
+            )
+            : (
+              <button
+                type="button"
+                class="primary full"
+                onClick={() =>
+                  props.dispatch({
+                    type: "advance_deal",
+                    dealId: props.deal.id,
+                  })}
+              >
+                Advance deal <ChevronRight size={15} />
+              </button>
+            )}
         </>
       )}
     </div>

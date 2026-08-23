@@ -191,6 +191,12 @@ Calls, emails, notes, status changes, campaign touches, support events, and
 system outcomes appear in chronological activity history. Tasks carry type,
 priority, due time, owner, related records, and completion state.
 
+Negotiation and support resolution are explicit decision moments rather than
+generic completion clicks. Discount, value-proof, and pilot approaches alter
+close likelihood, workload, economics, and starting account health. Workaround,
+thorough-fix, and specialist approaches alter workload, cash, resolution
+quality, account health, and follow-up risk using canonical CRM state.
+
 Old detailed activity may be summarized into immutable aggregate history when
 required to keep cookie saves within budget.
 
@@ -220,9 +226,11 @@ Available immediately:
 Unlocked after acquiring and retaining the first customers:
 
 - Marketing workspace;
-- campaigns with audience, channel, message, daily budget, and duration;
+- campaigns with audience, channel, message, daily budget, duration, and a
+  bounded objective hypothesis;
 - deterministic channel spend and attributed lead delivery over game time;
 - campaign pause and resume controls;
+- post-campaign outcome summaries and a duplicate-into-iteration workflow;
 - audience segments;
 - basic lead scoring;
 - single-touch attribution;
@@ -250,6 +258,8 @@ Unlocked through active-customer and renewal volume:
 - customer health and success workspaces;
 - onboarding, adoption, check-ins, renewals, expansion, and churn risk driven by
   account health and neglect;
+- bounded account plans that focus success work on balanced outcomes, adoption,
+  relationships, expansion readiness, or stabilization with visible tradeoffs;
 - support inbox with priority- and channel-based tickets, ownership, response
   and resolution SLAs, and account-health penalties for missed deadlines;
 - dedicated service staffing with payroll, skill, capacity, and burnout;
@@ -274,6 +284,8 @@ Unlocked as staffing and process complexity grow:
 - advanced capacity planning and data hygiene;
 - simulated roles and permissions;
 - larger market segments and operational incidents;
+- one active company initiative at a time, with explicit cost, duration, and
+  three decisions before any completion reward;
 - aggregate historical analysis and endless scaling goals.
 
 Locked modules remain visible in navigation and state the milestone or condition
@@ -292,6 +304,9 @@ Campaigns generate leads over time rather than immediately. Spend reduces cash
 as configured. Poor campaigns may create low-quality demand and increase
 workload without producing viable pipeline. Repeated delivery into the same
 campaign audience increases saturation and lowers the fit of later leads.
+Balanced, reach, quality, and efficiency objectives deterministically trade lead
+volume, lead quality, and spend. Completed-campaign summaries derive spend,
+leads, deals, customers, pipeline, MRR, CPL, and CAC from canonical records.
 
 Detailed campaign records are bounded. The oldest archived records compact into
 aggregate campaign counts, spend, and lead history so long-running saves remain

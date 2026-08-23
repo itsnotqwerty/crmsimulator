@@ -45,8 +45,7 @@ export const NARRATIVE_CHAPTERS: readonly NarrativeChapter[] = [{
   subject: "You are now the constraint",
   briefing:
     "The pipeline is beginning to move, but every conversation still waits on you. The company cannot grow while its founder is also its routing rule.",
-  directive:
-    "Build $3,000 in MRR and hire the first sales representative.",
+  directive: "Build $3,000 in MRR and hire the first sales representative.",
 }, {
   number: 3,
   eyebrow: "Chapter III · The promise",
@@ -76,7 +75,7 @@ export const NARRATIVE_CHAPTERS: readonly NarrativeChapter[] = [{
   briefing:
     "The numbers hold. Customers stay, the team operates, and revenue no longer depends on a single heroic week. The board approves the next stage on the strength of the company you built.",
   directive:
-    "The campaign is complete. Continue in endless mode and set the next operating target.",
+    "The campaign is complete. Continue in endless mode, choose a company initiative, and set the next operating target.",
 }];
 
 function stableCustomers(state: GameState): number {
@@ -104,7 +103,11 @@ export function narrativeObjectives(state: GameState): NarrativeObjective[] {
       }];
     case 1:
       return [
-        { label: "Retain three customers", current: state.company.customerCount, target: 3 },
+        {
+          label: "Retain three customers",
+          current: state.company.customerCount,
+          target: 3,
+        },
         {
           label: "Launch a marketing campaign",
           current: Object.keys(state.records.campaigns).length,
@@ -127,8 +130,16 @@ export function narrativeObjectives(state: GameState): NarrativeObjective[] {
       ];
     case 3:
       return [
-        { label: "Retain five customers", current: state.company.customerCount, target: 5 },
-        { label: "Stabilize three active accounts", current: stableCustomers(state), target: 3 },
+        {
+          label: "Retain five customers",
+          current: state.company.customerCount,
+          target: 5,
+        },
+        {
+          label: "Stabilize three active accounts",
+          current: stableCustomers(state),
+          target: 3,
+        },
         {
           label: "Hire a success specialist",
           current: Object.keys(state.records.successReps).length,
@@ -148,7 +159,11 @@ export function narrativeObjectives(state: GameState): NarrativeObjective[] {
           target: 1_000_000,
           format: "money",
         },
-        { label: "Retain eight customers", current: state.company.customerCount, target: 8 },
+        {
+          label: "Retain eight customers",
+          current: state.company.customerCount,
+          target: 8,
+        },
         {
           label: "Maintain 70% account health",
           current: averageCustomerHealth(state),
@@ -157,9 +172,9 @@ export function narrativeObjectives(state: GameState): NarrativeObjective[] {
         },
         {
           label: "Create an active workflow",
-          current: state.platform.workflows.filter((workflow) =>
-            workflow.enabled
-          ).length,
+          current:
+            state.platform.workflows.filter((workflow) => workflow.enabled)
+              .length,
           target: 1,
         },
         {

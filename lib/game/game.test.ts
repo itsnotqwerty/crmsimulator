@@ -7,6 +7,7 @@ import {
 } from "$std/assert/mod.ts";
 import { applyCommand, closeLossRiskPercent } from "./actions.ts";
 import { generateLead } from "./catalog.ts";
+import { campaignOutcomeSummary } from "./reports.ts";
 import { randomAt } from "./rng.ts";
 import {
   advanceGame,
@@ -280,6 +281,80 @@ Deno.test("safe-intent closes do not consume a random roll", () => {
   assertEquals(closed.state.rngCursor, cursor);
 });
 
+Deno.test("negotiation approaches create distinct deterministic tradeoffs", () => {
+  const negotiationState = () => {
+    let state = createInitialState({ seed: 42, now: 1_000 });
+    state = applyCommand(state, {
+      type: "contact_lead",
+      leadId: "lead_1",
+      channel: "email",
+    }).state;
+    state = applyCommand(state, {
+      type: "qualify_lead",
+      leadId: "lead_1",
+    }).state;
+    return {
+      ...state,
+      records: {
+        ...state.records,
+        leads: {
+          ...state.records.leads,
+          lead_1: { ...state.records.leads.lead_1, engagement: 70 },
+        },
+        deals: {
+          ...state.records.deals,
+          deal_1: {
+            ...state.records.deals.deal_1,
+            stage: "negotiation" as const,
+          },
+        },
+      },
+    };
+  };
+  const originalValue = negotiationState().records.deals.deal_1
+    .monthlyValueCents;
+  const discount = applyCommand(negotiationState(), {
+    type: "negotiate_deal",
+    dealId: "deal_1",
+    approach: "discount",
+  });
+  const proof = applyCommand(negotiationState(), {
+    type: "negotiate_deal",
+    dealId: "deal_1",
+    approach: "value_proof",
+  });
+  const pilot = applyCommand(negotiationState(), {
+    type: "negotiate_deal",
+    dealId: "deal_1",
+    approach: "pilot",
+  });
+
+  assert(discount.accepted && proof.accepted && pilot.accepted);
+  assertEquals(
+    discount.state.company.mrrCents,
+    Math.round(originalValue * 0.85),
+  );
+  assertEquals(proof.state.company.mrrCents, Math.round(originalValue * 1.05));
+  assertEquals(pilot.state.company.mrrCents, Math.round(originalValue * 0.95));
+  assertEquals(discount.state.company.founderCapacityRemaining, 440);
+  assertEquals(proof.state.company.founderCapacityRemaining, 380);
+  assertEquals(pilot.state.company.founderCapacityRemaining, 410);
+  assertEquals(proof.state.company.cashCents, 2_485_000);
+  assertEquals(pilot.state.company.cashCents, 2_460_000);
+  assertEquals(discount.state.records.customers.customer_1.health, 72);
+  assertEquals(proof.state.records.customers.customer_1.health, 86);
+  assertEquals(pilot.state.records.customers.customer_1.health, 92);
+  assertEquals(discount.events[0].kind, "deal_negotiation_decided");
+  assertStringIncludes(discount.events[0].summary, "18% stronger forecast");
+
+  const wrongStage = applyCommand(createInitialState({ seed: 1, now: 0 }), {
+    type: "negotiate_deal",
+    dealId: "deal_1",
+    approach: "discount",
+  });
+  assertEquals(wrongStage.accepted, false);
+});
+
 Deno.test("customer onboarding and expansion grow account value", () => {
   let state = createInitialState({ seed: 48, now: 1_000 });
   state = applyCommand(state, {
@@ -349,6 +424,7 @@ Deno.test("unhealthy customers churn at renewal", () => {
           health: 20,
           adoption: 20,
           lifecycle: "at_risk" as const,
+          accountPlan: "balanced" as const,
           startedAt: 0,
           nextBillingAt: 60,
           renewalAt: 60,
@@ -383,6 +459,7 @@ Deno.test("success representatives own accounts and improve playbooks", () => {
           health: 40,
           adoption: 35,
           lifecycle: "at_risk" as const,
+          accountPlan: "balanced" as const,
           startedAt: 0,
           nextBillingAt: 43_200,
           renewalAt: 43_200,
@@ -431,6 +508,132 @@ Deno.test("success representatives own accounts and improve playbooks", () => {
   );
 });
 
+Deno.test("customer account plans can be changed through commands", () => {
+  const initial = createInitialState({ seed: 51, now: 1_000 });
+  const state = {
+    ...initial,
+    company: { ...initial.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...initial.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 50,
+          adoption: 50,
+          lifecycle: "active" as const,
+          accountPlan: "balanced" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+
+  const changed = applyCommand(state, {
+    type: "set_customer_plan",
+    customerId: "customer_1",
+    accountPlan: "relationship",
+  });
+  assert(changed.accepted);
+  assertEquals(
+    changed.state.records.customers.customer_1.accountPlan,
+    "relationship",
+  );
+  assertEquals(changed.events[0]?.kind, "customer_plan_set");
+
+  const unchanged = applyCommand(changed.state, {
+    type: "set_customer_plan",
+    customerId: "customer_1",
+    accountPlan: "relationship",
+  });
+  assertEquals(unchanged.accepted, false);
+
+  const invalid = applyCommand(state, {
+    type: "set_customer_plan",
+    customerId: "customer_1",
+    accountPlan: "unbounded" as never,
+  });
+  assertEquals(invalid.accepted, false);
+});
+
+Deno.test("account plans create deterministic success-work tradeoffs", () => {
+  const initial = createInitialState({ seed: 52, now: 1_000 });
+  const state = {
+    ...initial,
+    company: { ...initial.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...initial.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 50,
+          adoption: 50,
+          lifecycle: "active" as const,
+          accountPlan: "balanced" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+
+  const balanced = applyCommand(state, {
+    type: "customer_check_in",
+    customerId: "customer_1",
+  }).state;
+  const adoption = applyCommand({
+    ...state,
+    records: {
+      ...state.records,
+      customers: {
+        customer_1: {
+          ...state.records.customers.customer_1,
+          accountPlan: "adoption",
+        },
+      },
+    },
+  }, {
+    type: "customer_check_in",
+    customerId: "customer_1",
+  }).state;
+  const stabilization = applyCommand({
+    ...state,
+    records: {
+      ...state.records,
+      customers: {
+        customer_1: {
+          ...state.records.customers.customer_1,
+          accountPlan: "stabilization",
+        },
+      },
+    },
+  }, {
+    type: "customer_check_in",
+    customerId: "customer_1",
+  }).state;
+
+  assertEquals(balanced.records.customers.customer_1.health, 62);
+  assertEquals(balanced.records.customers.customer_1.adoption, 58);
+  assertEquals(adoption.records.customers.customer_1.health, 60);
+  assertEquals(adoption.records.customers.customer_1.adoption, 64);
+  assertEquals(adoption.company.founderCapacityRemaining, 445);
+  assertEquals(stabilization.records.customers.customer_1.health, 70);
+  assertEquals(stabilization.records.customers.customer_1.adoption, 53);
+  assertEquals(stabilization.company.founderCapacityRemaining, 440);
+});
+
 Deno.test("NPS surveys produce deterministic bounded feedback", () => {
   const initial = createInitialState({ seed: 54, now: 1_000 });
   const state = {
@@ -447,6 +650,7 @@ Deno.test("NPS surveys produce deterministic bounded feedback", () => {
           health: 70,
           adoption: 65,
           lifecycle: "active" as const,
+          accountPlan: "balanced" as const,
           startedAt: 0,
           nextBillingAt: 43_200,
           renewalAt: 43_200,
@@ -566,6 +770,100 @@ Deno.test("mature operations enforce plans and escalating goals", () => {
   state = advanceGame(state, 10).state;
   assertEquals(state.platform.departments[0].headcount, 2);
   assertEquals(state.platform.endlessGoal, 2);
+});
+
+Deno.test("initiatives require three timed choices and remain bounded", () => {
+  let state: GameState = {
+    ...createInitialState({ seed: 560, now: 1_000 }),
+    company: {
+      ...createInitialState({ seed: 560, now: 1_000 }).company,
+      cashCents: 20_000_000,
+      mrrCents: 1_000_000,
+    },
+  };
+
+  for (let project = 0; project < 5; project += 1) {
+    const started = applyCommand(state, {
+      type: "start_initiative",
+      initiativeType: project % 2 === 0 ? "growth" : "efficiency",
+    });
+    assert(started.accepted);
+    state = started.state;
+    const active = state.platform.initiatives.find((initiative) =>
+      initiative.status === "active"
+    )!;
+    const duplicate = applyCommand(state, {
+      type: "start_initiative",
+      initiativeType: "retention",
+    });
+    assertEquals(duplicate.accepted, false);
+    assertStrictEquals(duplicate.state, state);
+
+    for (let milestone = 0; milestone < 3; milestone += 1) {
+      const elapsed = active.milestoneAt[milestone] - state.clock.gameMinute;
+      state = advanceGame(state, elapsed).state;
+      const prompted = state.platform.initiatives.find((initiative) =>
+        initiative.id === active.id
+      )!;
+      assertEquals(prompted.status, "active");
+      assertEquals(prompted.decisions.length, milestone);
+      assertEquals(prompted.promptedMilestone, milestone + 1);
+      const decided = applyCommand(state, {
+        type: "decide_initiative_milestone",
+        initiativeId: active.id,
+        approach: milestone === 0 ? "accelerate" : "stabilize",
+      });
+      assert(decided.accepted);
+      state = decided.state;
+    }
+    assertEquals(
+      state.platform.initiatives.find((initiative) =>
+        initiative.id === active.id
+      )?.status,
+      "completed",
+    );
+  }
+
+  assertEquals(state.platform.initiativesCompleted, 5);
+  assertEquals(state.platform.initiatives.length, 4);
+  assertEquals(
+    state.platform.initiatives.filter((initiative) =>
+      initiative.status === "active"
+    ).length,
+    0,
+  );
+  assert(
+    state.recentActivities.some((activity) =>
+      activity.kind === "initiative_completed"
+    ),
+  );
+});
+
+Deno.test("initiative completion adds the deterministic quarter bonus", () => {
+  const initial = createInitialState({ seed: 5601, now: 1_000 });
+  const state: GameState = {
+    ...initial,
+    clock: { ...initial.clock, gameMinute: 30 * 24 * 60 - 10 },
+    company: {
+      ...initial.company,
+      mrrCents: 1_000_000,
+      customerCount: 1,
+    },
+    platform: {
+      ...initial.platform,
+      growthTargetCents: 500_000,
+      efficiencyTargetPercent: 50,
+      retentionTargetPercent: 90,
+      quarterInitiativeCompleted: true,
+    },
+  };
+
+  const advanced = advanceGame(state, 10);
+  const quarterEvent = advanced.events.find((event) =>
+    event.kind === "quarter_completed"
+  );
+  assertEquals(quarterEvent?.amountCents, 1_000_000);
+  assertEquals(advanced.state.platform.quarterInitiativeCompleted, false);
 });
 
 Deno.test("quarters close automatically with target rewards", () => {
@@ -709,6 +1007,7 @@ Deno.test("marketing managers staff active campaigns", () => {
     name: "Demand test",
     channel: "email",
     audience: "mid_market",
+    objective: "balanced",
     dailyBudgetCents: 10_000,
     durationDays: 7,
     message: "A focused campaign message for operations testing.",
@@ -744,6 +1043,7 @@ Deno.test("support tickets follow an assigned SLA lifecycle", () => {
           health: 70,
           adoption: 65,
           lifecycle: "active" as const,
+          accountPlan: "balanced" as const,
           startedAt: 0,
           nextBillingAt: 43_200,
           renewalAt: 43_200,
@@ -809,6 +1109,117 @@ Deno.test("support tickets follow an assigned SLA lifecycle", () => {
   assertEquals(fired.state.records.tickets.ticket_1.ownerId, undefined);
 });
 
+Deno.test("support resolution approaches trade speed, spend, health, and risk", () => {
+  const acknowledgedTicketState = () => {
+    let state = createInitialState({ seed: 51, now: 1_000 });
+    state = {
+      ...state,
+      unlocks: ["customer_success"],
+      company: { ...state.company, customerCount: 1, mrrCents: 50_000 },
+      records: {
+        ...state.records,
+        customers: {
+          customer_1: {
+            id: "customer_1",
+            companyId: "company_1",
+            primaryLeadId: "lead_1",
+            monthlyValueCents: 50_000,
+            health: 70,
+            adoption: 65,
+            lifecycle: "active" as const,
+            accountPlan: "balanced" as const,
+            startedAt: 0,
+            nextBillingAt: 43_200,
+            renewalAt: 43_200,
+            lastSuccessAt: 0,
+            expansions: 0,
+          },
+        },
+      },
+    };
+    state = applyCommand(state, {
+      type: "hire_support_rep",
+      name: "Jordan Bell",
+      level: "mid",
+    }).state;
+    state = applyCommand(state, {
+      type: "create_ticket",
+      customerId: "customer_1",
+      channel: "chat",
+      priority: "high",
+      title: "Unable to publish reports",
+    }).state;
+    state = applyCommand(state, {
+      type: "assign_ticket",
+      ticketId: "ticket_1",
+      ownerId: "support_rep_1",
+    }).state;
+    return applyCommand(state, {
+      type: "acknowledge_ticket",
+      ticketId: "ticket_1",
+    }).state;
+  };
+  const fast = applyCommand(acknowledgedTicketState(), {
+    type: "resolve_ticket_with_approach",
+    ticketId: "ticket_1",
+    approach: "fast_workaround",
+  });
+  const thorough = applyCommand(acknowledgedTicketState(), {
+    type: "resolve_ticket_with_approach",
+    ticketId: "ticket_1",
+    approach: "thorough_fix",
+  });
+  const specialist = applyCommand(acknowledgedTicketState(), {
+    type: "resolve_ticket_with_approach",
+    ticketId: "ticket_1",
+    approach: "specialist_escalation",
+  });
+
+  assert(fast.accepted && thorough.accepted && specialist.accepted);
+  assertEquals(fast.state.records.tickets.ticket_1.resolutionQuality, 45);
+  assertEquals(thorough.state.records.tickets.ticket_1.resolutionQuality, 85);
+  assertEquals(
+    specialist.state.records.tickets.ticket_1.resolutionQuality,
+    87,
+  );
+  assertEquals(fast.state.records.customers.customer_1.health, 66);
+  assertEquals(thorough.state.records.customers.customer_1.health, 78);
+  assertEquals(specialist.state.records.customers.customer_1.health, 75);
+  assertEquals(fast.state.company.founderCapacityRemaining, 465);
+  assertEquals(thorough.state.company.founderCapacityRemaining, 390);
+  assertEquals(specialist.state.company.cashCents, 2_465_000);
+  assertEquals(
+    Object.values(fast.state.records.tasks).some((task) =>
+      task.relatedId === "ticket_1" && task.status === "open"
+    ),
+    true,
+  );
+  assertEquals(
+    specialist.state.records.tickets.ticket_1.escalated,
+    true,
+  );
+  assertEquals(fast.events[0].kind, "ticket_resolution_decided");
+
+  const constrained = acknowledgedTicketState();
+  const rejected = applyCommand({
+    ...constrained,
+    company: {
+      ...constrained.company,
+      cashCents: 0,
+      founderCapacityRemaining: 10,
+    },
+  }, {
+    type: "resolve_ticket_with_approach",
+    ticketId: "ticket_1",
+    approach: "thorough_fix",
+  });
+  assertEquals(rejected.accepted, false);
+  assertStrictEquals(
+    rejected.state.records.tickets.ticket_1.status,
+    "acknowledged",
+  );
+});
+
 Deno.test("customers open inbound support tickets over time", () => {
   const initial = createInitialState({ seed: 206, now: 1_000 });
   const state = {
@@ -826,6 +1237,7 @@ Deno.test("customers open inbound support tickets over time", () => {
           health: 55,
           adoption: 40,
           lifecycle: "active" as const,
+          accountPlan: "balanced" as const,
           startedAt: 0,
           nextBillingAt: 43_200,
           renewalAt: 43_200,
@@ -875,6 +1287,7 @@ Deno.test("staffed support processes generated inbound tickets", () => {
           health: 70,
           adoption: 65,
           lifecycle: "active" as const,
+          accountPlan: "balanced" as const,
           startedAt: 0,
           nextBillingAt: 43_200,
           renewalAt: 43_200,
@@ -913,6 +1326,7 @@ Deno.test("missed ticket SLAs fire once and damage account health", () => {
           health: 70,
           adoption: 65,
           lifecycle: "active" as const,
+          accountPlan: "balanced" as const,
           startedAt: 0,
           nextBillingAt: 43_200,
           renewalAt: 43_200,
@@ -971,6 +1385,7 @@ Deno.test("escalated incidents resolve with staffed service quality", () => {
           health: 70,
           adoption: 65,
           lifecycle: "active" as const,
+          accountPlan: "balanced" as const,
           startedAt: 0,
           nextBillingAt: 43_200,
           renewalAt: 43_200,
@@ -1354,6 +1769,7 @@ Deno.test("customer routing balances unassigned accounts by capacity", () => {
         health: 75,
         adoption: 65,
         lifecycle: "active" as const,
+        accountPlan: "balanced" as const,
         startedAt: index,
         nextBillingAt: 43_200,
         renewalAt: 43_200,
@@ -1467,6 +1883,7 @@ Deno.test("campaign commands enforce unlocks and lifecycle", () => {
     name: "  Operations Leaders  ",
     channel: "email" as const,
     audience: "mid_market" as const,
+    objective: "balanced" as const,
     dailyBudgetCents: 5_000,
     durationDays: 7,
     message: "See how revenue teams keep every handoff moving.",
@@ -1504,6 +1921,7 @@ Deno.test("campaigns can be edited, duplicated, and archived safely", () => {
       name: "Operations Leaders",
       channel: "email",
       audience: "mid_market",
+      objective: "balanced",
       dailyBudgetCents: 5_000,
       durationDays: 7,
       message: "Keep every revenue handoff visible and accountable.",
@@ -1517,6 +1935,7 @@ Deno.test("campaigns can be edited, duplicated, and archived safely", () => {
     name: "Revenue Leaders",
     channel: "events",
     audience: "enterprise",
+    objective: "quality",
     dailyBudgetCents: 8_000,
     durationDays: 14,
     message: "Build a more reliable operating rhythm across revenue teams.",
@@ -1535,6 +1954,7 @@ Deno.test("campaigns can be edited, duplicated, and archived safely", () => {
     name: "Revenue Leaders",
     channel: "events",
     audience: "enterprise",
+    objective: "quality",
     dailyBudgetCents: 8_000,
     durationDays: 14,
     message: "Build a more reliable operating rhythm across revenue teams.",
@@ -1574,6 +1994,7 @@ Deno.test("campaign simulation is deterministic and attributes spend and leads",
       name: "Revenue Operations",
       channel: "email",
       audience: "enterprise",
+      objective: "balanced",
       dailyBudgetCents: 4_800,
       durationDays: 2,
       message: "Give every revenue handoff a clear owner and next step.",
@@ -1598,6 +2019,129 @@ Deno.test("campaign simulation is deterministic and attributes spend and leads",
   );
 });
 
+Deno.test("campaign objectives deterministically trade volume quality and spend", () => {
+  const initial = {
+    ...createInitialState({ seed: 118, now: 1_000 }),
+    unlocks: ["marketing" as const],
+  };
+  const run = (objective: "balanced" | "reach" | "quality" | "efficiency") => {
+    const created = applyCommand(initial, {
+      type: "create_campaign",
+      name: `${objective} campaign`,
+      channel: "email",
+      audience: "mid_market",
+      objective,
+      dailyBudgetCents: 4_800,
+      durationDays: 2,
+      message: "Test a measurable acquisition hypothesis with clear outcomes.",
+    });
+    assert(created.accepted);
+    return advanceGame(created.state, 18 * 60, "active", {
+      ...DEFAULT_RULES,
+      leadArrivalIntervalMinutes: 100_000,
+    }).state;
+  };
+
+  const balanced = run("balanced");
+  const reach = run("reach");
+  const quality = run("quality");
+  const efficiency = run("efficiency");
+  assertEquals(balanced.records.campaigns.campaign_1.leadsGenerated, 3);
+  assertEquals(reach.records.campaigns.campaign_1.leadsGenerated, 4);
+  assertEquals(quality.records.campaigns.campaign_1.leadsGenerated, 2);
+  assertEquals(efficiency.records.campaigns.campaign_1.leadsGenerated, 2);
+  assertEquals(balanced.records.campaigns.campaign_1.totalSpentCents, 3_600);
+  assertEquals(reach.records.campaigns.campaign_1.totalSpentCents, 3_960);
+  assertEquals(quality.records.campaigns.campaign_1.totalSpentCents, 4_140);
+  assertEquals(efficiency.records.campaigns.campaign_1.totalSpentCents, 2_520);
+
+  const qualityLead = Object.values(quality.records.leads).find((lead) =>
+    lead.campaignId === "campaign_1"
+  )!;
+  const rawQualityLead = generateLead(initial.seed, initial.rngCursor, 2, 540);
+  assertEquals(
+    qualityLead.fit,
+    Math.min(100, rawQualityLead.lead.fit + 14),
+  );
+  assertEquals(
+    qualityLead.engagement,
+    Math.min(100, rawQualityLead.lead.engagement + 14),
+  );
+});
+
+Deno.test("campaign outcome summaries derive funnel and efficiency results", () => {
+  const initial = createInitialState({ seed: 119, now: 1_000 });
+  const created = applyCommand(
+    { ...initial, unlocks: ["marketing" as const] },
+    {
+      type: "create_campaign",
+      name: "Outcome test",
+      channel: "email",
+      audience: "mid_market",
+      objective: "balanced",
+      dailyBudgetCents: 4_800,
+      durationDays: 2,
+      message: "Measure spend through pipeline and retained customer outcomes.",
+    },
+  );
+  assert(created.accepted);
+  const advanced = advanceGame(created.state, 12 * 60).state;
+  const lead = Object.values(advanced.records.leads).find((entry) =>
+    entry.campaignId === "campaign_1"
+  )!;
+  const state: GameState = {
+    ...advanced,
+    records: {
+      ...advanced.records,
+      deals: {
+        deal_1: {
+          id: "deal_1",
+          leadId: lead.id,
+          companyId: lead.companyId,
+          stage: "won",
+          product: "growth",
+          monthlyValueCents: 50_000,
+          probability: 100,
+          expectedCloseAt: 720,
+          createdAt: 360,
+          updatedAt: 720,
+        },
+      },
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: lead.companyId,
+          primaryLeadId: lead.id,
+          monthlyValueCents: 50_000,
+          health: 80,
+          adoption: 70,
+          lifecycle: "active",
+          accountPlan: "balanced",
+          startedAt: 720,
+          nextBillingAt: 43_920,
+          renewalAt: 518_400,
+          lastSuccessAt: 720,
+          expansions: 0,
+        },
+      },
+    },
+  };
+
+  assertEquals(
+    campaignOutcomeSummary(state, state.records.campaigns.campaign_1),
+    {
+      spendCents: 2_400,
+      leads: 2,
+      deals: 1,
+      customers: 1,
+      openPipelineCents: 0,
+      wonMrrCents: 50_000,
+      costPerLeadCents: 1_200,
+      customerAcquisitionCostCents: 2_400,
+    },
+  );
+});
+
 Deno.test("campaign spend can trigger offline crisis pause", () => {
   const initial = createInitialState({ seed: 66, now: 1_000 });
   const created = applyCommand(
@@ -1615,6 +2159,7 @@ Deno.test("campaign spend can trigger offline crisis pause", () => {
       name: "High Intent Accounts",
       channel: "paid_social",
       audience: "mid_market",
+      objective: "reach",
       dailyBudgetCents: 100_000,
       durationDays: 1,
       message: "Reach operations teams evaluating their next revenue system.",
@@ -1636,6 +2181,7 @@ Deno.test("campaign saturation rises with volume and reduces lead quality", () =
       name: "Scaled Demand",
       channel: "paid_social",
       audience: "mid_market",
+      objective: "balanced",
       dailyBudgetCents: 5_000,
       durationDays: 7,
       message: "Reach operations teams looking for a clearer revenue process.",
@@ -1674,6 +2220,7 @@ Deno.test("old archived campaigns compact into bounded history", () => {
       name: `Campaign ${index}`,
       channel: "paid_social",
       audience: "mid_market",
+      objective: "balanced",
       dailyBudgetCents: 5_000,
       durationDays: 7,
       message: "Reach operations teams with a reliable revenue workflow.",
@@ -1701,6 +2248,20 @@ Deno.test("old archived campaigns compact into bounded history", () => {
   assert(state.history.campaignSpendArchivedCents > 0);
   assertEquals(state.history.campaignLeadsArchived, 1);
   assertEquals(validateGameState(state), { ok: true });
+
+  const iterated = applyCommand(state, {
+    type: "duplicate_campaign",
+    campaignId: "campaign_41",
+  });
+  assert(iterated.accepted);
+  assertEquals(Object.keys(iterated.state.records.campaigns).length, 40);
+  assertEquals(iterated.state.history.campaignsArchived, 2);
+  assertEquals(
+    iterated.state.records.campaigns.campaign_42.objective,
+    "balanced",
+  );
+  assertEquals(iterated.state.records.campaigns.campaign_42.totalSpentCents, 0);
+  assertEquals(validateGameState(iterated.state), { ok: true });
 });
 
 Deno.test("company names are normalized and validated", () => {
@@ -2119,6 +2680,7 @@ Deno.test("unassigned accounts create gradual team pressure", () => {
         health: 70,
         adoption: 65,
         lifecycle: "active" as const,
+        accountPlan: "balanced" as const,
         startedAt: 0,
         nextBillingAt: 43_200,
         renewalAt: 43_200,
@@ -2166,6 +2728,7 @@ Deno.test("success and support staff work owned records without founder capacity
           health: 40,
           adoption: 30,
           lifecycle: "at_risk" as const,
+          accountPlan: "balanced" as const,
           startedAt: 0,
           nextBillingAt: 43_200,
           renewalAt: 43_200,
@@ -2235,6 +2798,7 @@ Deno.test("support agents claim and acknowledge tickets in one action", () => {
           health: 70,
           adoption: 65,
           lifecycle: "active" as const,
+          accountPlan: "balanced" as const,
           startedAt: 0,
           nextBillingAt: 43_200,
           renewalAt: 43_200,

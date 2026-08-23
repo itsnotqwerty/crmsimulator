@@ -6,6 +6,7 @@ import type {
   GameCommand,
   GameRules,
   GameState,
+  InitiativeType,
 } from "./types.ts";
 
 const reject = (state: GameState, reason: string): CommandResult => ({
@@ -34,6 +35,57 @@ const clean = (value: string) => value.trim().replaceAll(/\s+/g, " ");
 const MANAGER_MONTHLY_SALARY_CENTS = 1_200_000;
 const QUARTER_MINUTES = 30 * 24 * 60;
 const TARGET_REWARD_CENTS = 250_000;
+const INITIATIVE_MILESTONES = 3;
+
+export interface InitiativeDefinition {
+  type: InitiativeType;
+  name: string;
+  summary: string;
+  startCostCents: number;
+  durationDays: number;
+  accelerateLabel: string;
+  stabilizeLabel: string;
+}
+
+export const INITIATIVE_DEFINITIONS: readonly InitiativeDefinition[] = [{
+  type: "growth",
+  name: "Market expansion",
+  summary: "Pursue a new segment without letting acquisition costs drift.",
+  startCostCents: 200_000,
+  durationDays: 12,
+  accelerateLabel: "Broaden the launch",
+  stabilizeLabel: "Prove one segment",
+}, {
+  type: "efficiency",
+  name: "Operating redesign",
+  summary: "Reduce recurring costs while protecting delivery capacity.",
+  startCostCents: 150_000,
+  durationDays: 10,
+  accelerateLabel: "Cut the bottleneck",
+  stabilizeLabel: "Standardize the process",
+}, {
+  type: "retention",
+  name: "Customer trust program",
+  summary: "Strengthen adoption and renewal confidence across the base.",
+  startCostCents: 120_000,
+  durationDays: 8,
+  accelerateLabel: "Intervene at risk",
+  stabilizeLabel: "Scale healthy habits",
+}, {
+  type: "resilience",
+  name: "Continuity program",
+  summary: "Harden critical operations against the next quarter's pressure.",
+  startCostCents: 250_000,
+  durationDays: 14,
+  accelerateLabel: "Harden critical paths",
+  stabilizeLabel: "Build recovery depth",
+}];
+
+export function initiativeDefinition(
+  type: InitiativeType,
+): InitiativeDefinition {
+  return INITIATIVE_DEFINITIONS.find((definition) => definition.type === type)!;
+}
 
 export interface OperatingMetrics {
   mrrCents: number;
@@ -370,6 +422,230 @@ export function applyPlatformCommand(
         "Operational resilience improved",
       );
     }
+    case "start_initiative": {
+      if (
+        state.company.mrrCents < 1_000_000 &&
+        platform.departments.length === 0
+      ) {
+        return reject(state, "Reach $10,000 MRR to unlock company initiatives");
+      }
+      if (platform.initiatives.some((item) => item.status === "active")) {
+        return reject(
+          state,
+          "Complete the active initiative before starting another",
+        );
+      }
+      const definition = initiativeDefinition(command.initiativeType);
+      if (!definition || state.company.cashCents < definition.startCostCents) {
+        return reject(state, "Not enough cash to start this initiative");
+      }
+      const sequence = platform.initiativeSequence + 1;
+      const startedAt = state.clock.gameMinute;
+      const durationMinutes = definition.durationDays * 24 * 60;
+      const milestoneAt = [1, 2, 3].map((milestone) =>
+        startedAt + Math.round(durationMinutes * milestone / 3)
+      ) as [number, number, number];
+      const initiative = {
+        id: `initiative_${sequence}`,
+        type: command.initiativeType,
+        status: "active" as const,
+        startedAt,
+        endsAt: startedAt + durationMinutes,
+        startCostCents: definition.startCostCents,
+        milestoneAt,
+        promptedMilestone: 0,
+        decisions: [],
+      };
+      const event: DomainEvent = {
+        kind: "initiative_started",
+        summary: `${definition.name} started`,
+        relatedId: initiative.id,
+        gameMinute: startedAt,
+        amountCents: definition.startCostCents,
+      };
+      const next = {
+        ...state,
+        company: {
+          ...state.company,
+          cashCents: state.company.cashCents - definition.startCostCents,
+        },
+        platform: {
+          ...platform,
+          initiativeSequence: sequence,
+          initiatives: [...platform.initiatives, initiative].slice(-4),
+        },
+      };
+      return {
+        accepted: true,
+        state: syncNarrative(projectEvents(next, [event], rules)),
+        events: [event],
+      };
+    }
+    case "decide_initiative_milestone": {
+      const initiative = platform.initiatives.find((item) =>
+        item.id === command.initiativeId && item.status === "active"
+      );
+      if (!initiative) return reject(state, "Active initiative does not exist");
+      const milestoneIndex = initiative.decisions.length;
+      if (
+        milestoneIndex >= INITIATIVE_MILESTONES ||
+        initiative.promptedMilestone <= milestoneIndex ||
+        state.clock.gameMinute < initiative.milestoneAt[milestoneIndex]
+      ) {
+        return reject(state, "The next initiative milestone is not ready");
+      }
+      const decisions = [...initiative.decisions, {
+        milestone: milestoneIndex + 1,
+        approach: command.approach,
+        decidedAt: state.clock.gameMinute,
+      }];
+      if (decisions.length < INITIATIVE_MILESTONES) {
+        const updated = {
+          ...initiative,
+          decisions,
+        };
+        const event: DomainEvent = {
+          kind: "initiative_milestone_decided",
+          summary: `${
+            initiativeDefinition(initiative.type).name
+          } milestone ${decisions.length}: ${command.approach}`,
+          relatedId: initiative.id,
+          gameMinute: state.clock.gameMinute,
+        };
+        const next = {
+          ...state,
+          platform: {
+            ...platform,
+            initiatives: platform.initiatives.map((item) =>
+              item.id === initiative.id ? updated : item
+            ),
+          },
+        };
+        return {
+          accepted: true,
+          state: syncNarrative(projectEvents(next, [event], rules)),
+          events: [event],
+        };
+      }
+      const accelerated =
+        decisions.filter((decision) => decision.approach === "accelerate")
+          .length;
+      const stabilized = decisions.length - accelerated;
+      const rewardCents = 150_000 + platform.endlessGoal * 25_000 +
+        stabilized * 15_000;
+      let completed: GameState = {
+        ...state,
+        company: {
+          ...state.company,
+          cashCents: state.company.cashCents + rewardCents,
+        },
+      };
+      let outcome = "";
+      if (initiative.type === "growth") {
+        const mrrGain = 40_000 + accelerated * 20_000;
+        completed = {
+          ...completed,
+          company: {
+            ...completed.company,
+            mrrCents: completed.company.mrrCents + mrrGain,
+            peakMrrCents: Math.max(
+              completed.company.peakMrrCents,
+              completed.company.mrrCents + mrrGain,
+            ),
+            baselineMonthlyExpensesCents:
+              completed.company.baselineMonthlyExpensesCents +
+              accelerated * 10_000,
+          },
+        };
+        outcome = `$${mrrGain / 100} MRR added; ${
+          accelerated * 100
+        } dollars of monthly complexity accepted`;
+      } else if (initiative.type === "efficiency") {
+        const savings = 50_000 + accelerated * 15_000;
+        completed = {
+          ...completed,
+          company: {
+            ...completed.company,
+            baselineMonthlyExpensesCents: Math.max(
+              100_000,
+              completed.company.baselineMonthlyExpensesCents - savings,
+            ),
+          },
+        };
+        completed = applyBurnoutPressure(completed, accelerated * 2);
+        outcome = `$${savings / 100} monthly cost removed; ${
+          accelerated * 2
+        } burnout pressure accepted`;
+      } else if (initiative.type === "retention") {
+        const healthGain = 8 + stabilized * 3;
+        completed = {
+          ...completed,
+          records: {
+            ...completed.records,
+            customers: Object.fromEntries(
+              Object.entries(completed.records.customers).map((
+                [id, customer],
+              ) => [id, {
+                ...customer,
+                health: Math.min(100, customer.health + healthGain),
+                adoption: Math.min(
+                  100,
+                  customer.adoption + 5 + stabilized * 2,
+                ),
+              }]),
+            ),
+          },
+        };
+        outcome =
+          `Customer health improved ${healthGain} points; growth upside deferred`;
+      } else {
+        const levels = 1 + (stabilized >= 2 ? 1 : 0);
+        completed = {
+          ...completed,
+          platform: {
+            ...completed.platform,
+            resilienceLevel: completed.platform.resilienceLevel + levels,
+          },
+        };
+        outcome = `${levels} resilience level${
+          levels === 1 ? "" : "s"
+        } gained; no direct growth created`;
+      }
+      const finished = {
+        ...initiative,
+        status: "completed" as const,
+        decisions,
+        completedAt: state.clock.gameMinute,
+        rewardCents,
+        outcome,
+      };
+      const event: DomainEvent = {
+        kind: "initiative_completed",
+        summary: `${
+          initiativeDefinition(initiative.type).name
+        } completed: ${outcome}`,
+        relatedId: initiative.id,
+        gameMinute: state.clock.gameMinute,
+        amountCents: rewardCents,
+      };
+      const finalized = {
+        ...completed,
+        platform: {
+          ...completed.platform,
+          initiatives: completed.platform.initiatives.map((item) =>
+            item.id === initiative.id ? finished : item
+          ).slice(-4),
+          initiativesCompleted: completed.platform.initiativesCompleted + 1,
+          quarterInitiativeCompleted: true,
+          auditEntriesArchived: completed.platform.auditEntriesArchived + 1,
+        },
+      };
+      return {
+        accepted: true,
+        state: syncNarrative(projectEvents(finalized, [event], rules)),
+        events: [event],
+      };
+    }
     default:
       return undefined;
   }
@@ -414,6 +690,37 @@ export function advancePlatform(
 ): { state: GameState; events: DomainEvent[] } {
   let current = state;
   const events: DomainEvent[] = [];
+  const activeInitiative = current.platform.initiatives.find((initiative) =>
+    initiative.status === "active"
+  );
+  if (activeInitiative) {
+    const milestoneIndex = activeInitiative.decisions.length;
+    if (
+      milestoneIndex < INITIATIVE_MILESTONES &&
+      activeInitiative.promptedMilestone <= milestoneIndex &&
+      endMinute >= activeInitiative.milestoneAt[milestoneIndex]
+    ) {
+      current = {
+        ...current,
+        platform: {
+          ...current.platform,
+          initiatives: current.platform.initiatives.map((initiative) =>
+            initiative.id === activeInitiative.id
+              ? { ...initiative, promptedMilestone: milestoneIndex + 1 }
+              : initiative
+          ),
+        },
+      };
+      events.push({
+        kind: "initiative_milestone_ready",
+        summary: `${
+          initiativeDefinition(activeInitiative.type).name
+        } milestone ${milestoneIndex + 1} needs a decision`,
+        relatedId: activeInitiative.id,
+        gameMinute: endMinute,
+      });
+    }
+  }
   if (Math.floor(startMinute / 1_440) !== Math.floor(endMinute / 1_440)) {
     current = {
       ...current,
@@ -462,7 +769,10 @@ export function advancePlatform(
       metrics.retentionPercent >= current.platform.retentionTargetPercent,
     ];
     const score = targetsMet.filter(Boolean).length;
-    const rewardCents = score * TARGET_REWARD_CENTS;
+    const initiativeBonus = current.platform.quarterInitiativeCompleted
+      ? TARGET_REWARD_CENTS
+      : 0;
+    const rewardCents = score * TARGET_REWARD_CENTS + initiativeBonus;
     const misses = targetsMet.length - score;
     const pressure = misses * Math.max(
       0,
@@ -489,6 +799,7 @@ export function advancePlatform(
         retentionTargetPercent: targetsMet[2]
           ? Math.min(99, current.platform.retentionTargetPercent + 1)
           : Math.max(75, current.platform.retentionTargetPercent - 1),
+        quarterInitiativeCompleted: false,
         auditEntriesArchived: current.platform.auditEntriesArchived + 1,
       },
     };
@@ -496,7 +807,9 @@ export function advancePlatform(
       kind: "quarter_completed",
       summary: `Q${
         current.platform.quarter - 1
-      } closed: ${score}/3 targets met`,
+      } closed: ${score}/3 targets met${
+        initiativeBonus ? " plus initiative bonus" : ""
+      }`,
       gameMinute: endMinute,
       amountCents: rewardCents,
     });

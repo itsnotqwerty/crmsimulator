@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 23 as const;
+export const SAVE_SCHEMA_VERSION = 26 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -28,12 +28,23 @@ export type DealStage =
   | "won"
   | "lost";
 export type DealProduct = "starter" | "growth" | "scale";
+export type DealNegotiationApproach = "discount" | "value_proof" | "pilot";
 export type BillingCycle = "monthly" | "annual";
 export type QuoteStatus = "draft" | "sent" | "accepted" | "expired";
 export type CustomerLifecycle = "onboarding" | "active" | "at_risk";
+export type CustomerAccountPlan =
+  | "balanced"
+  | "adoption"
+  | "relationship"
+  | "expansion"
+  | "stabilization";
 export type TicketChannel = "email" | "chat" | "phone";
 export type TicketPriority = "low" | "normal" | "high" | "urgent";
 export type TicketStatus = "open" | "acknowledged" | "resolved";
+export type TicketResolutionApproach =
+  | "fast_workaround"
+  | "thorough_fix"
+  | "specialist_escalation";
 export type IncidentSeverity = "minor" | "major" | "critical";
 export type IncidentStatus = "investigating" | "resolved";
 export type SalesRepLevel = "junior" | "mid" | "senior";
@@ -58,6 +69,7 @@ export type ActivityKind =
   | "deal_created"
   | "deal_updated"
   | "deal_advanced"
+  | "deal_negotiation_decided"
   | "deal_won"
   | "deal_lost"
   | "sales_rep_hired"
@@ -72,6 +84,7 @@ export type ActivityKind =
   | "quote_expired"
   | "customer_onboarded"
   | "customer_check_in"
+  | "customer_plan_set"
   | "customer_renewed"
   | "customer_expanded"
   | "customer_at_risk"
@@ -85,6 +98,7 @@ export type ActivityKind =
   | "ticket_assigned"
   | "ticket_acknowledged"
   | "ticket_resolved"
+  | "ticket_resolution_decided"
   | "ticket_sla_breached"
   | "support_rep_hired"
   | "support_rep_fired"
@@ -109,6 +123,10 @@ export type ActivityKind =
   | "campaign_resumed"
   | "campaign_completed"
   | "campaign_archived"
+  | "initiative_started"
+  | "initiative_milestone_ready"
+  | "initiative_milestone_decided"
+  | "initiative_completed"
   | "quarter_completed"
   | "operating_goal_reached";
 export type AutomationTrigger =
@@ -182,6 +200,35 @@ export interface OperatingManager {
   lastDecision?: string;
 }
 
+export type InitiativeType =
+  | "growth"
+  | "efficiency"
+  | "retention"
+  | "resilience";
+export type InitiativeApproach = "accelerate" | "stabilize";
+export type InitiativeStatus = "active" | "completed";
+
+export interface InitiativeDecision {
+  milestone: number;
+  approach: InitiativeApproach;
+  decidedAt: GameMinute;
+}
+
+export interface CompanyInitiative {
+  id: EntityId;
+  type: InitiativeType;
+  status: InitiativeStatus;
+  startedAt: GameMinute;
+  endsAt: GameMinute;
+  startCostCents: number;
+  milestoneAt: [GameMinute, GameMinute, GameMinute];
+  promptedMilestone: number;
+  decisions: InitiativeDecision[];
+  completedAt?: GameMinute;
+  rewardCents?: number;
+  outcome?: string;
+}
+
 export interface PlatformState {
   sequences: SequenceAutomation[];
   workflows: WorkflowAutomation[];
@@ -198,9 +245,14 @@ export interface PlatformState {
   retentionTargetPercent: number;
   resilienceLevel: number;
   endlessGoal: number;
+  initiativeSequence: number;
+  initiatives: CompanyInitiative[];
+  initiativesCompleted: number;
+  quarterInitiativeCompleted: boolean;
 }
 export type CampaignChannel = "email" | "paid_social" | "events";
 export type CampaignAudience = "small_business" | "mid_market" | "enterprise";
+export type CampaignObjective = "balanced" | "reach" | "quality" | "efficiency";
 export type CampaignStatus = "active" | "paused" | "completed" | "archived";
 export type UnlockId = "marketing" | "pipeline" | "customer_success";
 
@@ -254,6 +306,7 @@ export interface Campaign {
   name: string;
   channel: CampaignChannel;
   audience: CampaignAudience;
+  objective: CampaignObjective;
   status: CampaignStatus;
   message: string;
   dailyBudgetCents: number;
@@ -313,6 +366,7 @@ export interface Customer {
   health: number;
   adoption: number;
   lifecycle: CustomerLifecycle;
+  accountPlan: CustomerAccountPlan;
   startedAt: GameMinute;
   nextBillingAt: GameMinute;
   renewalAt: GameMinute;
@@ -505,6 +559,11 @@ export type GameCommand =
   | { type: "disqualify_lead"; leadId: EntityId }
   | { type: "advance_deal"; dealId: EntityId }
   | {
+    type: "negotiate_deal";
+    dealId: EntityId;
+    approach: DealNegotiationApproach;
+  }
+  | {
     type: "update_deal";
     dealId: EntityId;
     product: DealProduct;
@@ -554,6 +613,7 @@ export type GameCommand =
     name: string;
     channel: CampaignChannel;
     audience: CampaignAudience;
+    objective: CampaignObjective;
     dailyBudgetCents: number;
     durationDays: number;
     message: string;
@@ -569,6 +629,7 @@ export type GameCommand =
     name: string;
     channel: CampaignChannel;
     audience: CampaignAudience;
+    objective: CampaignObjective;
     dailyBudgetCents: number;
     durationDays: number;
     message: string;
@@ -593,6 +654,11 @@ export type GameCommand =
   | { type: "cancel_task"; taskId: EntityId }
   | { type: "complete_customer_onboarding"; customerId: EntityId }
   | { type: "customer_check_in"; customerId: EntityId }
+  | {
+    type: "set_customer_plan";
+    customerId: EntityId;
+    accountPlan: CustomerAccountPlan;
+  }
   | { type: "renew_customer"; customerId: EntityId }
   | { type: "expand_customer"; customerId: EntityId }
   | { type: "hire_success_rep"; name: string; level: SalesRepLevel }
@@ -618,6 +684,11 @@ export type GameCommand =
   | { type: "assign_ticket"; ticketId: EntityId; ownerId?: EntityId }
   | { type: "acknowledge_ticket"; ticketId: EntityId }
   | { type: "resolve_ticket"; ticketId: EntityId }
+  | {
+    type: "resolve_ticket_with_approach";
+    ticketId: EntityId;
+    approach: TicketResolutionApproach;
+  }
   | { type: "hire_support_rep"; name: string; level: SalesRepLevel }
   | { type: "fire_support_rep"; supportRepId: EntityId }
   | { type: "escalate_ticket"; ticketId: EntityId }
@@ -655,6 +726,12 @@ export type GameCommand =
   | { type: "fire_manager"; department: ManagerDepartment }
   | { type: "set_approval_threshold"; amountCents: number }
   | { type: "invest_resilience" }
+  | { type: "start_initiative"; initiativeType: InitiativeType }
+  | {
+    type: "decide_initiative_milestone";
+    initiativeId: EntityId;
+    approach: InitiativeApproach;
+  }
   | { type: "acknowledge_narrative" }
   | { type: "resume_crisis" }
   | { type: "new_company"; seed: number; now: number; companyName?: string };
@@ -698,6 +775,8 @@ export interface GameRules {
   leadArrivalIntervalMinutes: number;
   prospectingCapacityMinutes: number;
   leadCoolingMinutes: number;
+  safeCloseIntent: number;
+  maximumCloseLossChancePercent: number;
   capacityResetIntervalMinutes: number;
   billingIntervalMinutes: number;
   maxRecentActivities: number;

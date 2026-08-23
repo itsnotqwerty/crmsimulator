@@ -1,5 +1,7 @@
 import { randomInteger } from "./rng.ts";
+import { dealCloseLossChance } from "./deals.ts";
 import type {
+  CustomerAccountPlan,
   DealStage,
   DomainEvent,
   GameRules,
@@ -12,6 +14,19 @@ import type {
   TicketChannel,
   TicketPriority,
 } from "./types.ts";
+
+const ACCOUNT_PLAN_EFFECTS: Readonly<
+  Record<
+    CustomerAccountPlan,
+    { health: number; adoption: number; founderCapacity: number }
+  >
+> = {
+  balanced: { health: 0, adoption: 0, founderCapacity: 0 },
+  adoption: { health: -2, adoption: 6, founderCapacity: 5 },
+  relationship: { health: 5, adoption: -2, founderCapacity: 5 },
+  expansion: { health: -4, adoption: 4, founderCapacity: 10 },
+  stabilization: { health: 8, adoption: -5, founderCapacity: 10 },
+};
 
 export const TICKET_SLA_MINUTES: Record<
   TicketPriority,
@@ -37,9 +52,7 @@ const ok = (state: GameState, events: DomainEvent[]): WorkResult => ({
 });
 
 export function closeLossRiskPercent(intent: number): number {
-  const boundedIntent = Math.max(0, Math.min(100, intent));
-  if (boundedIntent >= 70) return 0;
-  return Math.round((70 - boundedIntent) / 70 * 95);
+  return dealCloseLossChance(intent);
 }
 
 export function nextDealStage(stage: DealStage): DealStage | undefined {
@@ -582,7 +595,9 @@ export function customerCheckInWork(
 ): WorkResult {
   const customer = state.records.customers[customerId];
   if (!customer) return fail("Customer does not exist");
-  const capacityCost = 30;
+  const planEffect = ACCOUNT_PLAN_EFFECTS[customer.accountPlan];
+  const capacityCost = 30 +
+    (consumeFounderCapacity ? planEffect.founderCapacity : 0);
   if (
     consumeFounderCapacity &&
     state.company.founderCapacityRemaining < capacityCost
@@ -604,8 +619,14 @@ export function customerCheckInWork(
         ...state.records.customers,
         [customer.id]: {
           ...customer,
-          health: Math.min(100, customer.health + 12),
-          adoption: Math.min(100, customer.adoption + 8),
+          health: Math.max(
+            0,
+            Math.min(100, customer.health + 12 + planEffect.health),
+          ),
+          adoption: Math.max(
+            0,
+            Math.min(100, customer.adoption + 8 + planEffect.adoption),
+          ),
           lifecycle: customer.lifecycle === "onboarding"
             ? "onboarding"
             : "active",
@@ -683,7 +704,10 @@ export function runSuccessPlaybookWork(
   const owner = customer.ownerId
     ? state.records.successReps[customer.ownerId]
     : undefined;
-  const capacityCost = owner || !consumeFounderCapacity ? 0 : 35;
+  const planEffect = ACCOUNT_PLAN_EFFECTS[customer.accountPlan];
+  const capacityCost = owner || !consumeFounderCapacity
+    ? 0
+    : 35 + planEffect.founderCapacity;
   if (state.company.founderCapacityRemaining < capacityCost) {
     return fail("Not enough founder capacity");
   }
@@ -695,10 +719,19 @@ export function runSuccessPlaybookWork(
   const skillBonus = owner
     ? Math.floor((owner.skill - owner.burnout / 2) / 20)
     : 0;
-  const health = Math.min(100, customer.health + base.health + skillBonus);
-  const adoption = Math.min(
-    100,
-    customer.adoption + base.adoption + skillBonus,
+  const health = Math.max(
+    0,
+    Math.min(
+      100,
+      customer.health + base.health + skillBonus + planEffect.health,
+    ),
+  );
+  const adoption = Math.max(
+    0,
+    Math.min(
+      100,
+      customer.adoption + base.adoption + skillBonus + planEffect.adoption,
+    ),
   );
   const lifecycle = adoption >= 50 && health >= 45
     ? "active" as const
@@ -976,6 +1009,7 @@ export function advanceDealWork(
           health: 80,
           adoption: 25,
           lifecycle: "onboarding",
+          accountPlan: "balanced",
           startedAt: gameMinute,
           nextBillingAt: gameMinute + rules.billingIntervalMinutes,
           renewalAt: gameMinute + rules.customerRenewalIntervalMinutes,

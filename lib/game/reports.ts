@@ -1,4 +1,51 @@
-import type { GameState } from "./types.ts";
+import type { Campaign, GameState } from "./types.ts";
+
+export interface CampaignOutcomeSummary {
+  spendCents: number;
+  leads: number;
+  deals: number;
+  customers: number;
+  openPipelineCents: number;
+  wonMrrCents: number;
+  costPerLeadCents: number | null;
+  customerAcquisitionCostCents: number | null;
+}
+
+export function campaignOutcomeSummary(
+  state: GameState,
+  campaign: Campaign,
+): CampaignOutcomeSummary {
+  const leadIds = new Set(
+    Object.values(state.records.leads)
+      .filter((lead) => lead.campaignId === campaign.id)
+      .map((lead) => lead.id),
+  );
+  const deals = Object.values(state.records.deals).filter((deal) =>
+    leadIds.has(deal.leadId)
+  );
+  const customers = Object.values(state.records.customers).filter((customer) =>
+    leadIds.has(customer.primaryLeadId)
+  );
+  return {
+    spendCents: campaign.totalSpentCents,
+    leads: campaign.leadsGenerated,
+    deals: deals.length,
+    customers: customers.length,
+    openPipelineCents: deals.filter((deal) =>
+      deal.stage !== "won" && deal.stage !== "lost"
+    ).reduce((total, deal) => total + deal.monthlyValueCents, 0),
+    wonMrrCents: customers.reduce(
+      (total, customer) => total + customer.monthlyValueCents,
+      0,
+    ),
+    costPerLeadCents: campaign.leadsGenerated
+      ? Math.round(campaign.totalSpentCents / campaign.leadsGenerated)
+      : null,
+    customerAcquisitionCostCents: customers.length
+      ? Math.round(campaign.totalSpentCents / customers.length)
+      : null,
+  };
+}
 
 export interface RetentionReport {
   grossRetentionPercent: number;

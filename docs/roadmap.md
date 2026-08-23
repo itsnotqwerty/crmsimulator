@@ -180,6 +180,8 @@ relying only on organic leads.
 - [x] Model saturation, poor targeting, and low-quality workload.
 - [x] Add campaign pause and resume workflows.
 - [x] Add campaign edit, duplicate, and archive workflows.
+- [x] Deepen campaigns with persisted objectives, deterministic tradeoffs,
+      outcome summaries, and an iterate-from-results workflow.
 - [x] Extend save fixtures and aggregate old campaign history.
 
 **Acceptance checks**
@@ -231,6 +233,7 @@ acquiring them.
 - [x] Add account health, onboarding, adoption, renewal, expansion, and churn
       risk.
 - [x] Add customer-success staff, ownership, playbooks, and work queues.
+- [x] Add persisted customer account plans with bounded success-work tradeoffs.
 - [x] Add Support Inbox, tickets, priority, channel, status, assignment, and SLA
       timers.
 - [x] Add support staffing, escalation, incidents, and resolution quality.
@@ -291,6 +294,12 @@ victory state.
       auth.
 - [x] Add automatic 30-day operating reviews with growth, efficiency, and
       retention targets that affect cash rewards and burnout pressure.
+- [x] Add one-at-a-time company initiatives across growth, efficiency,
+      retention, and resilience with paid starts, timed decision milestones,
+      deterministic tradeoffs, and bounded history.
+- [x] Expand decision forks at negotiation and support resolution with
+      deterministic capacity, cash, probability, health, and future-risk
+      consequences recorded in activity history.
 - [x] Add advanced data hygiene, audit summaries, and archive controls.
 - [x] Add escalating endless goals for growth, efficiency, retention, and
       resilience.
@@ -330,3 +339,5 @@ gameplay work but must be completed before production release:
       requirements;
 - [x] Review repository metadata, deploy workflow, and license text for stale
       project references.
+- [x] Harden release verification with worst-case cookie fixtures, production
+      smoke tests, and a concise release-gate command map.

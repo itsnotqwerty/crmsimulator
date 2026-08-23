@@ -15,6 +15,7 @@ import {
   closeLossRiskPercent,
   completeOnboardingWork,
   contactLeadWork,
+  createRelatedTaskWork,
   createTicketWork,
   customerCheckInWork,
   followUpLeadWork,
@@ -29,7 +30,10 @@ import type {
   BillingCycle,
   CampaignAudience,
   CampaignChannel,
+  CampaignObjective,
   CommandResult,
+  CustomerAccountPlan,
+  DealNegotiationApproach,
   DealProduct,
   DomainEvent,
   GameCommand,
@@ -41,6 +45,7 @@ import type {
   SalesTerritory,
   TicketChannel,
   TicketPriority,
+  TicketResolutionApproach,
 } from "./types.ts";
 
 const SALES_REP_PROFILES: Record<
@@ -94,6 +99,7 @@ function createCampaign(
     name: string;
     channel: CampaignChannel;
     audience: CampaignAudience;
+    objective: CampaignObjective;
     dailyBudgetCents: number;
     durationDays: number;
     message: string;
@@ -120,6 +126,11 @@ function createCampaign(
   }
   const name = input.name.trim().replaceAll(/\s+/g, " ");
   const message = input.message.trim().replaceAll(/\s+/g, " ");
+  if (
+    !["balanced", "reach", "quality", "efficiency"].includes(input.objective)
+  ) {
+    return rejected(state, "Campaign objective is invalid");
+  }
   if (name.length < 2 || name.length > 60) {
     return rejected(state, "Campaign name must contain 2 to 60 characters");
   }
@@ -150,6 +161,7 @@ function createCampaign(
     name,
     channel: input.channel,
     audience: input.audience,
+    objective: input.objective,
     status: "active" as const,
     message,
     dailyBudgetCents: input.dailyBudgetCents,
@@ -305,6 +317,7 @@ function updateCampaign(
           name: values.name,
           channel: values.channel,
           audience: values.audience,
+          objective: values.objective,
           message: values.message,
           dailyBudgetCents: values.dailyBudgetCents,
           endsAt: state.clock.gameMinute + command.durationDays * 24 * 60,
@@ -326,6 +339,14 @@ function duplicateCampaign(
 ): CommandResult {
   const source = state.records.campaigns[campaignId];
   if (!source) return rejected(state, "Campaign does not exist");
+  if (
+    Object.keys(state.records.campaigns).length >= rules.maxCampaignRecords &&
+    !Object.values(state.records.campaigns).some((campaign) =>
+      campaign.status === "archived"
+    )
+  ) {
+    return rejected(state, "Archive an older campaign before iterating");
+  }
   const sequence = state.sequences.campaign + 1;
   const id = `campaign_${sequence}`;
   const name = `Copy of ${source.name}`.slice(0, 60);
@@ -1161,6 +1182,45 @@ function customerCheckIn(
     : rejected(state, result.reason);
 }
 
+function setCustomerPlan(
+  state: GameState,
+  customerId: string,
+  accountPlan: CustomerAccountPlan,
+  rules: GameRules,
+): CommandResult {
+  const customer = state.records.customers[customerId];
+  if (!customer) return rejected(state, "Customer does not exist");
+  if (
+    ![
+      "balanced",
+      "adoption",
+      "relationship",
+      "expansion",
+      "stabilization",
+    ].includes(accountPlan)
+  ) {
+    return rejected(state, "Account plan is invalid");
+  }
+  if (customer.accountPlan === accountPlan) {
+    return rejected(state, "Account plan is unchanged");
+  }
+  return accepted({
+    ...state,
+    records: {
+      ...state.records,
+      customers: {
+        ...state.records.customers,
+        [customer.id]: { ...customer, accountPlan },
+      },
+    },
+  }, [{
+    kind: "customer_plan_set",
+    summary: `Account plan set to ${accountPlan}`,
+    relatedId: customer.id,
+    gameMinute: state.clock.gameMinute,
+  }], rules);
+}
+
 function renewCustomer(
   state: GameState,
   customerId: string,
@@ -1880,6 +1940,288 @@ function advanceDeal(
   return rejected(state, result.reason);
 }
 
+const NEGOTIATION_EFFECTS: Record<
+  DealNegotiationApproach,
+  {
+    label: string;
+    capacity: number;
+    cash: number;
+    engagement: number;
+    probability: number;
+    valuePercent: number;
+    customerHealth: number;
+    customerAdoption: number;
+  }
+> = {
+  discount: {
+    label: "Commercial discount",
+    capacity: 30,
+    cash: 0,
+    engagement: 18,
+    probability: 18,
+    valuePercent: 85,
+    customerHealth: 72,
+    customerAdoption: 20,
+  },
+  value_proof: {
+    label: "Value proof",
+    capacity: 90,
+    cash: 15_000,
+    engagement: 10,
+    probability: 12,
+    valuePercent: 105,
+    customerHealth: 86,
+    customerAdoption: 35,
+  },
+  pilot: {
+    label: "Paid pilot",
+    capacity: 60,
+    cash: 40_000,
+    engagement: 25,
+    probability: 22,
+    valuePercent: 95,
+    customerHealth: 92,
+    customerAdoption: 45,
+  },
+};
+
+function negotiateDeal(
+  state: GameState,
+  dealId: string,
+  approach: DealNegotiationApproach,
+  rules: GameRules,
+): CommandResult {
+  const effects = NEGOTIATION_EFFECTS[approach];
+  if (!effects) return rejected(state, "Negotiation approach is invalid");
+  const deal = state.records.deals[dealId];
+  if (!deal) return rejected(state, "Deal does not exist");
+  if (deal.stage !== "negotiation") {
+    return rejected(state, "Negotiation choices are available at negotiation");
+  }
+  const lead = state.records.leads[deal.leadId];
+  if (!lead) return rejected(state, "Deal contact does not exist");
+  if (state.company.founderCapacityRemaining < effects.capacity) {
+    return rejected(state, "Not enough founder capacity for this approach");
+  }
+  if (state.company.cashCents < effects.cash) {
+    return rejected(state, "Not enough cash for this approach");
+  }
+
+  const prepared: GameState = {
+    ...state,
+    company: {
+      ...state.company,
+      cashCents: state.company.cashCents - effects.cash,
+      founderCapacityRemaining: state.company.founderCapacityRemaining -
+        effects.capacity,
+    },
+    records: {
+      ...state.records,
+      leads: {
+        ...state.records.leads,
+        [lead.id]: {
+          ...lead,
+          engagement: Math.min(100, lead.engagement + effects.engagement),
+          lastActivityAt: state.clock.gameMinute,
+        },
+      },
+      deals: {
+        ...state.records.deals,
+        [deal.id]: {
+          ...deal,
+          monthlyValueCents: Math.max(
+            1,
+            Math.round(deal.monthlyValueCents * effects.valuePercent / 100),
+          ),
+          probability: Math.min(
+            95,
+            deal.probability + effects.probability,
+          ),
+          updatedAt: state.clock.gameMinute,
+        },
+      },
+    },
+  };
+  const closed = advanceDealWork(prepared, dealId, rules);
+  if (!closed.ok) return rejected(state, closed.reason);
+
+  const customer = closed.state.sequences.customer > prepared.sequences.customer
+    ? closed.state.records.customers[
+      `customer_${closed.state.sequences.customer}`
+    ]
+    : undefined;
+  const nextState = customer
+    ? {
+      ...closed.state,
+      records: {
+        ...closed.state.records,
+        customers: {
+          ...closed.state.records.customers,
+          [customer.id]: {
+            ...customer,
+            health: effects.customerHealth,
+            adoption: effects.customerAdoption,
+          },
+        },
+      },
+    }
+    : closed.state;
+  return accepted(nextState, [{
+    kind: "deal_negotiation_decided",
+    summary: `${effects.label} chosen: ${effects.capacity}m capacity, ${
+      effects.cash ? `$${(effects.cash / 100).toFixed(0)} cost, ` : ""
+    }${effects.probability}% stronger forecast`,
+    relatedId: deal.id,
+    gameMinute: state.clock.gameMinute,
+  }, ...closed.events], rules);
+}
+
+const RESOLUTION_EFFECTS: Record<
+  TicketResolutionApproach,
+  {
+    label: string;
+    capacity: number;
+    cash: number;
+    quality: number;
+    health: number;
+    escalate: boolean;
+  }
+> = {
+  fast_workaround: {
+    label: "Fast workaround",
+    capacity: 15,
+    cash: 0,
+    quality: -20,
+    health: -6,
+    escalate: false,
+  },
+  thorough_fix: {
+    label: "Thorough fix",
+    capacity: 90,
+    cash: 10_000,
+    quality: 20,
+    health: 6,
+    escalate: false,
+  },
+  specialist_escalation: {
+    label: "Specialist escalation",
+    capacity: 30,
+    cash: 35_000,
+    quality: 12,
+    health: 3,
+    escalate: true,
+  },
+};
+
+function resolveTicketWithApproach(
+  state: GameState,
+  ticketId: string,
+  approach: TicketResolutionApproach,
+  rules: GameRules,
+): CommandResult {
+  const effects = RESOLUTION_EFFECTS[approach];
+  if (!effects) return rejected(state, "Resolution approach is invalid");
+  const ticket = state.records.tickets[ticketId];
+  if (!ticket) return rejected(state, "Ticket does not exist");
+  if (ticket.status !== "acknowledged") {
+    return rejected(
+      state,
+      "Acknowledge the ticket before choosing a resolution",
+    );
+  }
+  if (state.company.founderCapacityRemaining < effects.capacity) {
+    return rejected(state, "Not enough founder capacity for this approach");
+  }
+  if (state.company.cashCents < effects.cash) {
+    return rejected(state, "Not enough cash for this approach");
+  }
+
+  const prepared: GameState = {
+    ...state,
+    company: {
+      ...state.company,
+      cashCents: state.company.cashCents - effects.cash,
+      founderCapacityRemaining: state.company.founderCapacityRemaining -
+        effects.capacity,
+    },
+    records: effects.escalate
+      ? {
+        ...state.records,
+        tickets: {
+          ...state.records.tickets,
+          [ticket.id]: { ...ticket, escalated: true, priority: "urgent" },
+        },
+      }
+      : state.records,
+  };
+  const resolved = resolveTicketWork(prepared, ticketId);
+  if (!resolved.ok) return rejected(state, resolved.reason);
+  const resolvedTicket = resolved.state.records.tickets[ticket.id];
+  const customer = resolved.state.records.customers[ticket.customerId];
+  let nextState: GameState = {
+    ...resolved.state,
+    records: {
+      ...resolved.state.records,
+      tickets: {
+        ...resolved.state.records.tickets,
+        [ticket.id]: {
+          ...resolvedTicket,
+          resolutionQuality: Math.max(
+            0,
+            Math.min(
+              100,
+              (resolvedTicket.resolutionQuality ?? 0) + effects.quality,
+            ),
+          ),
+        },
+      },
+      customers: customer
+        ? {
+          ...resolved.state.records.customers,
+          [customer.id]: {
+            ...customer,
+            health: Math.max(
+              0,
+              Math.min(100, customer.health + effects.health),
+            ),
+          },
+        }
+        : resolved.state.records.customers,
+    },
+  };
+  let futureRisk = effects.escalate
+    ? "specialist review lowers recurrence risk"
+    : "no follow-up debt";
+  const extraEvents: DomainEvent[] = [];
+  if (approach === "fast_workaround") {
+    const followUp = createRelatedTaskWork(
+      nextState,
+      ticket.id,
+      `Replace workaround for ${ticket.title}`,
+      "follow_up",
+    );
+    if (followUp.ok) {
+      nextState = followUp.state;
+      extraEvents.push(...followUp.events);
+      futureRisk = "follow-up debt created";
+    } else {
+      futureRisk = "untracked recurrence risk";
+    }
+  }
+  return accepted(nextState, [
+    {
+      kind: "ticket_resolution_decided",
+      summary: `${effects.label} chosen: ${effects.capacity}m capacity, ${
+        effects.cash ? `$${(effects.cash / 100).toFixed(0)} cost, ` : ""
+      }${futureRisk}`,
+      relatedId: ticket.id,
+      gameMinute: state.clock.gameMinute,
+    },
+    ...resolved.events,
+    ...extraEvents,
+  ], rules);
+}
+
 export function applyCommand(
   state: GameState,
   command: GameCommand,
@@ -2095,6 +2437,8 @@ export function applyCommand(
     }
     case "advance_deal":
       return advanceDeal(state, command.dealId, rules);
+    case "negotiate_deal":
+      return negotiateDeal(state, command.dealId, command.approach, rules);
     case "update_deal":
       return updateDeal(state, command, rules);
     case "lose_deal":
@@ -2196,6 +2540,13 @@ export function applyCommand(
       return completeCustomerOnboarding(state, command.customerId, rules);
     case "customer_check_in":
       return customerCheckIn(state, command.customerId, rules);
+    case "set_customer_plan":
+      return setCustomerPlan(
+        state,
+        command.customerId,
+        command.accountPlan,
+        rules,
+      );
     case "renew_customer":
       return renewCustomer(state, command.customerId, rules);
     case "expand_customer":
@@ -2225,6 +2576,13 @@ export function applyCommand(
       return acknowledgeTicket(state, command.ticketId, rules);
     case "resolve_ticket":
       return resolveTicket(state, command.ticketId, rules);
+    case "resolve_ticket_with_approach":
+      return resolveTicketWithApproach(
+        state,
+        command.ticketId,
+        command.approach,
+        rules,
+      );
     case "hire_support_rep":
       return hireSupportRep(state, command.name, command.level, rules);
     case "fire_support_rep":

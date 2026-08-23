@@ -10,6 +10,7 @@ import { syncNarrative } from "./narrative.ts";
 import type {
   AdvanceResult,
   AdvanceSummary,
+  CampaignObjective,
   Customer,
   DomainEvent,
   GameRules,
@@ -42,10 +43,44 @@ function crossedBoundary(
     Math.floor(endMinute / intervalMinutes);
 }
 
-function campaignLeadInterval(channel: string): number {
-  if (channel === "paid_social") return 4 * 60;
-  if (channel === "email") return 6 * 60;
-  return 12 * 60;
+function campaignLeadInterval(
+  channel: string,
+  objective: CampaignObjective,
+): number {
+  const base = channel === "paid_social"
+    ? 4 * 60
+    : channel === "email"
+    ? 6 * 60
+    : 12 * 60;
+  const volumePercent = objective === "reach"
+    ? 75
+    : objective === "quality"
+    ? 150
+    : objective === "efficiency"
+    ? 125
+    : 100;
+  return Math.round(base * volumePercent / 100);
+}
+
+function campaignDailySpend(
+  dailyBudgetCents: number,
+  objective: CampaignObjective,
+): number {
+  const spendPercent = objective === "reach"
+    ? 110
+    : objective === "quality"
+    ? 115
+    : objective === "efficiency"
+    ? 70
+    : 100;
+  return Math.round(dailyBudgetCents * spendPercent / 100);
+}
+
+function campaignQualityAdjustment(objective: CampaignObjective): number {
+  if (objective === "reach") return -12;
+  if (objective === "quality") return 14;
+  if (objective === "efficiency") return 4;
+  return 0;
 }
 
 const TICKET_ARRIVAL_INTERVAL_MINUTES = 12 * 60;
@@ -228,7 +263,7 @@ function processStep(
     const campaignEnd = Math.min(endMinute, campaign.endsAt);
     if (campaignEnd <= startMinute) continue;
     const spend = accruedBetween(
-      campaign.dailyBudgetCents,
+      campaignDailySpend(campaign.dailyBudgetCents, campaign.objective),
       Math.max(startMinute, campaign.createdAt),
       campaignEnd,
       24 * 60,
@@ -356,7 +391,10 @@ function processStep(
     if (campaign.status === "paused" || startMinute >= campaign.endsAt) {
       continue;
     }
-    const interval = campaignLeadInterval(campaign.channel);
+    const interval = campaignLeadInterval(
+      campaign.channel,
+      campaign.objective,
+    );
     const firstBoundary = Math.floor(startMinute / interval) + 1;
     const lastBoundary = Math.floor(
       Math.min(endMinute, campaign.endsAt) / interval,
@@ -411,7 +449,17 @@ function processStep(
                 0,
                 Math.min(
                   100,
-                  generated.lead.fit + audienceAdjustment - saturationPenalty,
+                  generated.lead.fit + audienceAdjustment -
+                    saturationPenalty +
+                    campaignQualityAdjustment(campaign.objective),
+                ),
+              ),
+              engagement: Math.max(
+                0,
+                Math.min(
+                  100,
+                  generated.lead.engagement +
+                    campaignQualityAdjustment(campaign.objective),
                 ),
               ),
             },

@@ -24,9 +24,10 @@ simulation, task cancellation, cookie autosave, company naming, reduced-motion
 preferences, import/export/reset, and recovery modals implemented.
 
 Release 3 is complete with persistent campaign records, configurable audience,
-channel, budget, duration, and messaging, deterministic spend and attributed
-lead delivery, full-funnel channel reporting, and campaign pause, edit,
-duplicate, resume, archive, saturation, and bounded-history controls.
+channel, objective, budget, duration, and messaging, deterministic
+volume/quality/spend tradeoffs, attributed lead delivery, post-campaign outcome
+summaries, full-funnel channel reporting, and campaign pause, edit,
+iterate/duplicate, resume, archive, saturation, and bounded-history controls.
 
 Release 4 begins with a Pipeline workspace unlocked by $1,000 MRR and three
 customers. Its list and board views expose stage age, expected close timing,
@@ -48,24 +49,33 @@ customers. Account health and adoption respond to onboarding, check-ins, and
 neglect; renewal outcomes can retain or churn MRR, while healthy adopted
 accounts can expand. Customer-success specialists add recurring payroll, account
 ownership, capacity and burnout, while adoption and recovery playbooks turn the
-account portfolio into a prioritized work queue. The Support Inbox adds
-persistent priority- and channel-based tickets, assignment, acknowledgement and
-resolution workflows, and visible SLA timers. Missed response or resolution
-deadlines reduce account health. Dedicated support agents add payroll, skill,
-ticket capacity, and burnout. Escalated tickets can become incidents whose
-recovery quality and duration directly affect customer health. Success
-specialists and support agents can be dismissed without leaving dangling account
-or ticket ownership.
+account portfolio into a prioritized work queue. Persisted account plans focus
+success work on balanced, adoption, relationship, expansion, or stabilization
+outcomes with deterministic tradeoffs. The Support Inbox adds persistent
+priority- and channel-based tickets, assignment, acknowledgement and resolution
+workflows, and visible SLA timers. Missed response or resolution deadlines
+reduce account health. Dedicated support agents add payroll, skill, ticket
+capacity, and burnout. Escalated tickets can become incidents whose recovery
+quality and duration directly affect customer health. Success specialists and
+support agents can be dismissed without leaving dangling account or ticket
+ownership.
+
+Key deal and support details now present explicit operating choices. Negotiation
+trades discounting, value proof, or a paid pilot across close odds, capacity,
+cash, MRR, and starting account health. Acknowledged tickets offer a fast
+workaround, thorough fix, or specialist escalation with distinct quality,
+health, spend, and follow-up-risk consequences in activity history.
 
 Releases 5 through 7 are complete. NPS, retention and support reporting feed a
 bounded history model. Automation adds sequences and trigger-condition-action
 workflows. Analytics derives funnel, cohort, attribution, retention, and
 forecast variance from canonical state. Mature operations adds departments,
 headcount plans, approval controls, quarterly targets, resilience investment,
-audit summaries, and escalating goals. Optional notification pings and an
-original procedurally synthesized lounge loop are available in Settings. Both
-are disabled by default and use the Web Audio API, so no licensed recordings or
-external media requests are involved.
+audit summaries, escalating goals, and one-at-a-time strategic initiatives with
+timed decision milestones and deterministic tradeoffs. Optional notification
+pings and an original procedurally synthesized lounge loop are available in
+Settings. Both are disabled by default and use the Web Audio API, so no licensed
+recordings or external media requests are involved.
 
 The campaign supplies a narrative throughline across those systems. A final
 runway investor letter opens before the CRM itself, then five persistent
@@ -150,7 +160,7 @@ company operations.
 - [Deno](https://deno.com/) 2.x
 - [Fresh](https://fresh.deno.dev/) 1.7
 - [Preact](https://preactjs.com/) and Signals
-- [Tailwind CSS](https://tailwindcss.com/) 3.4
+- Hand-authored responsive CSS in `static/crm.css`
 - Deno standard library
 
 ## Development
@@ -203,11 +213,12 @@ optional env/TLS/nginx configuration, and provides a non-root `--dry-run`. See
 
 ## Documentation
 
-| Document                           | Contents                                                                           |
-| ---------------------------------- | ---------------------------------------------------------------------------------- |
-| [docs/spec.md](docs/spec.md)       | Product rules, progression, time, failure, UX, and acceptance criteria             |
-| [docs/design.md](docs/design.md)   | Root-only architecture, deterministic engine, cookie format, security, and testing |
-| [docs/roadmap.md](docs/roadmap.md) | Independently playable releases and quality gates                                  |
+| Document                                                     | Contents                                                                           |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| [docs/spec.md](docs/spec.md)                                 | Product rules, progression, time, failure, UX, and acceptance criteria             |
+| [docs/design.md](docs/design.md)                             | Root-only architecture, deterministic engine, cookie format, security, and testing |
+| [docs/roadmap.md](docs/roadmap.md)                           | Independently playable releases and quality gates                                  |
+| [docs/release-verification.md](docs/release-verification.md) | Release gates and the commands or checks that verify them                          |
 
 These documents are the implementation contract. Intentional behavior changes
 should update the relevant document before or alongside code.

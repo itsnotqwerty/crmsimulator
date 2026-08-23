@@ -60,12 +60,33 @@ success roster. Health, adoption, renewals, expansion, ownership, payroll, and
 playbook outcomes remain canonical simulation state; older customers migrate as
 active accounts so an upgrade cannot create surprise churn.
 
+Schema version 24 adds a bounded account-plan strategy to each customer.
+Existing accounts migrate to the neutral balanced plan, while adoption,
+relationship, expansion, and stabilization plans apply deterministic health,
+adoption, and founder-capacity tradeoffs when success work runs.
+
+Schema version 25 adds a four-value campaign objective. Existing campaigns
+migrate to the neutral balanced objective.
+
+Schema version 26 adds a platform-level company initiative portfolio. At most
+one initiative is active, only four records are retained, and each project
+persists its start cost, duration, three milestone timestamps, player choices,
+and deterministic outcome. Time only exposes milestones; player commands make
+the decisions and complete the project.
+
 Schema version 11 adds bounded support tickets with channel, priority,
 ownership, lifecycle timestamps, response and resolution deadlines, and one-time
 SLA breach tracking.
 
 Schema version 12 separates support ownership into a bounded specialist roster
 and adds escalation, incident records, workload burnout, and resolution quality.
+
+Negotiation and ticket-resolution forks do not add persisted strategy fields.
+Each validated command immediately applies its deterministic costs and risk
+adjustments to existing canonical state, resolves through the normal deal or
+ticket work path, and records the choice in bounded activity history. Fast
+support work may create an ordinary follow-up task, keeping future maintenance
+risk visible without a parallel risk ledger.
 
 Schema version 17 persists the 1x/2x/4x simulation scale. Existing saves migrate
 to the faster 2x default and repair ticket-resolution counts that older builds
@@ -166,15 +187,18 @@ records and companies no longer referenced by canonical CRM records. Aggregate
 history and recent activity preserve long-run outcomes without linear save
 growth.
 
-Campaigns accrue their daily budget in the same fixed simulation intervals as
-operating expenses. Channel-specific boundaries generate deterministic leads,
-and each lead stores its originating campaign ID for reporting. Offline campaign
-spend uses the normal Crisis Pause boundary.
+Campaigns accrue objective-adjusted spend in the same fixed simulation intervals
+as operating expenses. Channel and objective-specific boundaries generate
+deterministic leads; objective modifiers trade volume, fit, engagement, and
+spend. Each lead stores its originating campaign ID for reporting. Offline
+campaign spend uses the normal Crisis Pause boundary.
 
 Campaign edits require a paused record, duplicates begin paused with clean
 performance totals, and archival removes records from active workflows without
 breaking historical attribution. Funnel and channel reports derive from
 campaign, lead, deal, and customer relationships rather than persisted totals.
+Completed campaigns expose the same derived data as an outcome summary and can
+be duplicated into a paused, editable iteration with clean performance totals.
 After the detailed campaign limit is reached, the oldest archived records are
 folded into aggregate count, spend, and lead totals; stale campaign references
 are removed from retained leads during the same immutable transition.

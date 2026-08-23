@@ -43,6 +43,13 @@ const SALES_TERRITORIES = new Set([
 const BILLING_CYCLES = new Set(["monthly", "annual"]);
 const QUOTE_STATUSES = new Set(["draft", "sent", "accepted", "expired"]);
 const CUSTOMER_LIFECYCLES = new Set(["onboarding", "active", "at_risk"]);
+const CUSTOMER_ACCOUNT_PLANS = new Set([
+  "balanced",
+  "adoption",
+  "relationship",
+  "expansion",
+  "stabilization",
+]);
 const TICKET_CHANNELS = new Set(["email", "chat", "phone"]);
 const TICKET_PRIORITIES = new Set(["low", "normal", "high", "urgent"]);
 const TICKET_STATUSES = new Set(["open", "acknowledged", "resolved"]);
@@ -56,6 +63,12 @@ const CAMPAIGN_AUDIENCES = new Set([
   "mid_market",
   "enterprise",
 ]);
+const CAMPAIGN_OBJECTIVES = new Set([
+  "balanced",
+  "reach",
+  "quality",
+  "efficiency",
+]);
 const CAMPAIGN_STATUSES = new Set([
   "active",
   "paused",
@@ -63,6 +76,13 @@ const CAMPAIGN_STATUSES = new Set([
   "archived",
 ]);
 const UNLOCKS = new Set(["marketing", "pipeline", "customer_success"]);
+const INITIATIVE_TYPES = new Set([
+  "growth",
+  "efficiency",
+  "retention",
+  "resilience",
+]);
+const INITIATIVE_APPROACHES = new Set(["accelerate", "stabilize"]);
 
 export class SaveValidationError extends Error {
   constructor(public readonly issues: ValidationIssue[]) {
@@ -132,10 +152,12 @@ function validCampaign(entry: Record<string, unknown>): boolean {
     "name",
     "channel",
     "audience",
+    "objective",
     "status",
     "message",
   ]) && CAMPAIGN_CHANNELS.has(String(entry.channel)) &&
     CAMPAIGN_AUDIENCES.has(String(entry.audience)) &&
+    CAMPAIGN_OBJECTIVES.has(String(entry.objective)) &&
     CAMPAIGN_STATUSES.has(String(entry.status)) &&
     isInteger(entry.dailyBudgetCents, 1) && isInteger(entry.createdAt) &&
     isInteger(entry.endsAt, 1) && isInteger(entry.totalSpentCents) &&
@@ -206,7 +228,9 @@ function validCustomer(entry: Record<string, unknown>): boolean {
     "companyId",
     "primaryLeadId",
     "lifecycle",
+    "accountPlan",
   ]) && CUSTOMER_LIFECYCLES.has(String(entry.lifecycle)) &&
+    CUSTOMER_ACCOUNT_PLANS.has(String(entry.accountPlan)) &&
     isInteger(entry.monthlyValueCents) && isInteger(entry.health) &&
     Number(entry.health) <= 100 && isInteger(entry.adoption) &&
     Number(entry.adoption) <= 100 && isInteger(entry.startedAt) &&
@@ -274,6 +298,33 @@ function validManager(entry: unknown): boolean {
     (entry.lastDecision === undefined || isString(entry.lastDecision));
 }
 
+function validInitiative(entry: unknown): boolean {
+  if (!isRecord(entry)) return false;
+  const decisions = entry.decisions;
+  const milestoneAt = entry.milestoneAt;
+  return hasStrings(entry, ["id", "type", "status"]) &&
+    INITIATIVE_TYPES.has(String(entry.type)) &&
+    ["active", "completed"].includes(String(entry.status)) &&
+    isInteger(entry.startedAt) && isInteger(entry.endsAt) &&
+    isInteger(entry.startCostCents, 1) &&
+    Array.isArray(milestoneAt) && milestoneAt.length === 3 &&
+    milestoneAt.every((minute) => isInteger(minute)) &&
+    isInteger(entry.promptedMilestone) &&
+    Number(entry.promptedMilestone) <= 3 &&
+    Array.isArray(decisions) && decisions.length <= 3 &&
+    (entry.status === "active"
+      ? decisions.length < 3 && entry.completedAt === undefined
+      : decisions.length === 3 && isInteger(entry.completedAt)) &&
+    decisions.every((decision) =>
+      isRecord(decision) && isInteger(decision.milestone, 1) &&
+      Number(decision.milestone) <= 3 &&
+      INITIATIVE_APPROACHES.has(String(decision.approach)) &&
+      isInteger(decision.decidedAt)
+    ) &&
+    (entry.rewardCents === undefined || isInteger(entry.rewardCents)) &&
+    (entry.outcome === undefined || isString(entry.outcome));
+}
+
 function validPlatform(value: unknown): boolean {
   if (!isRecord(value)) return false;
   const arrays = [
@@ -282,6 +333,7 @@ function validPlatform(value: unknown): boolean {
     "dashboardWidgets",
     "departments",
     "managers",
+    "initiatives",
   ];
   const integers = [
     "automationRunsArchived",
@@ -294,12 +346,20 @@ function validPlatform(value: unknown): boolean {
     "retentionTargetPercent",
     "resilienceLevel",
     "endlessGoal",
+    "initiativeSequence",
+    "initiativesCompleted",
   ];
   return arrays.every((key) =>
     Array.isArray(value[key]) && (value[key] as unknown[]).length <= 20
   ) &&
     integers.every((key) => isInteger(value[key])) &&
-    (value.managers as unknown[]).every(validManager);
+    typeof value.quarterInitiativeCompleted === "boolean" &&
+    (value.managers as unknown[]).every(validManager) &&
+    (value.initiatives as unknown[]).length <= 4 &&
+    (value.initiatives as unknown[]).every(validInitiative) &&
+    (value.initiatives as Array<Record<string, unknown>>).filter((initiative) =>
+        initiative.status === "active"
+      ).length <= 1;
 }
 
 export function parseGameState(value: unknown): GameState {

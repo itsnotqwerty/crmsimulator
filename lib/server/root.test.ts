@@ -7,6 +7,7 @@ import {
   loadRoot,
   type RootConfig,
 } from "./root.ts";
+import { SAVE_SCHEMA_VERSION } from "../game/types.ts";
 
 const SECRET = "root-adapter-test-secret";
 const URL = "https://crm.example/";
@@ -72,6 +73,28 @@ function corruptChunk(setCookies: readonly string[]): string[] {
   });
 }
 
+Deno.test("production smoke requires COOKIE_SECRET", () => {
+  const secret = Deno.env.get("COOKIE_SECRET");
+  const deploymentId = Deno.env.get("DENO_DEPLOYMENT_ID");
+  try {
+    Deno.env.delete("COOKIE_SECRET");
+    Deno.env.set("DENO_DEPLOYMENT_ID", "release-verification");
+    let error: unknown;
+    try {
+      getRootConfig(new Request(URL));
+    } catch (caught) {
+      error = caught;
+    }
+    assert(error instanceof Error);
+    assertStringIncludes(error.message, "COOKIE_SECRET is required");
+  } finally {
+    if (secret === undefined) Deno.env.delete("COOKIE_SECRET");
+    else Deno.env.set("COOKIE_SECRET", secret);
+    if (deploymentId === undefined) Deno.env.delete("DENO_DEPLOYMENT_ID");
+    else Deno.env.set("DENO_DEPLOYMENT_ID", deploymentId);
+  }
+});
+
 Deno.test("root GET initializes a signed cookie save", async () => {
   const loaded = await loadRoot(new Request(URL), config(1_000));
 
@@ -90,6 +113,36 @@ Deno.test("forwarded HTTPS marks proxy-served cookies secure", () => {
   });
 
   assertEquals(getRootConfig(request).secure, true);
+});
+
+Deno.test("production smoke sets secure cookie flags behind forwarded HTTPS", async () => {
+  const request = new Request("http://127.0.0.1:8000/", {
+    headers: { "x-forwarded-proto": "https" },
+  });
+  const secret = Deno.env.get("COOKIE_SECRET");
+  const deploymentId = Deno.env.get("DENO_DEPLOYMENT_ID");
+  let productionConfig: RootConfig;
+  try {
+    Deno.env.set("COOKIE_SECRET", SECRET);
+    Deno.env.set("DENO_DEPLOYMENT_ID", "release-verification");
+    productionConfig = { ...getRootConfig(request), now: 1_000, seed: 81 };
+  } finally {
+    if (secret === undefined) Deno.env.delete("COOKIE_SECRET");
+    else Deno.env.set("COOKIE_SECRET", secret);
+    if (deploymentId === undefined) Deno.env.delete("DENO_DEPLOYMENT_ID");
+    else Deno.env.set("DENO_DEPLOYMENT_ID", deploymentId);
+  }
+
+  const loaded = await loadRoot(request, productionConfig);
+
+  assertEquals(productionConfig.secure, true);
+  assert(loaded.setCookies.length > 0);
+  for (const header of loaded.setCookies) {
+    assertStringIncludes(header, "Path=/");
+    assertStringIncludes(header, "HttpOnly");
+    assertStringIncludes(header, "SameSite=Strict");
+    assertStringIncludes(header, "Secure");
+  }
 });
 
 Deno.test("root GET loads cookies and advances offline time", async () => {
@@ -116,6 +169,7 @@ Deno.test("root GET repairs a pipeline unlock after requirements are met", async
     health: 80,
     adoption: 50,
     lifecycle: "active" as const,
+    accountPlan: "balanced" as const,
     startedAt: 0,
     nextBillingAt: 43_200,
     renewalAt: 43_200,
@@ -312,6 +366,47 @@ Deno.test("root export, import, and reset preserve cookie contract", async () =>
     pendingBriefing: true,
   });
   assert(responseCookies(reset).some((cookie) => cookie.includes("Max-Age=0")));
+});
+
+Deno.test("production smoke saves and reloads a migrated company", async () => {
+  const current = createInitialState({ seed: 82, now: 1_000 });
+  const legacy = structuredClone(current) as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 23;
+  const records = legacy.records as Record<string, unknown>;
+  records.customers = {
+    customer_1: {
+      id: "customer_1",
+      companyId: "company_1",
+      primaryLeadId: "lead_1",
+      monthlyValueCents: 50_000,
+      health: 80,
+      adoption: 70,
+      lifecycle: "active",
+      startedAt: 0,
+      nextBillingAt: 43_200,
+      renewalAt: 43_200,
+      lastSuccessAt: 0,
+      expansions: 0,
+    },
+  };
+  (legacy.company as Record<string, unknown>).customerCount = 1;
+  (legacy.company as Record<string, unknown>).mrrCents = 50_000;
+
+  const imported = await handleRootPost(
+    post({ type: "import", data: legacy }),
+    config(2_000, 82),
+  );
+  const saved = (await imported.clone().json()).game;
+  const reloaded = await loadRoot(
+    requestWithCookies(responseCookies(imported)),
+    config(2_000, 82),
+  );
+
+  assertEquals(imported.status, 200);
+  assertEquals(saved.schemaVersion, SAVE_SCHEMA_VERSION);
+  assertEquals(saved.records.customers.customer_1.accountPlan, "balanced");
+  assertEquals(reloaded.data.loadStatus, "loaded");
+  assertEquals(reloaded.data.game, saved);
 });
 
 Deno.test("prologue form begins the company and redirects into the CRM", async () => {
