@@ -220,8 +220,11 @@ export function followUpLeadWork(
   const paced = options.paced ?? false;
   const lead = state.records.leads[leadId];
   if (!lead) return fail("Lead does not exist");
-  if (lead.status !== "contacted" && lead.status !== "cold") {
-    return fail("Only contacted or cold leads need follow-up");
+  if (
+    lead.status !== "contacted" && lead.status !== "cold" &&
+    lead.status !== "qualified"
+  ) {
+    return fail("Only active leads need follow-up");
   }
   const gameMinute = state.clock.gameMinute;
   if (paced && gameMinute - lead.lastActivityAt < 4 * 60) {
@@ -250,7 +253,7 @@ export function followUpLeadWork(
         ...state.records.leads,
         [lead.id]: {
           ...lead,
-          status: "contacted",
+          status: lead.status === "qualified" ? "qualified" : "contacted",
           engagement: Math.min(100, lead.engagement + engagementGain.value),
           lastActivityAt: gameMinute,
         },

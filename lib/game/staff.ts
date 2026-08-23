@@ -91,21 +91,36 @@ function workSalesRep(
     );
   }
 
-  const ownedDeal =
-    Object.values(state.records.deals).filter((deal) =>
-      deal.ownerId === rep.id && deal.stage !== "won" &&
-      deal.stage !== "lost" &&
-      state.clock.gameMinute - deal.updatedAt >= 8 * 60
-    ).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))[0];
-  if (ownedDeal) {
-    if (ownedDeal.stage === "negotiation") {
-      const lead = state.records.leads[ownedDeal.leadId];
-      if (lead && closeLossRiskPercent(lead.engagement) === 0) {
-        return applyWork(current, advanceDealWork(state, ownedDeal.id, rules));
-      }
-    } else {
-      return applyWork(current, advanceDealWork(state, ownedDeal.id, rules));
-    }
+  const readyDeals = Object.values(state.records.deals).filter((deal) =>
+    deal.ownerId === rep.id && deal.stage !== "won" &&
+    deal.stage !== "lost" &&
+    state.clock.gameMinute - deal.updatedAt >= 8 * 60
+  ).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+  const actionableDeal = readyDeals.find((deal) =>
+    deal.stage !== "negotiation" ||
+    closeLossRiskPercent(state.records.leads[deal.leadId]?.engagement ?? 0) ===
+      0
+  );
+  if (actionableDeal) {
+    return applyWork(
+      current,
+      advanceDealWork(state, actionableDeal.id, rules),
+    );
+  }
+  const blockedNegotiation = readyDeals.find((deal) => {
+    if (deal.stage !== "negotiation") return false;
+    const lead = state.records.leads[deal.leadId];
+    return lead?.status === "qualified" &&
+      state.clock.gameMinute - lead.lastActivityAt >= 4 * 60;
+  });
+  if (blockedNegotiation) {
+    return applyWork(
+      current,
+      followUpLeadWork(state, blockedNegotiation.leadId, {
+        consumeFounderCapacity: false,
+        paced: true,
+      }),
+    );
   }
 
   if (salesWorkload(state, rep.id) < rep.dealCapacity) {
@@ -206,7 +221,22 @@ function workSupportRep(
       !ticket.ownerId && ticket.status !== "resolved" && !ticket.escalated
     ).sort(byCreated)[0];
     if (unassigned) {
-      return applyWork(current, assignTicketWork(state, unassigned.id, rep.id));
+      const assigned = assignTicketWork(state, unassigned.id, rep.id);
+      if (!assigned.ok) {
+        return false;
+      }
+      const acknowledged = acknowledgeTicketWork(
+        assigned.state,
+        unassigned.id,
+      );
+      if (!acknowledged.ok) {
+        return applyWork(current, assigned);
+      }
+      return applyWork(current, {
+        ok: true,
+        state: acknowledged.state,
+        events: [...assigned.events, ...acknowledged.events],
+      });
     }
   }
   return false;

@@ -650,8 +650,8 @@ Deno.test("customers open inbound support tickets over time", () => {
   };
 
   assertEquals(Object.keys(state.records.tickets), []);
-  const first = advanceGame(state, 6 * 60);
-  const replay = advanceGame(state, 6 * 60);
+  const first = advanceGame(state, DEFAULT_RULES.simulationStepMinutes);
+  const replay = advanceGame(state, DEFAULT_RULES.simulationStepMinutes);
   assertEquals(first.state, replay.state);
   const tickets = Object.values(first.state.records.tickets);
   assertEquals(tickets.length, 1);
@@ -662,13 +662,51 @@ Deno.test("customers open inbound support tickets over time", () => {
     first.events.some((event) => event.kind === "ticket_created"),
   );
 
-  const withOpen = advanceGame(first.state, 6 * 60).state;
+  const withOpen = advanceGame(first.state, 12 * 60).state;
   assertEquals(
     Object.values(withOpen.records.tickets).filter((ticket) =>
       ticket.status !== "resolved"
     ).length,
     1,
   );
+});
+
+Deno.test("staffed support processes generated inbound tickets", () => {
+  const initial = createInitialState({ seed: 210, now: 1_000 });
+  let state: GameState = {
+    ...initial,
+    unlocks: ["customer_success" as const],
+    company: { ...initial.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...initial.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 70,
+          adoption: 65,
+          lifecycle: "active" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+  state = applyCommand(state, {
+    type: "hire_support_rep",
+    name: "Jordan Bell",
+    level: "mid",
+  }).state;
+
+  const worked = advanceGame(state, 24 * 60).state;
+  assert(worked.sequences.ticket >= 2);
+  assert(worked.history.ticketsResolved >= 1);
+  assertEquals(worked.history.ticketsBreached, 0);
 });
 
 Deno.test("missed ticket SLAs fire once and damage account health", () => {
@@ -1724,6 +1762,119 @@ Deno.test("sales representatives contact and qualify owned leads over time", () 
   }
 });
 
+Deno.test("sales representatives recover blocked negotiations", () => {
+  let state = createInitialState({ seed: 207, now: 1_000 });
+  state = applyCommand(
+    { ...state, unlocks: ["pipeline"] },
+    {
+      type: "hire_sales_rep",
+      name: "Avery Chen",
+      level: "senior",
+      territory: "all",
+      monthlyTargetCents: 1_500_000,
+    },
+  ).state;
+  const firstLead = {
+    ...state.records.leads.lead_1,
+    status: "qualified" as const,
+    ownerId: "sales_rep_1",
+    engagement: 60,
+    lastActivityAt: 0,
+  };
+  const secondLead = {
+    ...firstLead,
+    id: "lead_2",
+    engagement: 80,
+  };
+  state = {
+    ...state,
+    sequences: { ...state.sequences, deal: 2 },
+    records: {
+      ...state.records,
+      leads: { lead_1: firstLead, lead_2: secondLead },
+      deals: {
+        deal_1: {
+          id: "deal_1",
+          leadId: "lead_1",
+          companyId: "company_1",
+          stage: "negotiation",
+          product: "growth",
+          ownerId: "sales_rep_1",
+          monthlyValueCents: 50_000,
+          probability: 75,
+          expectedCloseAt: 1_440,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+        deal_2: {
+          id: "deal_2",
+          leadId: "lead_2",
+          companyId: "company_1",
+          stage: "qualified",
+          product: "growth",
+          ownerId: "sales_rep_1",
+          monthlyValueCents: 50_000,
+          probability: 25,
+          expectedCloseAt: 1_440,
+          createdAt: 1,
+          updatedAt: 0,
+        },
+      },
+    },
+  };
+
+  const worked = advanceGame(state, 8 * 60).state;
+  assertEquals(worked.records.deals.deal_2.stage, "discovery");
+  assertEquals(worked.records.leads.lead_1.status, "qualified");
+  assert(worked.records.leads.lead_1.engagement > 60);
+
+  const recovered = advanceGame(worked, 4 * 60).state;
+  assertEquals(recovered.records.deals.deal_1.stage, "won");
+});
+
+Deno.test("unassigned accounts create gradual team pressure", () => {
+  let state = createInitialState({ seed: 208, now: 1_000 });
+  const customers = Object.fromEntries(
+    Array.from({ length: 20 }, (_, index) => {
+      const id = `customer_${index + 1}`;
+      return [id, {
+        id,
+        companyId: "company_1",
+        primaryLeadId: "lead_1",
+        monthlyValueCents: 50_000,
+        health: 70,
+        adoption: 65,
+        lifecycle: "active" as const,
+        startedAt: 0,
+        nextBillingAt: 43_200,
+        renewalAt: 43_200,
+        lastSuccessAt: 0,
+        expansions: 0,
+      }];
+    }),
+  );
+  state = {
+    ...state,
+    unlocks: ["customer_success"],
+    company: { ...state.company, customerCount: 20, mrrCents: 1_000_000 },
+    records: { ...state.records, customers },
+  };
+  state = applyCommand(state, {
+    type: "hire_success_rep",
+    name: "Morgan Lee",
+    level: "mid",
+  }).state;
+
+  const pressured = advanceGame(state, 24 * 60).state;
+  assertEquals(pressured.records.successReps.success_rep_1.burnout, 4);
+  assertEquals(
+    Object.values(pressured.records.customers).filter((customer) =>
+      !customer.ownerId
+    ).length,
+    8,
+  );
+});
+
 Deno.test("success and support staff work owned records without founder capacity", () => {
   let state = createInitialState({ seed: 202, now: 1_000 });
   state = {
@@ -1790,6 +1941,69 @@ Deno.test("success and support staff work owned records without founder capacity
   const afterShift = advanceGame(afterHour, 3 * 60).state;
   assertEquals(afterShift.records.tickets.ticket_1.status, "resolved");
   assertEquals(afterShift.company.founderCapacityRemaining, capacity);
+});
+
+Deno.test("support agents claim and acknowledge tickets in one action", () => {
+  let state = createInitialState({ seed: 209, now: 1_000 });
+  state = {
+    ...state,
+    clock: { ...state.clock, gameMinute: 10 },
+    unlocks: ["customer_success"],
+    company: { ...state.company, customerCount: 1, mrrCents: 50_000 },
+    records: {
+      ...state.records,
+      customers: {
+        customer_1: {
+          id: "customer_1",
+          companyId: "company_1",
+          primaryLeadId: "lead_1",
+          monthlyValueCents: 50_000,
+          health: 70,
+          adoption: 65,
+          lifecycle: "active" as const,
+          startedAt: 0,
+          nextBillingAt: 43_200,
+          renewalAt: 43_200,
+          lastSuccessAt: 0,
+          expansions: 0,
+        },
+      },
+    },
+  };
+  state = applyCommand(state, {
+    type: "hire_support_rep",
+    name: "Jordan Bell",
+    level: "mid",
+  }).state;
+  state = applyCommand(state, {
+    type: "create_ticket",
+    customerId: "customer_1",
+    channel: "chat",
+    priority: "urgent",
+    title: "Unable to publish reports",
+  }).state;
+
+  const triaged = advanceGame(state, 50).state;
+  assertEquals(triaged.records.tickets.ticket_1.status, "acknowledged");
+  assertEquals(
+    triaged.records.tickets.ticket_1.ownerId,
+    "support_rep_1",
+  );
+  assertEquals(triaged.history.ticketsBreached, 0);
+
+  let queued = triaged;
+  for (let index = 0; index < 4; index += 1) {
+    queued = applyCommand(queued, {
+      type: "create_ticket",
+      customerId: "customer_1",
+      channel: "email",
+      priority: "normal",
+      title: `Queued support request ${index + 1}`,
+    }).state;
+  }
+  queued = { ...queued, clock: { ...queued.clock, gameMinute: 350 } };
+  const pressured = advanceGame(queued, 10).state;
+  assertEquals(pressured.records.supportReps.support_rep_1.burnout, 1);
 });
 
 Deno.test("workflows assign owners and advance lead status from live events", () => {

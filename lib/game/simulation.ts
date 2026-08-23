@@ -47,7 +47,7 @@ function campaignLeadInterval(channel: string): number {
   return 12 * 60;
 }
 
-const TICKET_ARRIVAL_INTERVAL_MINUTES = 6 * 60;
+const TICKET_ARRIVAL_INTERVAL_MINUTES = 12 * 60;
 
 function inboundTicketChance(customer: Customer): number {
   if (customer.lifecycle === "at_risk" || customer.health < 45) return 35;
@@ -77,10 +77,34 @@ function openInboundTickets(
     Math.floor(startMinute / TICKET_ARRIVAL_INTERVAL_MINUTES) +
     1;
   const lastBoundary = Math.floor(endMinute / TICKET_ARRIVAL_INTERVAL_MINUTES);
-  if (lastBoundary < firstBoundary) return { state, events: [] };
 
   let current = state;
   const events: DomainEvent[] = [];
+  if (current.sequences.ticket === 0) {
+    const firstCustomer =
+      Object.values(current.records.customers).sort((a, b) =>
+        a.health - b.health || a.id.localeCompare(b.id)
+      )[0];
+    if (firstCustomer) {
+      const issue = generateSupportIssue(
+        current.seed,
+        current.rngCursor,
+        firstCustomer.health,
+        firstCustomer.lifecycle,
+      );
+      const result = createTicketWork(current, {
+        customerId: firstCustomer.id,
+        channel: issue.channel,
+        priority: issue.priority,
+        title: issue.title,
+        createdAt: endMinute,
+      }, rules);
+      if (result.ok) {
+        current = { ...result.state, rngCursor: issue.nextCursor };
+        events.push(...result.events);
+      }
+    }
+  }
   for (
     let boundary = firstBoundary;
     boundary <= lastBoundary;
@@ -448,7 +472,22 @@ function processStep(
   const salesReps = { ...nextState.records.salesReps };
   const successReps = { ...nextState.records.successReps };
   const supportReps = { ...nextState.records.supportReps };
+  const pressureIntervals = Math.floor(endMinute / (6 * 60)) -
+    Math.floor(startMinute / (6 * 60));
   if (elapsedHours > 0) {
+    const activeLeadCount = Object.values(leads).filter((lead) =>
+      ["new", "contacted", "cold"].includes(lead.status)
+    ).length;
+    const openDealCount =
+      Object.values(nextState.records.deals).filter((deal) =>
+        deal.stage !== "won" && deal.stage !== "lost"
+      ).length;
+    const salesCapacity = Object.values(salesReps).reduce(
+      (total, rep) =>
+        total + rep.dealCapacity,
+      0,
+    );
+    const salesBacklogged = activeLeadCount + openDealCount > salesCapacity;
     for (const rep of Object.values(salesReps)) {
       const leadLoad = Object.values(leads).filter((lead) =>
         lead.ownerId === rep.id &&
@@ -458,43 +497,41 @@ function processStep(
         deal.ownerId === rep.id && deal.stage !== "won" && deal.stage !== "lost"
       ).length;
       const overloaded = leadLoad + dealLoad > rep.dealCapacity;
+      const burnoutDelta = overloaded
+        ? elapsedHours * 2
+        : salesBacklogged
+        ? pressureIntervals
+        : -elapsedHours;
       salesReps[rep.id] = {
         ...rep,
         burnout: Math.max(
           0,
-          Math.min(100, rep.burnout + elapsedHours * (overloaded ? 2 : -1)),
+          Math.min(100, rep.burnout + burnoutDelta),
         ),
       };
     }
+    const successCapacity = Object.values(successReps).reduce(
+      (total, rep) => total + rep.accountCapacity,
+      0,
+    );
+    const successBacklogged =
+      Object.values(nextState.records.customers).length >
+        successCapacity;
     for (const rep of Object.values(successReps)) {
       const accountLoad = Object.values(nextState.records.customers).filter(
         (customer) => customer.ownerId === rep.id,
       ).length;
+      const overloaded = accountLoad > rep.accountCapacity;
+      const burnoutDelta = overloaded
+        ? elapsedHours * 2
+        : successBacklogged
+        ? pressureIntervals
+        : -elapsedHours;
       successReps[rep.id] = {
         ...rep,
         burnout: Math.max(
           0,
-          Math.min(
-            100,
-            rep.burnout + elapsedHours *
-                (accountLoad > rep.accountCapacity ? 2 : -1),
-          ),
-        ),
-      };
-    }
-    for (const rep of Object.values(supportReps)) {
-      const ticketLoad = Object.values(nextState.records.tickets).filter(
-        (ticket) => ticket.ownerId === rep.id && ticket.status !== "resolved",
-      ).length;
-      supportReps[rep.id] = {
-        ...rep,
-        burnout: Math.max(
-          0,
-          Math.min(
-            100,
-            rep.burnout + elapsedHours *
-                (ticketLoad > rep.ticketCapacity ? 2 : -1),
-          ),
+          Math.min(100, rep.burnout + burnoutDelta),
         ),
       };
     }
@@ -679,6 +716,40 @@ function processStep(
   const staffed = applyStaffWork(nextState, startMinute, endMinute, rules);
   nextState = staffed.state;
   events.push(...staffed.events);
+  if (elapsedHours > 0) {
+    const openSupportTickets = Object.values(nextState.records.tickets).filter(
+      (ticket) => ticket.status !== "resolved",
+    );
+    const supportReps = { ...nextState.records.supportReps };
+    const supportCapacity = Object.values(supportReps).reduce(
+      (total, rep) => total + rep.ticketCapacity,
+      0,
+    );
+    const unassignedSupportTickets = openSupportTickets.filter((ticket) =>
+      !ticket.ownerId
+    ).length;
+    const supportBacklogged = openSupportTickets.length > supportCapacity ||
+      unassignedSupportTickets >
+        Math.max(1, Object.keys(supportReps).length * 2);
+    for (const rep of Object.values(supportReps)) {
+      const ticketLoad = openSupportTickets.filter((ticket) =>
+        ticket.ownerId === rep.id
+      ).length;
+      const burnoutDelta = ticketLoad > rep.ticketCapacity
+        ? elapsedHours * 2
+        : supportBacklogged
+        ? pressureIntervals
+        : -elapsedHours;
+      supportReps[rep.id] = {
+        ...rep,
+        burnout: Math.max(0, Math.min(100, rep.burnout + burnoutDelta)),
+      };
+    }
+    nextState = {
+      ...nextState,
+      records: { ...nextState.records, supportReps },
+    };
+  }
   const staffAutomated = applyAutomations(nextState, staffed.events, rules);
   nextState = staffAutomated.state;
   events.push(...staffAutomated.events);
