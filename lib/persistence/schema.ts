@@ -268,15 +268,10 @@ function validPlatform(value: unknown): boolean {
   const arrays = [
     "sequences",
     "workflows",
-    "integrations",
-    "customFields",
-    "savedViews",
     "dashboardWidgets",
     "departments",
   ];
   const integers = [
-    "duplicateReviews",
-    "duplicatesMerged",
     "automationRunsArchived",
     "automationErrorsArchived",
     "approvalThresholdCents",

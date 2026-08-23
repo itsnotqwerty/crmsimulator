@@ -270,8 +270,7 @@ management capacity.
 - Automations cannot create unbounded events or save growth.
 - The same workflow and inputs replay deterministically.
 - Reports derive from bounded canonical or aggregate history.
-- Integration failures are simulated locally and never call real external
-  services.
+- Automations never call real external services.
 
 ## Release 7: Mature operations and endless scale
 

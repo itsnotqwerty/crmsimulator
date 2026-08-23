@@ -58,14 +58,13 @@ specialists and support agents can be dismissed without leaving dangling account
 or ticket ownership.
 
 Releases 5 through 7 are complete. NPS, retention and support reporting feed a
-bounded history model. Automation adds sequences, trigger-condition-action
-workflows, simulated integrations, custom fields, saved views, and duplicate
-review. Analytics derives funnel, cohort, attribution, retention, and forecast
-variance from canonical state. Mature operations adds departments, headcount
-plans, approval controls, quarterly targets, resilience investment, audit
-summaries, and escalating goals. Optional notification pings and an original
-procedurally synthesized lounge loop are available in Settings. Both are
-disabled by default and use the Web Audio API, so no licensed recordings or
+bounded history model. Automation adds sequences and trigger-condition-action
+workflows. Analytics derives funnel, cohort, attribution, retention, and
+forecast variance from canonical state. Mature operations adds departments,
+headcount plans, approval controls, quarterly targets, resilience investment,
+audit summaries, and escalating goals. Optional notification pings and an
+original procedurally synthesized lounge loop are available in Settings. Both
+are disabled by default and use the Web Audio API, so no licensed recordings or
 external media requests are involved.
 
 The campaign supplies a narrative throughline across those systems. A final

@@ -176,12 +176,7 @@ export function createInitialState(options: InitialStateOptions): GameState {
     platform: {
       sequences: [],
       workflows: [],
-      integrations: [],
-      customFields: [],
-      savedViews: [],
       dashboardWidgets: ["cash", "mrr", "pipeline", "retention"],
-      duplicateReviews: 0,
-      duplicatesMerged: 0,
       automationRunsArchived: 0,
       automationErrorsArchived: 0,
       departments: [],
@@ -269,10 +264,7 @@ export function validateGameState(state: GameState): ValidationResult {
   if (
     state.platform.sequences.length > 12 ||
     state.platform.workflows.length > 20 ||
-    state.platform.integrations.length > 8 ||
-    state.platform.departments.length > 8 ||
-    state.platform.customFields.length > 20 ||
-    state.platform.savedViews.length > 12
+    state.platform.departments.length > 8
   ) {
     issue(issues, "platform", "Platform collection limit exceeded");
   }

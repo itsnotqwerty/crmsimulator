@@ -1180,10 +1180,6 @@ function PlatformWorkspace(props: {
   const trigger = useSignal<AutomationTrigger>("lead_created");
   const condition = useSignal<AutomationCondition>("all");
   const action = useSignal<AutomationAction>("create_task");
-  const integrationName = useSignal("");
-  const integrationMapping = useSignal("company → account");
-  const customFieldName = useSignal("");
-  const savedViewName = useSignal("");
   const report = analyticsReport(props.game);
   const platform = props.game.platform;
   if (props.mode === "analytics") {
@@ -1221,9 +1217,6 @@ function PlatformWorkspace(props: {
               <h2>Dashboard composition</h2>
               <span>{platform.dashboardWidgets.join(" · ")}</span>
             </div>
-          </div>
-          <div class="tag-list">
-            {platform.savedViews.map((view) => <span key={view}>{view}</span>)}
           </div>
         </section>
       </>
@@ -1377,7 +1370,7 @@ function PlatformWorkspace(props: {
         <div>
           <span>Systems at scale</span>
           <h1>Automation</h1>
-          <p>Sequences, workflows, integrations, and data quality.</p>
+          <p>Sequences and workflows.</p>
         </div>
       </div>
       <div class="pipeline-summary">
@@ -1392,10 +1385,6 @@ function PlatformWorkspace(props: {
         <div>
           <span>Errors</span>
           <strong>{platform.automationErrorsArchived}</strong>
-        </div>
-        <div>
-          <span>Duplicates</span>
-          <strong>{platform.duplicateReviews}</strong>
         </div>
       </div>
       <section class="panel">
@@ -1631,231 +1620,6 @@ function PlatformWorkspace(props: {
               </div>
             </div>
           )}
-      </section>
-      <section class="panel data-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>Data and integrations</h2>
-            <span>
-              Configure simulated data operations and inspect their results
-            </span>
-          </div>
-        </div>
-        <div class="data-tools-grid">
-          <article class="data-tool integration-tool">
-            <header>
-              <span>
-                <RefreshCw size={18} />
-              </span>
-              <div>
-                <strong>Integration sync</strong>
-                <small>
-                  Simulates importing 25 mapped records on the next game day.
-                </small>
-              </div>
-            </header>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                const accepted = props.dispatch({
-                  type: "connect_integration",
-                  name: integrationName.value,
-                  mapping: integrationMapping.value,
-                });
-                if (accepted) integrationName.value = "";
-              }}
-            >
-              <label>
-                <span>Connection name</span>
-                <input
-                  required
-                  minLength={2}
-                  maxLength={60}
-                  placeholder="Finance warehouse"
-                  value={integrationName.value}
-                  onInput={(event) =>
-                    integrationName.value = event.currentTarget.value}
-                />
-              </label>
-              <label>
-                <span>Record mapping</span>
-                <select
-                  value={integrationMapping.value}
-                  onChange={(event) =>
-                    integrationMapping.value = event.currentTarget.value}
-                >
-                  <option value="company → account">Company → Account</option>
-                  <option value="contact → person">Contact → Person</option>
-                  <option value="deal → opportunity">Deal → Opportunity</option>
-                  <option value="ticket → case">Ticket → Case</option>
-                </select>
-              </label>
-              <button
-                class="secondary"
-                type="submit"
-                disabled={platform.integrations.length >= 8}
-              >
-                <RefreshCw size={15} />Connect sync
-              </button>
-            </form>
-            <div class="integration-list">
-              {platform.integrations.length === 0
-                ? <span>No connections configured.</span>
-                : platform.integrations.map((integration) => (
-                  <div key={integration.id}>
-                    <div>
-                      <strong>{integration.name}</strong>
-                      <small>{integration.mapping}</small>
-                    </div>
-                    <span class={`status ${integration.status}`}>
-                      {statusLabel(integration.status)}
-                    </span>
-                    <small>
-                      {integration.recordsSynced} records ·{" "}
-                      {integration.failures} failures
-                    </small>
-                    {integration.status === "failed" && (
-                      <button
-                        type="button"
-                        class="text-button"
-                        onClick={() =>
-                          props.dispatch({
-                            type: "retry_integration",
-                            integrationId: integration.id,
-                          })}
-                      >
-                        Retry
-                      </button>
-                    )}
-                  </div>
-                ))}
-            </div>
-          </article>
-
-          <article class="data-tool">
-            <header>
-              <span>
-                <SlidersHorizontal size={18} />
-              </span>
-              <div>
-                <strong>Custom fields</strong>
-                <small>Add a reusable attribute to your CRM data model.</small>
-              </div>
-            </header>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                const accepted = props.dispatch({
-                  type: "add_custom_field",
-                  name: customFieldName.value,
-                });
-                if (accepted) customFieldName.value = "";
-              }}
-            >
-              <label>
-                <span>Field name</span>
-                <input
-                  required
-                  minLength={2}
-                  maxLength={60}
-                  placeholder="Renewal priority"
-                  value={customFieldName.value}
-                  onInput={(event) =>
-                    customFieldName.value = event.currentTarget.value}
-                />
-              </label>
-              <button
-                class="secondary"
-                type="submit"
-                disabled={platform.customFields.length >= 20}
-              >
-                <SlidersHorizontal size={15} />Add field
-              </button>
-            </form>
-            <div class="data-chip-list">
-              {platform.customFields.length === 0
-                ? <span>No custom fields added.</span>
-                : platform.customFields.map((field) => <b>{field}</b>)}
-            </div>
-          </article>
-
-          <article class="data-tool">
-            <header>
-              <span>
-                <Columns3 size={18} />
-              </span>
-              <div>
-                <strong>Saved views</strong>
-                <small>Store a named operations preset for reporting.</small>
-              </div>
-            </header>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                const accepted = props.dispatch({
-                  type: "save_view",
-                  name: savedViewName.value,
-                });
-                if (accepted) savedViewName.value = "";
-              }}
-            >
-              <label>
-                <span>View name</span>
-                <input
-                  required
-                  minLength={2}
-                  maxLength={60}
-                  placeholder="At-risk accounts"
-                  value={savedViewName.value}
-                  onInput={(event) =>
-                    savedViewName.value = event.currentTarget.value}
-                />
-              </label>
-              <button
-                class="secondary"
-                type="submit"
-                disabled={platform.savedViews.length >= 12}
-              >
-                <Columns3 size={15} />Save view
-              </button>
-            </form>
-            <div class="data-chip-list">
-              {platform.savedViews.length === 0
-                ? <span>No views saved.</span>
-                : platform.savedViews.map((viewName) => <b>{viewName}</b>)}
-            </div>
-          </article>
-
-          <article class="data-tool duplicate-tool">
-            <header>
-              <span>
-                <Copy size={18} />
-              </span>
-              <div>
-                <strong>Duplicate review</strong>
-                <small>
-                  The simulator periodically detects records that may represent
-                  the same account.
-                </small>
-              </div>
-            </header>
-            <div class="duplicate-summary">
-              <div>
-                <strong>{platform.duplicateReviews}</strong>
-                <span>records awaiting review</span>
-              </div>
-              <small>{platform.duplicatesMerged} records merged to date</small>
-            </div>
-            <button
-              class="primary full"
-              type="button"
-              disabled={!platform.duplicateReviews}
-              onClick={() => props.dispatch({ type: "merge_duplicates" })}
-            >
-              <Check size={15} />Merge reviewed duplicates
-            </button>
-          </article>
-        </div>
       </section>
     </>
   );

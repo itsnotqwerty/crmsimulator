@@ -1415,8 +1415,7 @@ td small {
   padding: 0 20px 20px;
 }
 
-.workflow-panel,
-.data-panel {
+.workflow-panel {
   margin-top: 16px;
   overflow: hidden;
 }
@@ -1445,9 +1444,7 @@ td small {
 }
 
 .workflow-builder-form input,
-.workflow-builder-form select,
-.data-tool input,
-.data-tool select {
+.workflow-builder-form select {
   width: 100%;
   min-width: 0;
   height: 43px;
@@ -1608,168 +1605,6 @@ td small {
 
 .automation-empty span {
   font-size: 14px;
-}
-
-.data-tools-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 16px;
-  background: #f6f8f7;
-}
-
-.data-tool {
-  display: grid;
-  min-width: 0;
-  align-content: start;
-  gap: 15px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
-}
-
-.data-tool.integration-tool {
-  grid-column: 1 / -1;
-}
-
-.data-tool > header {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: 11px;
-}
-
-.data-tool > header > span {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 7px;
-  color: var(--green);
-  background: var(--green-soft);
-}
-
-.data-tool > header > div {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.data-tool > header strong {
-  font-size: 16px;
-}
-
-.data-tool > header small,
-.integration-list > span,
-.data-chip-list > span {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.data-tool form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 10px;
-}
-
-.integration-tool form {
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
-}
-
-.data-tool label {
-  display: grid;
-  min-width: 0;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.integration-list {
-  display: grid;
-  border-top: 1px solid var(--line);
-}
-
-.integration-list > span {
-  padding-top: 12px;
-}
-
-.integration-list > div {
-  display: grid;
-  grid-template-columns: minmax(150px, 1fr) auto auto auto;
-  min-width: 0;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.integration-list > div:last-child {
-  border-bottom: 0;
-}
-
-.integration-list > div > div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.integration-list strong,
-.integration-list small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.integration-list small {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.data-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-
-.data-chip-list b {
-  padding: 5px 8px;
-  border: 1px solid #cee0da;
-  border-radius: 99px;
-  color: var(--green-dark);
-  background: var(--green-soft);
-  font-size: 12px;
-}
-
-.duplicate-summary {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 13px;
-  border-radius: 7px;
-  background: var(--surface-soft);
-}
-
-.duplicate-summary > div {
-  display: grid;
-  gap: 2px;
-}
-
-.duplicate-summary > div strong {
-  font-size: 24px;
-}
-
-.duplicate-summary span,
-.duplicate-summary > small {
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .pipeline-summary span {
@@ -3775,22 +3610,8 @@ table,
     justify-content: flex-start;
   }
 
-  .workflow-list,
-  .data-tools-grid {
+  .workflow-list {
     grid-template-columns: 1fr;
-  }
-
-  .data-tool.integration-tool {
-    grid-column: 1;
-  }
-
-  .integration-tool form {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .integration-tool form button {
-    grid-column: 1 / -1;
-    justify-self: start;
   }
 
   .sales-team-list > div {
@@ -4280,8 +4101,7 @@ table,
     display: none;
   }
 
-  .workflow-publish,
-  .data-tool form button {
+  .workflow-publish {
     width: 100%;
   }
 
@@ -4307,31 +4127,8 @@ table,
     justify-content: center;
   }
 
-  .data-tools-grid,
   .workflow-list {
     padding: 10px;
-  }
-
-  .data-tool form,
-  .integration-tool form {
-    grid-template-columns: 1fr;
-  }
-
-  .integration-tool form button {
-    grid-column: 1;
-  }
-
-  .integration-list > div {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .integration-list > div > small {
-    grid-column: 1;
-  }
-
-  .duplicate-summary {
-    align-items: flex-start;
-    flex-direction: column;
   }
 
   .quote-actions button {

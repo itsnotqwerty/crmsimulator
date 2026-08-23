@@ -232,9 +232,9 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       Record<string, unknown>
     >;
     const history = save.history as Record<string, unknown>;
-    const resolvedTickets = Object.values(tickets).filter((ticket) =>
-      ticket.status === "resolved"
-    ).length + Number(history.ticketsArchived ?? 0);
+    const resolvedTickets =
+      Object.values(tickets).filter((ticket) => ticket.status === "resolved")
+        .length + Number(history.ticketsArchived ?? 0);
     return {
       ...save,
       history: {
@@ -255,6 +255,15 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       pendingBriefing: true,
     },
   }),
+  19: (save) => {
+    const platform = { ...(save.platform as Record<string, unknown>) };
+    delete platform.integrations;
+    delete platform.customFields;
+    delete platform.savedViews;
+    delete platform.duplicateReviews;
+    delete platform.duplicatesMerged;
+    return { ...save, platform };
+  },
 };
 
 export function migrateGameState(value: unknown): GameState {

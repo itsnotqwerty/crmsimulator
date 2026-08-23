@@ -77,6 +77,10 @@ derived from canonical CRM, workforce, customer-health, support, and automation
 state; the narrative record stores only irreversible campaign progress and
 whether the current briefing has been acknowledged.
 
+Schema version 19 removes unused simulated data-ops fields: integrations, custom
+fields, saved views, and duplicate-review counters. Existing saves drop those
+platform records during migration.
+
 Each operation returns JSON except export. The client identifies the action in
 the request body, not in a query path. Requests must use
 `Content-Type: application/json` except a bounded multipart import if later
@@ -254,10 +258,10 @@ summaries through bounded projectors. The event log is not retained forever.
 max(0, min(now - lastSimulatedAt, 24 hours))
 ```
 
-It converts accepted real time at one game hour per real minute at 1x, multiplies
-the result by the saved 1x/2x/4x scale, and advances through the normal engine.
-Before applying an interval that would bankrupt the company, offline mode stops
-at the previous valid state and emits Crisis Pause.
+It converts accepted real time at one game hour per real minute at 1x,
+multiplies the result by the saved 1x/2x/4x scale, and advances through the
+normal engine. Before applying an interval that would bankrupt the company,
+offline mode stops at the previous valid state and emits Crisis Pause.
 
 Active mode does not use this protection. It emits bankruptcy, freezes
 simulation, and requires a reset action.

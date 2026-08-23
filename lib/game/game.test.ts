@@ -451,7 +451,7 @@ Deno.test("NPS surveys produce deterministic bounded feedback", () => {
   assertEquals(first.state.history.npsResponses, 1);
 });
 
-Deno.test("automation and simulated integrations replay deterministically", () => {
+Deno.test("automation sequences and workflows replay deterministically", () => {
   let state = createInitialState({ seed: 55, now: 1_000 });
   state = applyCommand(state, {
     type: "create_sequence",
@@ -465,19 +465,11 @@ Deno.test("automation and simulated integrations replay deterministically", () =
     condition: "high_value",
     action: "assign_owner",
   }).state;
-  state = applyCommand(state, {
-    type: "connect_integration",
-    name: "Ledger sync",
-    mapping: "company -> account",
-  }).state;
   const first = advanceGame(state, 24 * 60).state;
   const replay = advanceGame(state, 24 * 60).state;
   assertEquals(first, replay);
   assertEquals(first.platform.automationRunsArchived, 1);
   assertEquals(first.platform.sequences[0].enrolled, 1);
-  assert(
-    ["connected", "failed"].includes(first.platform.integrations[0].status),
-  );
 });
 
 Deno.test("workflows support expanded rules and safe removal", () => {

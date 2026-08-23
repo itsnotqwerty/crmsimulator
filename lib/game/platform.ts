@@ -155,104 +155,6 @@ export function applyPlatformCommand(
         `Workflow removed: ${workflow.name}`,
       );
     }
-    case "connect_integration": {
-      const name = clean(command.name), mapping = clean(command.mapping);
-      if (
-        name.length < 2 || mapping.length < 2 ||
-        platform.integrations.length >= 8
-      ) return reject(state, "Integration configuration is invalid");
-      const item = {
-        id: `integration_${platform.integrations.length + 1}`,
-        name,
-        mapping,
-        status: "syncing" as const,
-        recordsSynced: 0,
-        failures: 0,
-      };
-      return accept(
-        {
-          ...state,
-          platform: {
-            ...platform,
-            integrations: [...platform.integrations, item],
-          },
-        },
-        rules,
-        `Simulated integration connected: ${name}`,
-      );
-    }
-    case "retry_integration": {
-      if (
-        !platform.integrations.some((item) => item.id === command.integrationId)
-      ) return reject(state, "Integration does not exist");
-      return accept(
-        {
-          ...state,
-          platform: {
-            ...platform,
-            integrations: platform.integrations.map((item) =>
-              item.id === command.integrationId
-                ? { ...item, status: "syncing" as const }
-                : item
-            ),
-          },
-        },
-        rules,
-        "Integration sync queued",
-      );
-    }
-    case "add_custom_field": {
-      const name = clean(command.name);
-      if (
-        name.length < 2 || platform.customFields.includes(name) ||
-        platform.customFields.length >= 20
-      ) return reject(state, "Custom field is invalid or already exists");
-      return accept(
-        {
-          ...state,
-          platform: {
-            ...platform,
-            customFields: [...platform.customFields, name],
-          },
-        },
-        rules,
-        `Custom field added: ${name}`,
-      );
-    }
-    case "save_view": {
-      const name = clean(command.name);
-      if (
-        name.length < 2 || platform.savedViews.includes(name) ||
-        platform.savedViews.length >= 12
-      ) return reject(state, "Saved view is invalid or already exists");
-      return accept(
-        {
-          ...state,
-          platform: { ...platform, savedViews: [...platform.savedViews, name] },
-        },
-        rules,
-        `View saved: ${name}`,
-      );
-    }
-    case "merge_duplicates":
-      if (platform.duplicateReviews < 1) {
-        return reject(state, "No duplicate records need review");
-      }
-      return accept(
-        {
-          ...state,
-          platform: {
-            ...platform,
-            duplicateReviews: 0,
-            duplicatesMerged: platform.duplicatesMerged +
-              platform.duplicateReviews,
-            auditEntriesArchived: platform.auditEntriesArchived +
-              platform.duplicateReviews,
-          },
-        },
-        rules,
-        "Duplicate records merged",
-      );
     case "create_department": {
       const name = clean(command.name), manager = clean(command.manager);
       if (
@@ -421,16 +323,6 @@ export function advancePlatform(
       }
       : sequence
   );
-  const integrations = state.platform.integrations.map((integration) => {
-    if (integration.status !== "syncing") return integration;
-    const failed = (state.seed + day + integration.failures) % 7 === 0;
-    return {
-      ...integration,
-      status: failed ? "failed" as const : "connected" as const,
-      recordsSynced: integration.recordsSynced + (failed ? 0 : 25),
-      failures: integration.failures + Number(failed),
-    };
-  });
   const departments = state.platform.departments.map((department) => ({
     ...department,
     burnout: Math.max(
@@ -448,12 +340,7 @@ export function advancePlatform(
       ...state.platform,
       workflows,
       sequences,
-      integrations,
       departments,
-      duplicateReviews: Math.min(
-        20,
-        state.platform.duplicateReviews + Number(day % 5 === 0),
-      ),
       automationRunsArchived: state.platform.automationRunsArchived + runs,
       automationErrorsArchived: state.platform.automationErrorsArchived +
         errors,

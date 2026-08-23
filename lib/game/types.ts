@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 18 as const;
+export const SAVE_SCHEMA_VERSION = 19 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -143,15 +143,6 @@ export interface WorkflowAutomation {
   lastRunAt?: GameMinute;
 }
 
-export interface SimulatedIntegration {
-  id: EntityId;
-  name: string;
-  mapping: string;
-  status: "connected" | "syncing" | "failed";
-  recordsSynced: number;
-  failures: number;
-}
-
 export interface Department {
   id: EntityId;
   name: string;
@@ -165,12 +156,7 @@ export interface Department {
 export interface PlatformState {
   sequences: SequenceAutomation[];
   workflows: WorkflowAutomation[];
-  integrations: SimulatedIntegration[];
-  customFields: string[];
-  savedViews: string[];
   dashboardWidgets: string[];
-  duplicateReviews: number;
-  duplicatesMerged: number;
   automationRunsArchived: number;
   automationErrorsArchived: number;
   departments: Department[];
@@ -620,11 +606,6 @@ export type GameCommand =
   }
   | { type: "toggle_workflow"; workflowId: EntityId }
   | { type: "delete_workflow"; workflowId: EntityId }
-  | { type: "connect_integration"; name: string; mapping: string }
-  | { type: "retry_integration"; integrationId: EntityId }
-  | { type: "add_custom_field"; name: string }
-  | { type: "save_view"; name: string }
-  | { type: "merge_duplicates" }
   | {
     type: "create_department";
     name: string;
