@@ -2530,7 +2530,7 @@ td small {
   border: 1px solid var(--line-strong);
   border-radius: 6px;
   color: var(--ink);
-  background: white;
+  background: var(--surface);
   font: inherit;
 }
 
@@ -2560,7 +2560,7 @@ td small {
   padding: 15px;
   border: 1px solid #b8d3c9;
   border-radius: 8px;
-  background: white;
+  background: var(--surface);
 }
 
 .dark-mode .quote-preview {
@@ -2623,7 +2623,7 @@ td small {
   display: grid;
   gap: 10px;
   padding: 16px;
-  background: #f6f8f7;
+  background: var(--surface-soft);
 }
 
 .quote-row {
@@ -2634,7 +2634,7 @@ td small {
   padding: 15px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: white;
+  background: var(--surface);
   box-shadow: 0 1px 3px rgb(23 32 29 / 4%);
 }
 
