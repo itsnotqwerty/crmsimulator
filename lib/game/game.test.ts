@@ -2445,6 +2445,23 @@ Deno.test("dark mode updates independently from the color palette", () => {
   );
 });
 
+Deno.test("pipeline view preference switches between list and board", () => {
+  const initial = createInitialState({ seed: 632, now: 1_000 });
+  const updated = applyCommand(initial, {
+    type: "set_pipeline_view",
+    view: "board",
+  });
+
+  assert(updated.accepted);
+  assertEquals(updated.state.preferences.pipelineView, "board");
+  assertEquals(initial.preferences.pipelineView, "list");
+  assertStrictEquals(
+    applyCommand(updated.state, { type: "set_pipeline_view", view: "board" })
+      .state,
+    updated.state,
+  );
+});
+
 Deno.test("sound preferences are independent and reject no-op updates", () => {
   const initial = createInitialState({ seed: 64, now: 1_000 });
   const pings = applyCommand(initial, {

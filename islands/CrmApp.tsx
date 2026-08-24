@@ -2210,6 +2210,7 @@ function PipelineWorkspace(props: {
   onModeChange: (mode: "list" | "board") => void;
   dispatch: (command: GameCommand) => boolean;
 }) {
+  const displayMode = useSignal(props.mode);
   const editingDealId = useSignal<string | undefined>(undefined);
   const editProduct = useSignal<DealProduct>("growth");
   const editValue = useSignal("500");
@@ -2356,6 +2357,24 @@ function PipelineWorkspace(props: {
     selectedDeals.value = next;
   };
   const clearSelection = () => selectedDeals.value = new Set();
+  const changeMode = (mode: "list" | "board") => {
+    if (mode !== displayMode.value) {
+      displayMode.value = mode;
+      props.onModeChange(mode);
+    }
+    globalThis.requestAnimationFrame(() => {
+      const dealsView = document.getElementById("pipeline-deals");
+      dealsView?.scrollIntoView({
+        behavior: props.game.preferences.reducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+      dealsView?.focus({ preventScroll: true });
+    });
+  };
+
+  useEffect(() => {
+    displayMode.value = props.mode;
+  }, [props.mode]);
 
   return (
     <>
@@ -2371,17 +2390,17 @@ function PipelineWorkspace(props: {
         <div class="segmented-control" aria-label="Pipeline view">
           <button
             type="button"
-            class={props.mode === "list" ? "active" : ""}
-            aria-pressed={props.mode === "list"}
-            onClick={() => props.onModeChange("list")}
+            class={displayMode.value === "list" ? "active" : ""}
+            aria-pressed={displayMode.value === "list"}
+            onClick={() => changeMode("list")}
           >
             <List size={16} />List
           </button>
           <button
             type="button"
-            class={props.mode === "board" ? "active" : ""}
-            aria-pressed={props.mode === "board"}
-            onClick={() => props.onModeChange("board")}
+            class={displayMode.value === "board" ? "active" : ""}
+            aria-pressed={displayMode.value === "board"}
+            onClick={() => changeMode("board")}
           >
             <Columns3 size={16} />Board
           </button>
@@ -2975,16 +2994,20 @@ function PipelineWorkspace(props: {
       )}
       {openDeals.length === 0
         ? (
-          <div class="panel">
+          <div id="pipeline-deals" class="panel pipeline-deals" tabIndex={-1}>
             <EmptyState
               title="No open deals"
               detail="Qualify contacted leads to create pipeline records."
             />
           </div>
         )
-        : props.mode === "list"
+        : displayMode.value === "list"
         ? (
-          <div class="panel table-panel">
+          <div
+            id="pipeline-deals"
+            class="panel table-panel pipeline-deals"
+            tabIndex={-1}
+          >
             <div class="table-toolbar">
               <strong>
                 {selectedDeals.value.size || openDeals.length}{" "}
@@ -3069,7 +3092,9 @@ function PipelineWorkspace(props: {
                           />
                         </td>
                         <td>
-                          <strong>{company?.name ?? "Unknown company"}</strong>
+                          <strong>
+                            {company?.name ?? "Unknown company"}
+                          </strong>
                           <small>
                             {lead
                               ? `${lead.firstName} ${lead.lastName}`
@@ -3093,7 +3118,10 @@ function PipelineWorkspace(props: {
                         </td>
                         <td>{deal.probability}%</td>
                         <td>
-                          {relativeGameTime(deal.updatedAt, props.currentMinute)
+                          {relativeGameTime(
+                            deal.updatedAt,
+                            props.currentMinute,
+                          )
                             .replace(" overdue", "")}
                         </td>
                         <td>
@@ -3142,7 +3170,12 @@ function PipelineWorkspace(props: {
           </div>
         )
         : (
-          <div class="pipeline-board" aria-label="Deal stage board">
+          <div
+            id="pipeline-deals"
+            class="pipeline-board pipeline-deals"
+            tabIndex={-1}
+            aria-label="Deal stage board"
+          >
             {PIPELINE_STAGES.map((stage) => {
               const stageDeals = openDeals.filter((deal) =>
                 deal.stage === stage

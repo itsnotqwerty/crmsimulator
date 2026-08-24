@@ -420,19 +420,19 @@ body {
   border-radius: 0.5rem;
   background: #f7931a;
   box-shadow: 0 2px 6px rgb(0 0 0 / 20%);
-  color: #2b1700;
+  color: #000;
   font-weight: 700;
 }
 
 .site-footer a.donate:hover {
   border: 0;
   background: #e0830f;
-  color: #2b1700;
+  color: #000;
 }
 
 .crm-app.dark-mode + .site-footer a.donate,
 .crm-app.dark-mode + .site-footer a.donate:hover {
-  color: #2b1700;
+  color: #000;
 }
 
 button,
@@ -3383,6 +3383,14 @@ td small {
   gap: 12px;
   padding-bottom: 8px;
   overflow-x: auto;
+}
+
+.pipeline-deals {
+  scroll-margin-top: 84px;
+}
+
+.pipeline-deals:focus {
+  outline: none;
 }
 
 .pipeline-column {
