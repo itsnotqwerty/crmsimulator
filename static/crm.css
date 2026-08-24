@@ -3401,12 +3401,13 @@ td small {
 
 .palette-options {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(94px, 1fr));
   gap: 8px;
 }
 
 .palette-options button {
   display: grid;
+  min-width: 94px;
   gap: 8px;
   justify-items: start;
   padding: 10px;
@@ -3511,12 +3512,6 @@ td small {
 }
 .palette-swatch.obsidian i:nth-child(3) {
   background: #e2ece8;
-}
-
-@media (max-width: 600px) {
-  .palette-options {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 .identity-panel {
