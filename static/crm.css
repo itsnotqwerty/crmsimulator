@@ -1454,7 +1454,9 @@ tbody tr.selected td:first-child {
 }
 
 .lead-table tbody tr:hover td,
-.lead-table tbody tr.selected td {
+.lead-table tbody tr.selected td,
+.contacts-table tbody tr:hover td,
+.contacts-table tbody tr.selected td {
   background: transparent;
 }
 
@@ -5159,6 +5161,7 @@ table,
   .lead-table td,
   .contacts-table td {
     display: block;
+    height: auto;
     padding: 0;
     border: 0;
   }
