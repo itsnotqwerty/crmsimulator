@@ -166,6 +166,14 @@ The persisted envelope contains:
 - bounded recent activities and notifications;
 - onboarding progress and UI preferences.
 
+Onboarding progress is authoritative domain state, not a client-only tour. Its
+linear step controls which core workspace is available, whether elapsed
+simulation time is held, and which explanation the player may acknowledge.
+Business actions advance action steps only after their normal reducers succeed.
+The client mirrors these rules in navigation and routes each completed step to
+the next workspace. Skipping marks onboarding complete without modifying the
+business-driven capability unlock list.
+
 Company identity, accessibility preferences, and simulation speed are canonical
 save data. They change through validated commands and use the same cookie
 autosave path as simulation progress.

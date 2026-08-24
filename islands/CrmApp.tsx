@@ -31,6 +31,7 @@ import {
   Settings,
   SlidersHorizontal,
   Target,
+  TriangleAlert,
   Upload,
   Users,
   Volume2,
@@ -51,6 +52,14 @@ import {
   quoteMonthlyValueCents,
 } from "../lib/game/actions.ts";
 import { selectGuidance } from "../lib/game/guidance.ts";
+import {
+  ONBOARDING_STEPS,
+  onboardingActive,
+  onboardingPausesSimulation,
+  onboardingStepNumber,
+  onboardingWorkspace,
+  onboardingWorkspaceAvailable,
+} from "../lib/game/onboarding.ts";
 import { campaignSaturation } from "../lib/game/simulation.ts";
 import {
   INITIATIVE_DEFINITIONS,
@@ -87,6 +96,7 @@ import type {
   InitiativeType,
   Lead,
   ManagerDepartment,
+  OnboardingStep,
   SalesRepLevel,
   SalesTerritory,
   Task,
@@ -109,6 +119,89 @@ type View =
   | "analytics"
   | "operations"
   | "settings";
+
+const TUTORIAL_COPY: Record<
+  Exclude<OnboardingStep, "complete">,
+  { title: string; detail: string; action: string; important?: string }
+> = {
+  inspect_lead: {
+    title: "Start with the person, not the buttons",
+    detail:
+      "Open the first lead and read their role, company, fit, and intent. Fit shows whether they match the product; intent shows how ready they are to talk.",
+    action: "Inspect the first lead",
+  },
+  contact_lead: {
+    title: "Make the first outreach",
+    detail:
+      "Contact the lead from their record. Outreach consumes founder capacity and changes intent, so every interaction is a tradeoff.",
+    action: "Open the lead",
+  },
+  explain_spam: {
+    title: "Give every outreach room to work",
+    important: "Important: Spam protection",
+    detail:
+      "Contacting the same lead again within one in-game hour is treated as spam. The outreach still costs founder capacity, but email drops intent by 20 and a call drops it by 30 instead of gaining intent. Every rapid repeat restarts the one-hour window. Wait at least one in-game hour before trying again; automated sales outreach is paced and avoids this penalty.",
+    action: "I understand, continue",
+  },
+  review_contacts: {
+    title: "Contacts remember the relationship",
+    detail:
+      "This workspace collects every person and their current status. Use it when you need relationship context rather than a queue of work.",
+    action: "Continue to Companies",
+  },
+  review_company: {
+    title: "Companies hold the account context",
+    detail:
+      "A contact is a person; a company is the account you may eventually sell to. Company records keep that buying context together.",
+    action: "Continue to qualification",
+  },
+  qualify_lead: {
+    title: "Turn interest into an opportunity",
+    detail:
+      "Qualify the contacted lead when the fit is credible. This creates a deal with value, probability, and a sales stage.",
+    action: "Open the contacted lead",
+  },
+  review_tasks: {
+    title: "Tasks keep promises from disappearing",
+    detail:
+      "Tasks are dated commitments created by sales and customer work. Review what is due before returning to the deal.",
+    action: "Continue to the deal",
+  },
+  work_deal: {
+    title: "Move the deal one stage at a time",
+    detail:
+      "Advance the opportunity through discovery, evaluation, and negotiation. Read each stage before committing to the next move.",
+    action: "Work the first deal",
+  },
+  review_dashboard: {
+    title: "Now the dashboard has meaning",
+    detail:
+      "Cash measures survival, MRR measures recurring revenue, and founder capacity limits today's work. These numbers summarize the decisions you just made.",
+    action: "Continue to onboarding",
+  },
+  onboard_customer: {
+    title: "A signed deal is not an active customer",
+    detail:
+      "Complete the new onboarding task. Activation improves adoption and health, protecting the revenue you just won.",
+    action: "Open onboarding tasks",
+  },
+  repeat_sales: {
+    title: "Prove the process is repeatable",
+    detail:
+      "Use the same inspect, contact, qualify, close, and onboard loop until the company has three customers. Marketing unlocks at three.",
+    action: "Work the next lead",
+  },
+};
+
+function tutorialAllowsView(game: GameState, next: View): boolean {
+  if (!onboardingActive(game)) return true;
+  if (
+    next === "campaign" || next === "dashboard" || next === "leads" ||
+    next === "contacts" || next === "companies" || next === "tasks" ||
+    next === "settings"
+  ) return onboardingWorkspaceAvailable(game, next);
+  return false;
+}
 
 export interface CrmAppProps {
   initial: GameState;
@@ -282,6 +375,64 @@ function NarrativePanel(props: { game: GameState; onOpen: () => void }) {
       <button type="button" class="narrative-open" onClick={props.onOpen}>
         <FileText size={15} />Read campaign briefing
       </button>
+    </section>
+  );
+}
+
+function TutorialPanel(props: {
+  game: GameState;
+  onAction: () => void;
+  onSkip: () => void;
+}) {
+  if (!onboardingActive(props.game)) return null;
+  const step = props.game.onboarding.step;
+  if (step === "complete") return null;
+  const copy = TUTORIAL_COPY[step];
+  const total = ONBOARDING_STEPS.length - 1;
+  return (
+    <section class="tutorial-panel" aria-labelledby="tutorial-title">
+      <div class="tutorial-progress" aria-label="Guided Chapter 1 progress">
+        <span>
+          Guided Chapter 1 · Step {onboardingStepNumber(step)} of {total}
+        </span>
+        <div>
+          <i
+            style={{ width: `${onboardingStepNumber(step) / total * 100}%` }}
+          />
+        </div>
+      </div>
+      <div class="tutorial-content">
+        <div class="tutorial-icon">
+          <GraduationCap size={21} />
+        </div>
+        <div>
+          {copy.important && (
+            <strong class="tutorial-important">
+              <TriangleAlert size={14} /> {copy.important}
+            </strong>
+          )}
+          <h2 id="tutorial-title">{copy.title}</h2>
+          <p>{copy.detail}</p>
+          {onboardingPausesSimulation(props.game) && (
+            <small>
+              <Clock3 size={13} /> Company time is paused while you read.
+            </small>
+          )}
+        </div>
+        <button type="button" class="primary" onClick={props.onAction}>
+          {copy.action}
+          <ChevronRight size={15} />
+        </button>
+      </div>
+      <div class="tutorial-footer">
+        <button
+          type="button"
+          class="secondary tutorial-skip"
+          onClick={props.onSkip}
+        >
+          <X size={15} /> Skip guided Chapter 1
+        </button>
+      </div>
     </section>
   );
 }
@@ -3093,7 +3244,11 @@ function PipelineWorkspace(props: {
 export default function CrmApp(props: CrmAppProps) {
   const store = useGameStore(props.initial);
   const view = useSignal<View>(
-    props.loadStatus === "new" ? "campaign" : "dashboard",
+    props.loadStatus === "new"
+      ? "campaign"
+      : onboardingActive(props.initial)
+      ? onboardingWorkspace(props.initial)
+      : "dashboard",
   );
   const selectedLeadId = useSignal<string | undefined>(undefined);
   const selectedCompanyId = useSignal<string | undefined>(
@@ -3120,6 +3275,7 @@ export default function CrmApp(props: CrmAppProps) {
   );
   const showCorrupt = useSignal(props.loadStatus === "corrupt");
   const confirmReset = useSignal(false);
+  const confirmSkipTutorial = useSignal(false);
   const game = store.game.value;
   const soundDesign = useRef<SoundDesign | undefined>(undefined);
   const previousMusicTarget = useRef<MusicTarget | undefined>(undefined);
@@ -3354,6 +3510,7 @@ export default function CrmApp(props: CrmAppProps) {
   );
 
   const navigate = (next: View) => {
+    if (!tutorialAllowsView(game, next)) return;
     if (next === "contacts") selectedLeadId.value = undefined;
     view.value = next;
     mobileNav.value = false;
@@ -3471,11 +3628,42 @@ export default function CrmApp(props: CrmAppProps) {
 
   const dispatch = (command: GameCommand) => {
     const previousChapter = store.game.value.narrative.chapter;
+    const previousOnboardingStep = store.game.value.onboarding.step;
     const accepted = store.dispatch(command);
     if (
       accepted && store.game.value.narrative.chapter > previousChapter
     ) view.value = "campaign";
+    else if (
+      accepted && onboardingActive(store.game.value) &&
+      store.game.value.onboarding.step !== previousOnboardingStep
+    ) view.value = onboardingWorkspace(store.game.value);
     return accepted;
+  };
+
+  const performTutorialAction = () => {
+    const step = game.onboarding.step;
+    if (step === "complete") return;
+    if (onboardingPausesSimulation(game)) {
+      if (!dispatch({ type: "acknowledge_onboarding", step })) return;
+    } else {
+      navigate(onboardingWorkspace(game));
+    }
+    if (
+      [
+        "inspect_lead",
+        "contact_lead",
+        "qualify_lead",
+        "work_deal",
+        "repeat_sales",
+      ].includes(step)
+    ) {
+      const targetLead = Object.values(store.game.value.records.leads).find(
+        (lead) => lead.status !== "converted" && lead.status !== "disqualified",
+      );
+      if (targetLead) {
+        globalThis.requestAnimationFrame(() => openLead(targetLead.id));
+      }
+    }
   };
 
   const renameCompany = (event: SubmitEvent) => {
@@ -3642,17 +3830,28 @@ export default function CrmApp(props: CrmAppProps) {
         </div>
         <nav aria-label="Primary">
           <span class="nav-heading">Workspace</span>
-          {navItems.map((item) => (
-            <button
-              type="button"
-              class={view.value === item.id ? "active" : ""}
-              onClick={() => navigate(item.id)}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-              {item.count !== undefined && <b>{item.count}</b>}
-            </button>
-          ))}
+          {navItems.map((item) => {
+            const available = tutorialAllowsView(game, item.id);
+            const current = onboardingActive(game) &&
+              onboardingWorkspace(game) === item.id;
+            return (
+              <button
+                type="button"
+                class={`${view.value === item.id ? "active" : ""} ${
+                  available ? "" : "locked"
+                } ${current ? "tutorial-current" : ""}`}
+                disabled={!available}
+                title={available
+                  ? undefined
+                  : "Introduced later in Guided Chapter 1"}
+                onClick={() => navigate(item.id)}
+              >
+                {available ? item.icon : <LockKeyhole size={16} />}
+                <span>{item.label}</span>
+                {item.count !== undefined && <b>{item.count}</b>}
+              </button>
+            );
+          })}
           <span class="nav-heading">Growth</span>
           <button
             type="button"
@@ -4021,6 +4220,11 @@ export default function CrmApp(props: CrmAppProps) {
 
         <section class="workspace">
           <NarrativePanel game={game} onOpen={openCampaignBriefing} />
+          <TutorialPanel
+            game={game}
+            onAction={performTutorialAction}
+            onSkip={() => confirmSkipTutorial.value = true}
+          />
           {view.value === "campaign" && <CampaignWorkspace game={game} />}
           {view.value === "dashboard" && (
             <>
@@ -4038,23 +4242,26 @@ export default function CrmApp(props: CrmAppProps) {
                   <Inbox size={16} />Work leads
                 </button>
               </div>
-              <section class="guidance-card" aria-labelledby="guidance-title">
-                <div class="guidance-icon">
-                  <Target size={20} />
-                </div>
-                <div>
-                  <span>Next best action</span>
-                  <h2 id="guidance-title">{guidance.actionLabel}</h2>
-                  <p>{guidance.reason}</p>
-                </div>
-                <button
-                  type="button"
-                  class="primary"
-                  onClick={(event) => openGuidance(event.currentTarget)}
-                >
-                  Open work <ChevronRight size={15} />
-                </button>
-              </section>
+              {!onboardingActive(game) && (
+                <section class="guidance-card" aria-labelledby="guidance-title">
+                  <div class="guidance-icon">
+                    <Target size={20} />
+                  </div>
+                  <div>
+                    <span>Next best action</span>
+                    <h2 id="guidance-title">{guidance.actionLabel}</h2>
+                    <p>{guidance.reason}</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="primary"
+                    onClick={(event) =>
+                      openGuidance(event.currentTarget)}
+                  >
+                    Open work <ChevronRight size={15} />
+                  </button>
+                </section>
+              )}
               <div class="kpi-grid">
                 <Kpi
                   label="Cash"
@@ -4223,26 +4430,28 @@ export default function CrmApp(props: CrmAppProps) {
                   </button>
                 </div>
               </div>
-              <section
-                class="guidance-card compact"
-                aria-labelledby="lead-guidance-title"
-              >
-                <div class="guidance-icon">
-                  <Target size={18} />
-                </div>
-                <div>
-                  <span>Recommended now</span>
-                  <h2 id="lead-guidance-title">{guidance.actionLabel}</h2>
-                  <p>{guidance.reason}</p>
-                </div>
-                <button
-                  type="button"
-                  class="secondary"
-                  onClick={(event) => openGuidance(event.currentTarget)}
+              {!onboardingActive(game) && (
+                <section
+                  class="guidance-card compact"
+                  aria-labelledby="lead-guidance-title"
                 >
-                  Go <ChevronRight size={14} />
-                </button>
-              </section>
+                  <div class="guidance-icon">
+                    <Target size={18} />
+                  </div>
+                  <div>
+                    <span>Recommended now</span>
+                    <h2 id="lead-guidance-title">{guidance.actionLabel}</h2>
+                    <p>{guidance.reason}</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="secondary"
+                    onClick={(event) => openGuidance(event.currentTarget)}
+                  >
+                    Go <ChevronRight size={14} />
+                  </button>
+                </section>
+              )}
               {showLeadFilters.value && (
                 <div class="filter-bar">
                   <label>
@@ -5598,6 +5807,39 @@ export default function CrmApp(props: CrmAppProps) {
               {store.operationStatus.value === "resetting"
                 ? "Resetting..."
                 : "Reset company"}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {confirmSkipTutorial.value && (
+        <Modal
+          title="Skip guided Chapter 1?"
+          onClose={() => confirmSkipTutorial.value = false}
+        >
+          <p class="modal-copy">
+            This removes tutorial guidance and opens the core CRM workspaces.
+            Marketing, Pipeline, and later modules will still require their
+            normal business milestones.
+          </p>
+          <div class="modal-actions">
+            <button
+              type="button"
+              class="secondary"
+              onClick={() => confirmSkipTutorial.value = false}
+            >
+              Keep guidance
+            </button>
+            <button
+              type="button"
+              class="primary"
+              onClick={() => {
+                if (dispatch({ type: "skip_onboarding" })) {
+                  confirmSkipTutorial.value = false;
+                }
+              }}
+            >
+              Skip tutorial
             </button>
           </div>
         </Modal>

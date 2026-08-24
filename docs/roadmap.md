@@ -133,8 +133,17 @@ realistic CRM work, reload safely, and fail through active bankruptcy.
 - [x] Start directly in a live lead inbox with no setup wizard.
 - [x] Use contextual tasks to teach inspection, qualification, outreach,
       follow-up, and closing.
+- [x] Introduce Inbox, Contacts, Companies, Tasks, and Dashboard one at a time
+      with a persistent step indicator and a single current action.
+- [x] Explain the one-hour manual outreach spam window, intent penalties, and
+      paced automation exception immediately after the first contact.
+- [x] Pause company time during explanation steps and resume it for live work
+      without applying catch-up simulation.
+- [x] Offer a prominent, confirmed tutorial skip that preserves business locks.
 - [x] Unlock the first acquisition capability after retained customers
       demonstrate repeatable demand.
+- [x] End the guided chapter at three retained customers and teach the first
+      marketing campaign in the following chapter.
 - [x] Keep all guidance inside credible CRM UI.
 
 ### Failure and recovery

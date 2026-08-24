@@ -580,6 +580,12 @@ button:disabled {
   color: var(--sidebar-muted);
 }
 
+.sidebar nav button.tutorial-current {
+  color: var(--sidebar-ink);
+  background: var(--sidebar-soft);
+  box-shadow: inset 3px 0 var(--sidebar-accent);
+}
+
 .unlock-note {
   display: flex;
   gap: 9px;
@@ -869,6 +875,128 @@ main {
 
 .guidance-card button {
   white-space: nowrap;
+}
+
+.tutorial-panel {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--green) 42%, var(--line));
+  border-radius: 7px;
+  background:
+    linear-gradient(110deg, var(--green-soft), var(--surface) 68%),
+    var(--surface);
+  box-shadow: 0 8px 24px rgb(23 63 53 / 8%);
+}
+
+.tutorial-progress {
+  display: grid;
+  gap: 7px;
+}
+
+.tutorial-progress > span {
+  color: var(--green-dark);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tutorial-progress > div {
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--green) 15%, var(--surface));
+}
+
+.tutorial-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width 180ms ease-out;
+}
+
+.tutorial-content {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.tutorial-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--green-dark);
+  background: var(--surface);
+}
+
+.tutorial-content h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.tutorial-important {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--amber) 52%, var(--line));
+  border-radius: 5px;
+  color: #74551d;
+  background: var(--amber-soft);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dark-mode .tutorial-important {
+  color: #f0d49b;
+}
+
+.tutorial-content p {
+  max-width: 78ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.tutorial-content small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  color: var(--green-dark);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tutorial-content > button {
+  white-space: nowrap;
+}
+
+.tutorial-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--green) 18%, var(--line));
+}
+
+.tutorial-skip {
+  min-height: 36px;
+  margin-top: 10px;
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .record-open-button {
@@ -4930,6 +5058,29 @@ table,
   .guidance-card button {
     width: 100%;
     grid-column: 1 / -1;
+  }
+
+  .tutorial-panel {
+    padding: 14px;
+  }
+
+  .tutorial-content {
+    align-items: start;
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .tutorial-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .tutorial-content > button {
+    width: 100%;
+    grid-column: 1 / -1;
+  }
+
+  .tutorial-skip {
+    width: 100%;
   }
 
   .mobile-save-state small {

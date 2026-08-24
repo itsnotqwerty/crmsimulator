@@ -214,13 +214,6 @@ export function contactLeadWork(
         }
         : state.records.tasks,
     },
-    onboarding: {
-      ...state.onboarding,
-      step: state.onboarding.step === "inspect_lead" ||
-          state.onboarding.step === "contact_lead"
-        ? "qualify_lead"
-        : state.onboarding.step,
-    },
   }, events);
 }
 
@@ -321,7 +314,6 @@ export function qualifyLeadWork(state: GameState, leadId: string): WorkResult {
         },
       },
     },
-    onboarding: { ...state.onboarding, step: "close_deal" },
   }, [{
     kind: "lead_qualified",
     summary: `${lead.firstName} ${lead.lastName} qualified`,
@@ -1035,6 +1027,5 @@ export function advanceDealWork(
       ...(unlockMarketing ? ["marketing" as const] : []),
       ...(unlockCustomerSuccess ? ["customer_success" as const] : []),
     ],
-    onboarding: { ...state.onboarding, step: "complete" },
   }, events);
 }

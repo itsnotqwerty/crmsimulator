@@ -2,6 +2,7 @@ import { projectEvents } from "./events.ts";
 import { generateLead } from "./catalog.ts";
 import { randomInteger } from "./rng.ts";
 import { syncNarrative } from "./narrative.ts";
+import { acknowledgeOnboarding, syncOnboarding } from "./onboarding.ts";
 import {
   createInitialState,
   DEFAULT_RULES,
@@ -434,7 +435,9 @@ function accepted(
     : [];
   const commandEvents = [...events, ...unlockEvents];
   const automated = applyAutomations(unlocked, commandEvents, rules);
-  const nextState = syncProgressionUnlocks(automated.state, rules);
+  const nextState = syncOnboarding(
+    syncProgressionUnlocks(automated.state, rules),
+  );
   const projectedEvents = [...commandEvents, ...automated.events];
 
   return {
@@ -2427,6 +2430,28 @@ export function applyCommand(
         {
           ...state,
           narrative: { ...state.narrative, pendingBriefing: false },
+        },
+        [],
+        rules,
+      );
+    case "acknowledge_onboarding": {
+      const onboarding = acknowledgeOnboarding(
+        state.onboarding,
+        command.step,
+      );
+      if (!onboarding) {
+        return rejected(state, "This tutorial explanation is not active");
+      }
+      return accepted({ ...state, onboarding }, [], rules);
+    }
+    case "skip_onboarding":
+      if (state.onboarding.dismissed || state.onboarding.step === "complete") {
+        return rejected(state, "Guided Chapter 1 is already complete");
+      }
+      return accepted(
+        {
+          ...state,
+          onboarding: { step: "complete", dismissed: true },
         },
         [],
         rules,

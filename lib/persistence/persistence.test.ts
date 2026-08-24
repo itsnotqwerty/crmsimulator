@@ -987,6 +987,30 @@ Deno.test("version 27 saves migrate with dark mode disabled", () => {
   assertEquals(migrated.preferences.darkMode, false);
 });
 
+Deno.test("version 28 saves migrate the legacy close tutorial step", () => {
+  const current = createInitialState({ seed: 281, now: 1_000 });
+  const legacy = structuredClone(current) as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 28;
+  (legacy.onboarding as Record<string, unknown>).step = "close_deal";
+
+  const migrated = migrateGameState(legacy);
+
+  assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
+  assertEquals(migrated.onboarding.step, "work_deal");
+});
+
+Deno.test("version 29 guided-opening saves remain compatible", () => {
+  const current = createInitialState({ seed: 291, now: 1_000 });
+  const legacy = structuredClone(current) as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 29;
+  (legacy.onboarding as Record<string, unknown>).step = "review_contacts";
+
+  const migrated = migrateGameState(legacy);
+
+  assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
+  assertEquals(migrated.onboarding.step, "explain_spam");
+});
+
 Deno.test("save validation rejects unknown customer account plans", () => {
   const current = createInitialState({ seed: 116, now: 1_000 });
   const invalid = structuredClone(current) as unknown as Record<

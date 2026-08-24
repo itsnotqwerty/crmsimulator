@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 28 as const;
+export const SAVE_SCHEMA_VERSION = 30 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -512,11 +512,20 @@ export interface OnboardingState {
   step:
     | "inspect_lead"
     | "contact_lead"
+    | "explain_spam"
+    | "review_contacts"
+    | "review_company"
     | "qualify_lead"
-    | "close_deal"
+    | "review_tasks"
+    | "work_deal"
+    | "review_dashboard"
+    | "onboard_customer"
+    | "repeat_sales"
     | "complete";
   dismissed: boolean;
 }
+
+export type OnboardingStep = OnboardingState["step"];
 
 export interface NarrativeState {
   chapter: number;
@@ -732,6 +741,8 @@ export type GameCommand =
     initiativeId: EntityId;
     approach: InitiativeApproach;
   }
+  | { type: "acknowledge_onboarding"; step: OnboardingStep }
+  | { type: "skip_onboarding" }
   | { type: "acknowledge_narrative" }
   | { type: "resume_crisis" }
   | { type: "new_company"; seed: number; now: number; companyName?: string };

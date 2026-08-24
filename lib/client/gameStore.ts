@@ -3,6 +3,7 @@ import { useEffect, useRef } from "preact/hooks";
 import { applyCommand } from "../game/actions.ts";
 import { compactGameState } from "../game/compaction.ts";
 import { advanceGame } from "../game/simulation.ts";
+import { onboardingPausesSimulation } from "../game/onboarding.ts";
 import { DEFAULT_RULES } from "../game/state.ts";
 import { NARRATIVE_CHAPTERS } from "../game/narrative.ts";
 import type { GameCommand, GameState } from "../game/types.ts";
@@ -103,6 +104,10 @@ export function useGameStore(initial: GameState) {
   ) => {
     now.value = timestamp;
     if (game.value.clock.status !== "active") return;
+    if (onboardingPausesSimulation(game.value)) {
+      game.value = { ...game.value, lastSimulatedAt: timestamp };
+      return;
+    }
     const timeScale = game.value.preferences.timeScale;
     const totalElapsedGameMinutes = Math.floor(
       (timestamp - game.value.lastSimulatedAt) /
@@ -255,6 +260,7 @@ export function useGameStore(initial: GameState) {
     consecutiveSaveFailures,
     operationStatus,
     notice,
+    catchUp,
     dispatch,
     reset,
     importSave,

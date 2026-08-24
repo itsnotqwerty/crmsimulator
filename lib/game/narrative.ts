@@ -36,7 +36,7 @@ export const NARRATIVE_CHAPTERS: readonly NarrativeChapter[] = [{
   briefing:
     "One signature proves the product can sell. It does not prove there is a market. The next board update asks for a repeatable source of demand, not another founder miracle.",
   directive:
-    "Reach three customers, unlock Marketing, and launch the company's first campaign.",
+    "Learn the core CRM workflow and turn the first signal into three retained customers.",
 }, {
   number: 2,
   eyebrow: "Chapter II · The bottleneck",
@@ -45,7 +45,8 @@ export const NARRATIVE_CHAPTERS: readonly NarrativeChapter[] = [{
   subject: "You are now the constraint",
   briefing:
     "The pipeline is beginning to move, but every conversation still waits on you. The company cannot grow while its founder is also its routing rule.",
-  directive: "Build $3,000 in MRR and hire the first sales representative.",
+  directive:
+    "Launch the first marketing campaign, build $3,000 in MRR, and hire the first sales representative.",
 }, {
   number: 3,
   eyebrow: "Chapter III · The promise",
@@ -102,20 +103,18 @@ export function narrativeObjectives(state: GameState): NarrativeObjective[] {
         target: 1,
       }];
     case 1:
+      return [{
+        label: "Retain three customers",
+        current: state.company.customerCount,
+        target: 3,
+      }];
+    case 2:
       return [
-        {
-          label: "Retain three customers",
-          current: state.company.customerCount,
-          target: 3,
-        },
         {
           label: "Launch a marketing campaign",
           current: Object.keys(state.records.campaigns).length,
           target: 1,
         },
-      ];
-    case 2:
-      return [
         {
           label: "Reach $3,000 MRR",
           current: state.company.mrrCents,

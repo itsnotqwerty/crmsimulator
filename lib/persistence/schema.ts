@@ -57,6 +57,20 @@ const INCIDENT_SEVERITIES = new Set(["minor", "major", "critical"]);
 const INCIDENT_STATUSES = new Set(["investigating", "resolved"]);
 const TASK_KINDS = new Set(["call", "email", "follow_up", "onboarding"]);
 const TASK_STATUSES = new Set(["open", "completed", "cancelled"]);
+const ONBOARDING_STEPS = new Set([
+  "inspect_lead",
+  "contact_lead",
+  "explain_spam",
+  "review_contacts",
+  "review_company",
+  "qualify_lead",
+  "review_tasks",
+  "work_deal",
+  "review_dashboard",
+  "onboard_customer",
+  "repeat_sales",
+  "complete",
+]);
 const CAMPAIGN_CHANNELS = new Set(["email", "paid_social", "events"]);
 const CAMPAIGN_AUDIENCES = new Set([
   "small_business",
@@ -543,6 +557,7 @@ export function parseGameState(value: unknown): GameState {
   }
   if (
     !isRecord(value.onboarding) || !hasStrings(value.onboarding, ["step"]) ||
+    !ONBOARDING_STEPS.has(String(value.onboarding.step)) ||
     typeof value.onboarding.dismissed !== "boolean"
   ) {
     issues.push({ path: "onboarding", message: "Invalid onboarding state" });

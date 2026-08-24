@@ -373,6 +373,29 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       darkMode: false,
     },
   }),
+  29: (save) => {
+    const onboarding = save.onboarding as Record<string, unknown>;
+    return {
+      ...save,
+      onboarding: {
+        ...onboarding,
+        step: onboarding.step === "close_deal" ? "work_deal" : onboarding.step,
+      },
+    };
+  },
+  30: (save) => {
+    const onboarding = save.onboarding as Record<string, unknown>;
+    const step = onboarding.step;
+    const needsSpamLesson = onboarding.dismissed !== true &&
+      step !== "inspect_lead" && step !== "contact_lead" &&
+      step !== "complete";
+    return needsSpamLesson
+      ? {
+        ...save,
+        onboarding: { ...onboarding, step: "explain_spam" },
+      }
+      : save;
+  },
 };
 
 export function migrateGameState(value: unknown): GameState {

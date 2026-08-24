@@ -101,3 +101,24 @@ Deno.test("a save queued in flight preserves changes and advances revision", asy
     globalThis.fetch = originalFetch;
   }
 });
+
+Deno.test("informational tutorial steps discard elapsed simulation time", () => {
+  const initial = createInitialState({ seed: 3, now: 100 });
+  const store = renderStore(initial);
+
+  store.catchUp(60_100);
+  assertEquals(store.game.value.clock.gameMinute, 0);
+  assertEquals(store.game.value.lastSimulatedAt, 60_100);
+
+  assertEquals(
+    store.dispatch({
+      type: "acknowledge_onboarding",
+      step: "inspect_lead",
+    }),
+    true,
+  );
+  const resumedAt = store.game.value.lastSimulatedAt;
+  store.catchUp(resumedAt + 10_000);
+
+  assertEquals(store.game.value.clock.gameMinute, 20);
+});
