@@ -987,7 +987,7 @@ Deno.test("version 27 saves migrate with dark mode disabled", () => {
   assertEquals(migrated.preferences.darkMode, false);
 });
 
-Deno.test("version 28 saves migrate the legacy close tutorial step", () => {
+Deno.test("version 28 close-step saves migrate through the spam lesson", () => {
   const current = createInitialState({ seed: 281, now: 1_000 });
   const legacy = structuredClone(current) as unknown as Record<string, unknown>;
   legacy.schemaVersion = 28;
@@ -996,7 +996,7 @@ Deno.test("version 28 saves migrate the legacy close tutorial step", () => {
   const migrated = migrateGameState(legacy);
 
   assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
-  assertEquals(migrated.onboarding.step, "work_deal");
+  assertEquals(migrated.onboarding.step, "explain_spam");
 });
 
 Deno.test("version 29 guided-opening saves remain compatible", () => {

@@ -583,7 +583,10 @@ button:disabled {
 .sidebar nav button.tutorial-current {
   color: var(--sidebar-ink);
   background: var(--sidebar-soft);
-  box-shadow: inset 3px 0 var(--sidebar-accent);
+  box-shadow:
+    inset 4px 0 var(--sidebar-accent),
+    0 0 0 2px rgb(233 196 106 / 55%);
+  animation: tutorial-nav-pulse 1.6s ease-in-out infinite;
 }
 
 .unlock-note {
@@ -888,6 +891,14 @@ main {
     linear-gradient(110deg, var(--green-soft), var(--surface) 68%),
     var(--surface);
   box-shadow: 0 8px 24px rgb(23 63 53 / 8%);
+  animation: tutorial-panel-pulse 1.8s ease-in-out infinite;
+}
+
+.tutorial-panel.important {
+  border: 3px solid var(--amber);
+  box-shadow:
+    0 0 0 5px rgb(233 196 106 / 24%),
+    0 16px 38px rgb(116 85 29 / 18%);
 }
 
 .tutorial-progress {
@@ -983,6 +994,57 @@ main {
   white-space: nowrap;
 }
 
+.tutorial-next-action {
+  outline: 4px solid rgb(233 196 106 / 34%);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 1px var(--amber), 0 8px 20px rgb(23 63 53 / 22%);
+  animation: tutorial-action-pulse 1.15s ease-in-out infinite;
+}
+
+.tutorial-next-action svg {
+  animation: tutorial-arrow-nudge 700ms ease-in-out infinite alternate;
+}
+
+@keyframes tutorial-panel-pulse {
+  0%,
+  100% {
+    box-shadow: 0 8px 24px rgb(23 63 53 / 8%);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgb(233 196 106 / 20%), 0 12px 32px rgb(23 63 53 /
+      18%);
+  }
+}
+
+@keyframes tutorial-action-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.045);
+  }
+}
+
+@keyframes tutorial-arrow-nudge {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes tutorial-nav-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.28);
+  }
+}
+
 .tutorial-footer {
   display: flex;
   justify-content: flex-end;
@@ -1055,7 +1117,7 @@ main {
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
-  background: white;
+  background: var(--surface);
   box-shadow: 0 16px 38px rgb(23 32 29 / 16%);
 }
 
@@ -1086,7 +1148,7 @@ main {
   border: 0;
   border-bottom: 1px solid var(--line);
   color: var(--ink);
-  background: white;
+  background: var(--surface);
   font-size: 16px;
   text-align: left;
   cursor: pointer;

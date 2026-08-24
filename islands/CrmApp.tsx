@@ -390,7 +390,10 @@ function TutorialPanel(props: {
   const copy = TUTORIAL_COPY[step];
   const total = ONBOARDING_STEPS.length - 1;
   return (
-    <section class="tutorial-panel" aria-labelledby="tutorial-title">
+    <section
+      class={`tutorial-panel ${copy.important ? "important" : ""}`}
+      aria-labelledby="tutorial-title"
+    >
       <div class="tutorial-progress" aria-label="Guided Chapter 1 progress">
         <span>
           Guided Chapter 1 · Step {onboardingStepNumber(step)} of {total}
@@ -419,7 +422,11 @@ function TutorialPanel(props: {
             </small>
           )}
         </div>
-        <button type="button" class="primary" onClick={props.onAction}>
+        <button
+          type="button"
+          class="primary tutorial-next-action"
+          onClick={props.onAction}
+        >
           {copy.action}
           <ChevronRight size={15} />
         </button>
