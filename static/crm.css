@@ -4298,9 +4298,60 @@ table,
   }
 }
 
+@media (max-width: 1400px) {
+  .quote-form {
+    grid-template-columns: 1fr;
+  }
+
+  .quote-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .quote-fields label,
+  .quote-fields .quote-deal-field,
+  .quote-fields .quote-plan-field,
+  .quote-fields .quote-deal-field + .quote-plan-field + label {
+    grid-column: auto;
+  }
+
+  .quote-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .quote-terms {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .quote-value {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .quote-actions {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 1220px) {
   .kpi-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .sales-team-list > div {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+  }
+
+  .sales-team-list dl {
+    grid-column: 2 / -1;
+  }
+
+  .rep-actions {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
   }
 
   .record-layout {
@@ -4411,30 +4462,6 @@ table,
     justify-self: start;
   }
 
-  .quote-form {
-    grid-template-columns: 1fr;
-  }
-
-  .quote-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .quote-terms {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-
-  .quote-value {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .quote-actions {
-    grid-column: 1 / -1;
-    grid-row: 3;
-    justify-content: flex-start;
-  }
-
   .workflow-list {
     grid-template-columns: 1fr;
   }
@@ -4449,6 +4476,7 @@ table,
 
   .rep-actions {
     grid-column: 1 / -1;
+    grid-row: auto;
     justify-self: start;
   }
 
