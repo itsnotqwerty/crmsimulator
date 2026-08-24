@@ -206,9 +206,11 @@ The deployed application must use HTTPS so persistence cookies can use the
 Secure flag. Changing or losing `COOKIE_SECRET` invalidates existing signed
 saves unless an explicit key-rotation strategy is added later.
 
-The files under `deploy/` are project-neutral systemd and nginx templates. The
-installer requires an explicit service name and production command, supports
-optional env/TLS/nginx configuration, and provides a non-root `--dry-run`. See
+The `deploy/` directory is the project-neutral
+[DONUT Deploy](https://github.com/itsnotqwerty/donut-deploy) submodule. Initialize
+it with `git submodule update --init deploy`. The installer requires an explicit
+service name and production command, supports optional env/TLS/nginx
+configuration, and provides a non-root `--dry-run`. See
 [deploy/README.md](deploy/README.md) for usage and prerequisites.
 
 ## Documentation
