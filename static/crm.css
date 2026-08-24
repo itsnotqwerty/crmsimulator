@@ -1642,7 +1642,7 @@ td small {
   border: 0;
   border-right: 1px solid var(--line);
   color: var(--green);
-  background: white;
+  background: var(--surface);
   cursor: pointer;
 }
 
@@ -1652,6 +1652,10 @@ td small {
 
 .quick-actions button:hover {
   background: var(--green-soft);
+}
+
+.dark-mode .quick-actions button {
+  color: var(--green-dark);
 }
 
 .quick-actions span {
