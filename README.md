@@ -7,21 +7,23 @@ success, support, analytics, automation, and operations tools.
 
 The CRM is the game: leads arrive over time, outreach consumes capacity, deals
 become subscriptions, recurring revenue competes with operating costs, and
-neglected work creates measurable business consequences. There is no login,
-multiplayer, database, or cloud save.
+neglected work creates measurable business consequences. There is no login or
+multiplayer. Anonymous saves are stored in Supabase and are tied to an opaque,
+HttpOnly browser capability cookie.
 
 ## Status
 
 The product specification, technical design, and implementation roadmap are
 complete. Release 1 is implemented: the deterministic headless company engine,
-command reducers, offline crisis rules, compact save codec, signed cookie
-chunks, migrations, and foundation tests are available under `lib/`.
+command reducers, offline crisis rules, schema migrations, anonymous Supabase
+persistence, and foundation tests are available under `lib/`.
 
 Release 2 is complete with a playable root-only SPA: the responsive CRM shell,
 global search, Dashboard, Lead Inbox, Contacts, Companies, Tasks, deal workflow,
 founder prospecting, customer-referral acquisition, selectable 1x/2x/4x live
-simulation, task cancellation, cookie autosave, company naming, reduced-motion
-preferences, import/export/reset, and recovery modals implemented.
+simulation, task cancellation, anonymous cloud autosave, company naming,
+reduced-motion preferences, import/export/reset, and recovery modals
+implemented.
 
 Release 3 is complete with persistent campaign records, configurable audience,
 channel, objective, budget, duration, and messaging, deterministic
@@ -120,23 +122,22 @@ There are no feature pages or API routes. Fresh-generated JavaScript, CSS,
 source maps, icons, fonts, and static media may use their normal asset paths
 because Fresh requires those requests to run the client application.
 
-### Cookie-only storage
+### Anonymous Supabase storage
 
-Cookies are the only live persistence mechanism. The game will not use:
+The complete schema-versioned game state is stored server-side in Supabase. No
+account is required. The browser receives one opaque capability cookie
+containing a random save ID and a 256-bit token; only a SHA-256 hash of that
+token is stored in the database. The cookie is HttpOnly, SameSite=Strict, and
+Secure in production. Supabase is accessed only by the Fresh server with the
+service-role key, and row-level security blocks direct browser access.
 
-- localStorage or sessionStorage;
-- IndexedDB;
-- service-worker game storage;
-- a database or server-side save store;
-- Supabase or another cloud persistence service.
+Existing signed, chunked cookie saves are imported into Supabase on their first
+request after deployment. The old save cookies are then cleared. `COOKIE_SECRET`
+must remain stable while this migration path is supported.
 
-Saves are designed to be compact, schema-versioned, gzip-compressed,
-base64url-encoded, split across bounded cookie chunks, and signed by the server.
-The root handler writes HttpOnly, SameSite=Strict cookies and sets Secure in
-production.
-
-Exported JSON files are explicit user backups, not an alternate source of live
-state.
+Clearing browser cookies loses the anonymous capability and therefore access to
+that save. JSON export remains the portable backup and recovery mechanism. The
+application does not use localStorage, IndexedDB, or service-worker storage.
 
 ## First playable release
 
@@ -147,7 +148,7 @@ The initial release provides a complete founder-led lead-to-customer loop:
 - qualification, calls, emails, follow-up, deals, and customer creation;
 - cash, MRR, operating expenses, founder capacity, and recurring subscriptions;
 - contextual onboarding inside the live inbox;
-- cookie autosave, import, export, reset, and corrupt-save recovery;
+- anonymous cloud autosave, import, export, reset, and corrupt-save recovery;
 - offline summaries, Crisis Pause, bankruptcy reports, and restart;
 - a customer milestone that unlocks referral-based acquisition.
 
@@ -160,6 +161,7 @@ company operations.
 - [Deno](https://deno.com/) 2.x
 - [Fresh](https://fresh.deno.dev/) 1.7
 - [Preact](https://preactjs.com/) and Signals
+- [Supabase](https://supabase.com/) Postgres
 - Hand-authored responsive CSS in `static/crm.css`
 - Deno standard library
 
@@ -185,9 +187,8 @@ Available tasks:
 | `deno task manifest` | Regenerate the Fresh manifest                         |
 
 The test task covers deterministic simulation, commands, offline crisis versus
-active bankruptcy, schema validation, compression, signing, tamper rejection,
-cookie flags, stale chunk cleanup, save-size budgets, and the root persistence
-adapter including revision conflicts and corrupt-save recovery.
+active bankruptcy, schema validation, legacy cookie migration, capability cookie
+flags, anonymous save persistence, and revision conflicts.
 
 Production bundles are intentionally not shipped in release archives. Run
 `deno task build` after extracting a release (the installer does this
@@ -196,19 +197,38 @@ interface code.
 
 ## Production configuration
 
-Production requires a stable, high-entropy cookie signing secret:
+Copy `.env.example` to `.env` and provide these server-only values:
 
 ```text
 COOKIE_SECRET=<stable high-entropy secret>
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 ```
 
-The deployed application must use HTTPS so persistence cookies can use the
-Secure flag. Changing or losing `COOKIE_SECRET` invalidates existing signed
-saves unless an explicit key-rotation strategy is added later.
+Find the URL and service-role key in the Supabase project API settings. Never
+expose `SUPABASE_SERVICE_ROLE_KEY` in browser code, source control, or a public
+environment. It bypasses row-level security and is used only by the Fresh
+server.
+
+Apply the database migration before starting the application. With the Supabase
+CLI linked to the project:
+
+```sh
+supabase db push
+```
+
+Alternatively, run `supabase/migrations/20260824000000_anonymous_saves.sql` in
+the Supabase SQL Editor. The migration creates `crm_anonymous_saves`, enables
+row-level security, and revokes browser roles.
+
+The deployed application must use HTTPS so the anonymous capability cookie can
+use the Secure flag. `COOKIE_SECRET` signs and verifies legacy chunked saves
+during automatic migration; changing it prevents those old saves from being
+imported.
 
 The `deploy/` directory is the project-neutral
-[DONUT Deploy](https://github.com/itsnotqwerty/donut-deploy) submodule. Initialize
-it with `git submodule update --init deploy`.
+[DONUT Deploy](https://github.com/itsnotqwerty/donut-deploy) submodule.
+Initialize it with `git submodule update --init deploy`.
 
 Deploy CRM Simulator with its project-specific entrypoint so the systemd service
 name, port owner, and nginx hostname remain stable:
@@ -218,10 +238,10 @@ git pull
 sudo ./deploy-production.sh
 ```
 
-The entrypoint updates the deploy submodule, removes the obsolete
-`crmsimulator` service/configuration if present, and installs the canonical
-`crm-simulator` service for `crmsim.coolfreakingames.dev`. Do not invoke the
-generic installer directly for production CRM deployments. See
+The entrypoint updates the deploy submodule, removes the obsolete `crmsimulator`
+service/configuration if present, and installs the canonical `crm-simulator`
+service for `crmsim.coolfreakingames.dev`. Do not invoke the generic installer
+directly for production CRM deployments. See
 [deploy/README.md](deploy/README.md) for installer details and prerequisites.
 
 ## Documentation

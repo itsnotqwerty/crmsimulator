@@ -19,6 +19,7 @@
     "preact/": "https://esm.sh/preact@10.22.0/",
     "@preact/signals": "https://esm.sh/*@preact/signals@1.2.2",
     "@preact/signals-core": "https://esm.sh/*@preact/signals-core@1.5.1",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.57.4",
     "lucide-preact": "https://esm.sh/lucide-preact@0.468.0?deps=preact@10.22.0",
     "$std/": "https://deno.land/std@0.216.0/"
   },

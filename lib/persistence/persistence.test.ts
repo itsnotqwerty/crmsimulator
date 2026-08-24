@@ -19,6 +19,7 @@ import {
   readCookieBundle,
 } from "./cookies.ts";
 import { decodeGameState, encodeGameState } from "./codec.ts";
+import { fitGameStateToEncodedBudget } from "./fit.ts";
 import { migrateGameState } from "./migrations.ts";
 import { parseGameState, SaveValidationError } from "./schema.ts";
 
@@ -32,6 +33,14 @@ function maximumString(label: string, length: number, index: number): string {
     0,
     length,
   );
+}
+
+function variedString(seed: number, length: number): string {
+  let value = seed >>> 0;
+  return Array.from({ length }, () => {
+    value = (Math.imul(value, 1_664_525) + 1_013_904_223) >>> 0;
+    return String.fromCharCode(33 + value % 90);
+  }).join("");
 }
 
 function worstCasePersistenceFixture() {
@@ -1259,6 +1268,53 @@ Deno.test("worst-case bounded save satisfies the release cookie contract", async
       ),
     );
   }
+});
+
+Deno.test("activity history compacts a 13-chunk save to the cookie budget", async () => {
+  const compacted = compactGameState(
+    worstCasePersistenceFixture(),
+    DEFAULT_RULES,
+  );
+  let oversized: GameState | undefined;
+
+  for (
+    let varied = 10;
+    varied <= compacted.recentActivities.length;
+    varied += 10
+  ) {
+    const candidate = {
+      ...compacted,
+      recentActivities: compacted.recentActivities.map((activity, index) =>
+        index < varied
+          ? { ...activity, summary: variedString(index + 1, 200) }
+          : activity
+      ),
+    };
+    const length = (await encodeGameState(candidate)).length;
+    if (length > COOKIE_PAYLOAD_BUDGET && length <= 39_000) {
+      oversized = candidate;
+      break;
+    }
+  }
+
+  assert(oversized, "Fixture must require exactly 13 cookie chunks");
+  const before = await encodeGameState(oversized);
+  assertEquals(Math.ceil(before.length / DEFAULT_COOKIE_OPTIONS.chunkSize), 13);
+
+  const fitted = await fitGameStateToEncodedBudget(
+    oversized,
+    DEFAULT_RULES,
+    COOKIE_PAYLOAD_BUDGET,
+  );
+  const bundle = await createCookieBundle(fitted, SECRET);
+
+  assert(fitted.recentActivities.length < oversized.recentActivities.length);
+  assert(
+    fitted.history.activitiesArchived > oversized.history.activitiesArchived,
+  );
+  assert(bundle.payload.length <= COOKIE_PAYLOAD_BUDGET);
+  assert(bundle.manifest.chunks <= DEFAULT_COOKIE_OPTIONS.maxChunks);
+  assertEquals(await decodeGameState(bundle.payload), fitted);
 });
 
 Deno.test("long-running saves compact inactive sales history", async () => {

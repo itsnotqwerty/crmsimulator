@@ -1,6 +1,10 @@
 import { assert, assertEquals, assertStringIncludes } from "$std/assert/mod.ts";
 import { createInitialState } from "../game/state.ts";
-import { createSetCookieHeaders } from "../persistence/cookies.ts";
+import {
+  createSetCookieHeaders,
+  parseCookieHeader,
+  readCookieBundle,
+} from "../persistence/cookies.ts";
 import {
   getRootConfig,
   handleRootPost,
@@ -228,6 +232,13 @@ Deno.test("root save increments revision and rejects stale updates", async () =>
 
   assertEquals(saved.status, 200);
   assertEquals(savedBody.game.revision, 1);
+  assertEquals(
+    await readCookieBundle(
+      parseCookieHeader(cookieHeader(responseCookies(saved))),
+      SECRET,
+    ),
+    savedBody.game,
+  );
 
   const stale = await handleRootPost(
     post({ type: "save", state: initial }, responseCookies(saved)),
