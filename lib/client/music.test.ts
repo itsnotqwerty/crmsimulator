@@ -1,10 +1,25 @@
 import { assertEquals, assertNotEquals } from "$std/assert/mod.ts";
 import { createInitialState } from "../game/state.ts";
 import {
+  MOVEMENT_ARRANGEMENTS,
   musicDirectionKey,
   musicSnapshotFor,
   resolveMusicTarget,
 } from "./music.ts";
+
+Deno.test("movement arrangements retain bright jazz extensions", () => {
+  for (const arrangement of Object.values(MOVEMENT_ARRANGEMENTS)) {
+    assertEquals(
+      arrangement.chordQualities.every((quality) => quality.includes(14)),
+      true,
+    );
+    assertEquals(
+      arrangement.bassPattern.some((step) => step > 0),
+      true,
+    );
+    assertEquals(arrangement.tonalCenter >= 62, true);
+  }
+});
 
 Deno.test("music direction begins calm and varies deterministically by seed", () => {
   const first = resolveMusicTarget(

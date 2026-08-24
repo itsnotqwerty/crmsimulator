@@ -45,24 +45,37 @@ const DEFAULT_MUSIC_TARGET: MusicTarget = {
 const STEPS_PER_PHRASE = 32;
 const PHRASES_PER_LOOP = 2;
 export const MUSIC_PHRASE_SECONDS = STEPS_PER_PHRASE * 60 / 78 / 2;
+export const MUSIC_SWING_RATIO = 0.58;
 
 const RECOVERY_ARRANGEMENT: MovementArrangement = {
   tempo: 78,
-  chordRoots: [45, 43, 48, 48],
-  chordQualities: [[0, 3, 7, 10], [0, 5, 7, 11], [0, 4, 7, 11], [0, 7, 11, 16]],
-  motif: [0, 3, 7, 10, 7, 11, 12, 16],
-  bassPattern: [0, -1, 0, -1, 0, -1, 0, -1],
-  melodyDensity: 0.7,
-  tonalCenter: 60,
+  chordRoots: [50, 55, 48, 53],
+  chordQualities: [[0, 3, 7, 10, 14], [0, 4, 7, 10, 14], [0, 4, 7, 11, 14], [
+    0,
+    4,
+    7,
+    9,
+    14,
+  ]],
+  motif: [2, 3, 5, 7, 9, 7, 4, 2],
+  bassPattern: [0, -1, 3, -1, 7, -1, 10, -1],
+  melodyDensity: 0.8,
+  tonalCenter: 64,
 };
 const BANKRUPTCY_ARRANGEMENT: MovementArrangement = {
   tempo: 78,
-  chordRoots: [45, 44, 43, 36],
-  chordQualities: [[0, 3, 7, 10], [0, 4, 7, 10], [0, 3, 7, 10], [0, 7, 12, 15]],
-  motif: [7, 6, 3, 1, 0, -2, -5, -12],
-  bassPattern: [0, -1, -1, -1, 0, -1, -1, -1],
-  melodyDensity: 0.42,
-  tonalCenter: 57,
+  chordRoots: [50, 55, 48, 50],
+  chordQualities: [[0, 3, 7, 10, 14], [0, 4, 7, 10, 14], [0, 4, 7, 11, 14], [
+    0,
+    3,
+    7,
+    10,
+    14,
+  ]],
+  motif: [9, 7, 5, 3, 2, 3, 5, 2],
+  bassPattern: [0, -1, 3, -1, 7, -1, 10, -1],
+  melodyDensity: 0.62,
+  tonalCenter: 62,
 };
 
 function midiFrequency(note: number): number {
@@ -101,6 +114,27 @@ function addMusicTone(
   }
 }
 
+function addBrush(
+  samples: Float32Array,
+  sampleRate: number,
+  start: number,
+  level: number,
+  seed: number,
+): void {
+  const frameCount = Math.round(sampleRate * 0.11);
+  const startFrame = Math.round(start * sampleRate);
+  let noise = (seed + 1) * 0x9e3779b9;
+  for (let offset = 0; offset < frameCount; offset += 1) {
+    noise ^= noise << 13;
+    noise ^= noise >>> 17;
+    noise ^= noise << 5;
+    const envelope = (1 - offset / frameCount) ** 3;
+    const index = startFrame + offset;
+    if (index >= samples.length) break;
+    samples[index] += (noise / 0x80000000) * envelope * level;
+  }
+}
+
 export function renderMusicLoop(
   sampleRate: number,
   target: MusicTarget = DEFAULT_MUSIC_TARGET,
@@ -119,7 +153,10 @@ export function renderMusicLoop(
       arrangement.chordRoots.length;
     const root = arrangement.chordRoots[chordIndex];
     const quality = arrangement.chordQualities[chordIndex];
-    const start = step * eighthNoteSeconds;
+    const swingDelay = step % 2 === 1
+      ? eighthNoteSeconds * (MUSIC_SWING_RATIO * 2 - 1)
+      : 0;
+    const start = step * eighthNoteSeconds + swingDelay;
     const motifIndex = (phraseStep + target.variant * 2 + phrase) %
       arrangement.motif.length;
     const seededGate = (phraseStep * 5 + target.variant * 3 + phrase) % 8 / 8;
@@ -130,10 +167,10 @@ export function renderMusicLoop(
       addMusicTone(
         samples,
         sampleRate,
-        midiFrequency(pitch + (target.intensity === 2 ? 0 : 12)),
+        midiFrequency(pitch + 12),
         start,
-        eighthNoteSeconds * (target.movement === "crisis" ? 1.15 : 1.6),
-        0.075 + target.intensity * 0.012,
+        eighthNoteSeconds * 1.15,
+        0.068 + target.intensity * 0.008,
         "triangle",
       );
     }
@@ -145,22 +182,31 @@ export function renderMusicLoop(
         sampleRate,
         midiFrequency(root - 12 + bassOffset),
         start,
-        eighthNoteSeconds * 2.8,
-        0.13 + target.intensity * 0.01,
+        eighthNoteSeconds * 1.55,
+        0.115 + target.intensity * 0.008,
         "sine",
       );
     }
-    if (phraseStep % 8 === 0) {
-      quality.slice(0, 3).forEach((interval, index) =>
+    if ([0, 3, 6].includes(phraseStep % 8)) {
+      quality.slice(1, 5).forEach((interval, index) =>
         addMusicTone(
           samples,
           sampleRate,
           midiFrequency(root + interval + 12),
           start,
-          eighthNoteSeconds * 7.2,
-          0.025 - index * 0.004,
-          "sine",
+          eighthNoteSeconds * 1.35,
+          0.018 - index * 0.0025,
+          "triangle",
         )
+      );
+    }
+    if (phraseStep % 8 === 2 || phraseStep % 8 === 6) {
+      addBrush(
+        samples,
+        sampleRate,
+        start,
+        0.012 + target.intensity * 0.002,
+        target.variant * 97 + step,
       );
     }
   }

@@ -59,54 +59,63 @@ export const MOVEMENT_ARRANGEMENTS: Record<
 > = {
   calm: {
     tempo: 78,
-    chordRoots: [48, 50, 43, 45],
-    chordQualities: [[0, 7, 11, 16], [0, 7, 10, 15], [0, 7, 11, 14], [
+    chordRoots: [48, 50, 55, 53],
+    chordQualities: [[0, 4, 7, 9, 14], [0, 3, 7, 10, 14], [0, 4, 7, 11, 14], [
       0,
+      4,
       7,
-      10,
-      17,
+      9,
+      14,
     ]],
-    motif: [0, 7, 11, 7, 16, 11, 7, 4],
-    bassPattern: [0, -1, 0, -1, 0, -1, 0, -1],
-    melodyDensity: 0.62,
-    tonalCenter: 60,
+    motif: [4, 7, 9, 7, 4, 2, 0, 2],
+    bassPattern: [0, -1, 4, -1, 7, -1, 9, -1],
+    melodyDensity: 0.72,
+    tonalCenter: 64,
   },
   growth: {
     tempo: 78,
-    chordRoots: [48, 53, 45, 55],
-    chordQualities: [[0, 4, 7, 11], [0, 4, 7, 9], [0, 4, 7, 11], [0, 5, 7, 11]],
-    motif: [0, 4, 7, 11, 12, 16, 19, 23],
-    bassPattern: [0, -1, 7, -1, 0, -1, 7, -1],
-    melodyDensity: 0.88,
-    tonalCenter: 60,
+    chordRoots: [48, 53, 50, 55],
+    chordQualities: [[0, 4, 7, 11, 14], [0, 4, 7, 9, 14], [0, 3, 7, 10, 14], [
+      0,
+      4,
+      7,
+      10,
+      14,
+    ]],
+    motif: [0, 2, 4, 7, 9, 11, 9, 7],
+    bassPattern: [0, -1, 4, -1, 7, -1, 10, -1],
+    melodyDensity: 0.92,
+    tonalCenter: 64,
   },
   pressure: {
     tempo: 78,
-    chordRoots: [45, 46, 43, 41],
-    chordQualities: [[0, 3, 7, 10], [0, 4, 7, 11], [0, 3, 7, 10], [
+    chordRoots: [50, 55, 48, 57],
+    chordQualities: [[0, 3, 7, 10, 14], [0, 4, 7, 10, 14], [0, 4, 7, 11, 14], [
       0,
-      5,
-      8,
+      3,
+      7,
       10,
+      14,
     ]],
-    motif: [0, 3, 7, 3, 1, 3, 6, 3],
-    bassPattern: [0, 0, -1, 0, 0, 0, -1, 0],
-    melodyDensity: 0.72,
-    tonalCenter: 57,
+    motif: [2, 3, 7, 9, 7, 5, 4, 2],
+    bassPattern: [0, -1, 3, -1, 7, -1, 10, -1],
+    melodyDensity: 0.82,
+    tonalCenter: 62,
   },
   crisis: {
     tempo: 78,
-    chordRoots: [45, 44, 41, 43],
-    chordQualities: [[0, 3, 6, 10], [0, 4, 7, 10], [0, 3, 7, 11], [
+    chordRoots: [50, 55, 52, 57],
+    chordQualities: [[0, 3, 7, 10, 14], [0, 4, 7, 10, 14], [0, 3, 7, 10, 14], [
       0,
-      2,
+      4,
       7,
       10,
+      14,
     ]],
-    motif: [0, 1, 6, 1, 0, 1, 7, 6],
-    bassPattern: [0, 0, 0, -1, 0, 0, 0, -1],
+    motif: [2, 3, 5, 7, 10, 9, 7, 5],
+    bassPattern: [0, -1, 3, -1, 7, -1, 10, -1],
     melodyDensity: 1,
-    tonalCenter: 57,
+    tonalCenter: 62,
   },
 };
 
@@ -244,7 +253,7 @@ export function musicDirectionKey(target: MusicTarget): string {
 }
 
 export function movementTonalCenter(movement: MusicMovement): number {
-  if (movement === "recovery") return 60;
-  if (movement === "bankruptcy") return 57;
+  if (movement === "recovery") return 64;
+  if (movement === "bankruptcy") return 62;
   return MOVEMENT_ARRANGEMENTS[movement].tonalCenter;
 }
