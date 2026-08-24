@@ -2643,16 +2643,64 @@ td small {
   justify-content: flex-end;
 }
 
-.negotiation-decisions,
 .ticket-decision-list {
   display: grid;
   gap: 12px;
   padding: 14px;
 }
 
-.negotiation-decisions > div {
+.negotiation-decisions {
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.negotiation-decision-list {
   display: grid;
-  gap: 8px;
+}
+
+.negotiation-decision-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.28fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  padding: 16px 17px;
+  border-top: 1px solid var(--line);
+}
+
+.negotiation-decision-row:first-child {
+  border-top: 0;
+}
+
+.negotiation-deal-context {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.negotiation-deal-context > span {
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.negotiation-deal-context > strong {
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+}
+
+.negotiation-deal-context > small {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.negotiation-decisions .decision-fork {
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .decision-record-name {
@@ -2717,6 +2765,11 @@ td small {
 }
 
 @media (max-width: 760px) {
+  .negotiation-decision-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
   .decision-options {
     grid-template-columns: 1fr;
   }
@@ -4406,18 +4459,32 @@ table,
   }
 
   .lead-table .mobile-actions-cell {
-    display: block;
+    display: grid;
+    width: auto;
+    min-width: 0;
+    height: auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 6px;
+    white-space: normal;
+  }
+
+  .lead-table .record-open-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
   }
 
   .lead-table .mobile-contact-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 6px;
-    min-width: 190px;
+    width: 100%;
+    min-width: 0;
   }
 
   .lead-table .mobile-contact-actions button {
     display: inline-flex;
+    min-width: 0;
     min-height: 48px;
     align-items: center;
     justify-content: center;
@@ -4719,11 +4786,13 @@ table,
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 6px;
-    min-width: 190px;
+    width: 100%;
+    min-width: 0;
   }
 
   .mobile-contact-actions button {
     display: inline-flex;
+    min-width: 0;
     min-height: 48px;
     align-items: center;
     justify-content: center;

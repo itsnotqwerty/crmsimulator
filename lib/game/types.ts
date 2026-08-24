@@ -149,6 +149,7 @@ export type AutomationAction =
   | "send_outreach"
   | "assign_owner"
   | "notify_team"
+  | "qualify_lead"
   | "update_record"
   | "launch_playbook";
 
@@ -583,6 +584,7 @@ export type GameCommand =
     monthlyTargetCents: number;
   }
   | { type: "fire_sales_rep"; salesRepId: EntityId }
+  | { type: "assign_lead"; leadId: EntityId; ownerId?: EntityId }
   | { type: "assign_deal"; dealId: EntityId; ownerId?: EntityId }
   | { type: "train_sales_rep"; salesRepId: EntityId }
   | { type: "route_leads" }

@@ -19,6 +19,7 @@ import {
   pickSalesRep,
   pickSuccessRep,
   pickSupportRep,
+  qualifyLeadWork,
   runSuccessPlaybookWork,
   type WorkResult,
 } from "./work.ts";
@@ -53,6 +54,19 @@ function relatedLead(state: GameState, event: DomainEvent) {
   return customer ? state.records.leads[customer.primaryLeadId] : undefined;
 }
 
+function relatedCustomer(state: GameState, event: DomainEvent) {
+  if (!event.relatedId) return undefined;
+  const customer = state.records.customers[event.relatedId];
+  if (customer) return customer;
+  const ticket = state.records.tickets[event.relatedId];
+  if (ticket) return state.records.customers[ticket.customerId];
+  const deal = state.records.deals[event.relatedId];
+  if (!deal || deal.stage !== "won") return undefined;
+  return Object.values(state.records.customers).find((entry) =>
+    entry.primaryLeadId === deal.leadId
+  );
+}
+
 function matchesCondition(
   state: GameState,
   condition: AutomationCondition,
@@ -66,10 +80,7 @@ function matchesCondition(
     (state.records.quotes[relatedId]
       ? state.records.deals[state.records.quotes[relatedId].dealId]
       : undefined);
-  const customer = state.records.customers[relatedId] ??
-    (state.records.tickets[relatedId]
-      ? state.records.customers[state.records.tickets[relatedId].customerId]
-      : undefined);
+  const customer = relatedCustomer(state, event);
   const ticket = state.records.tickets[relatedId];
   const quote = state.records.quotes[relatedId];
 
@@ -87,7 +98,7 @@ function matchesCondition(
     return false;
   }
   if (condition === "high_intent") {
-    return (lead?.engagement ?? 0) >= 70;
+    return (lead?.engagement ?? 0) > 70;
   }
   if (condition === "high_value") {
     return (lead?.fit ?? 0) >= 70 ||
@@ -123,10 +134,7 @@ function applyWorkflowAction(
     (state.records.quotes[relatedId]
       ? state.records.deals[state.records.quotes[relatedId].dealId]
       : undefined);
-  const customer = state.records.customers[relatedId] ??
-    (state.records.tickets[relatedId]
-      ? state.records.customers[state.records.tickets[relatedId].customerId]
-      : undefined);
+  const customer = relatedCustomer(state, event);
   const ticket = state.records.tickets[relatedId];
   const action: AutomationAction = workflow.action;
 
@@ -161,6 +169,10 @@ function applyWorkflowAction(
     if (lead) return outreachLeadWork(state, lead);
     if (customer) return customerCheckInWork(state, customer.id, false);
     return { ok: false, reason: "No record available for outreach" };
+  }
+  if (action === "qualify_lead") {
+    if (!lead) return { ok: false, reason: "Qualification requires a lead" };
+    return qualifyLeadWork(state, lead.id);
   }
   if (action === "update_record") {
     if (lead) return advanceLeadStatusWork(state, lead);

@@ -12,6 +12,7 @@ import { applyAutomations } from "./automation.ts";
 import {
   acknowledgeTicketWork,
   advanceDealWork,
+  assignLeadWork,
   closeLossRiskPercent,
   completeOnboardingWork,
   contactLeadWork,
@@ -817,10 +818,19 @@ function assignDeal(
   const nextDeal = { ...deal, updatedAt: state.clock.gameMinute };
   if (ownerId) nextDeal.ownerId = ownerId;
   else delete nextDeal.ownerId;
+  const lead = state.records.leads[deal.leadId];
+  const nextLead = lead ? { ...lead } : undefined;
+  if (nextLead) {
+    if (ownerId) nextLead.ownerId = ownerId;
+    else delete nextLead.ownerId;
+  }
   const nextState: GameState = {
     ...state,
     records: {
       ...state.records,
+      leads: nextLead
+        ? { ...state.records.leads, [nextLead.id]: nextLead }
+        : state.records.leads,
       deals: { ...state.records.deals, [deal.id]: nextDeal },
     },
   };
@@ -2454,6 +2464,34 @@ export function applyCommand(
       );
     case "fire_sales_rep":
       return fireSalesRep(state, command.salesRepId, rules);
+    case "assign_lead": {
+      if (!state.unlocks.includes("pipeline")) {
+        return rejected(state, "Unlock Pipeline to assign leads");
+      }
+      if (!command.ownerId) {
+        const lead = state.records.leads[command.leadId];
+        if (!lead) return rejected(state, "Lead does not exist");
+        if (!lead.ownerId) return rejected(state, "Lead owner is unchanged");
+        const unassigned = { ...lead };
+        delete unassigned.ownerId;
+        return accepted({
+          ...state,
+          records: {
+            ...state.records,
+            leads: { ...state.records.leads, [lead.id]: unassigned },
+          },
+        }, [{
+          kind: "leads_routed",
+          summary: `${lead.firstName} ${lead.lastName} returned to founder`,
+          relatedId: lead.id,
+          gameMinute: state.clock.gameMinute,
+        }], rules);
+      }
+      const result = assignLeadWork(state, command.leadId, command.ownerId);
+      return result.ok
+        ? accepted(result.state, result.events, rules)
+        : rejected(state, result.reason);
+    }
     case "assign_deal":
       return assignDeal(state, command.dealId, command.ownerId, rules);
     case "train_sales_rep":

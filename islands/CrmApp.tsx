@@ -1976,7 +1976,7 @@ function PlatformWorkspace(props: {
               <option value="all">Any matching record</option>
               <option value="high_value">Value is high</option>
               <option value="unassigned">Owner is unassigned</option>
-              <option value="high_intent">Intent is at least 70%</option>
+              <option value="high_intent">Intent is over 70%</option>
               <option value="overdue">Record is overdue</option>
             </select>
           </label>
@@ -1991,6 +1991,7 @@ function PlatformWorkspace(props: {
               <option value="send_outreach">Send outreach</option>
               <option value="assign_owner">Assign owner</option>
               <option value="notify_team">Notify team</option>
+              <option value="qualify_lead">Qualify lead</option>
               <option value="update_record">Advance record status</option>
               <option value="launch_playbook">Launch playbook</option>
             </select>
@@ -2269,30 +2270,6 @@ function PipelineWorkspace(props: {
             pipeline.
           </p>
         </div>
-        {negotiationDeals.length > 0 && (
-          <section
-            class="panel negotiation-decisions"
-            aria-label="Deal details"
-          >
-            {negotiationDeals.map((deal) => {
-              const { company } = detail(deal);
-              return (
-                <div>
-                  <span class="decision-record-name">
-                    {company?.name ?? "Unknown company"} ·{" "}
-                    {money.format(deal.monthlyValueCents / 100)} MRR
-                  </span>
-                  <DealNegotiationControls
-                    dealId={deal.id}
-                    capacity={props.game.company.founderCapacityRemaining}
-                    cashCents={props.game.company.cashCents}
-                    dispatch={props.dispatch}
-                  />
-                </div>
-              );
-            })}
-          </section>
-        )}
         <div class="segmented-control" aria-label="Pipeline view">
           <button
             type="button"
@@ -2336,6 +2313,43 @@ function PipelineWorkspace(props: {
           <strong>{averageAge}d</strong>
         </div>
       </div>
+      {negotiationDeals.length > 0 && (
+        <section
+          class="panel negotiation-decisions"
+          aria-label="Deals awaiting negotiation"
+        >
+          <div class="panel-heading">
+            <div>
+              <h2>Negotiations</h2>
+              <span>Choose terms to close deals and shape new accounts.</span>
+            </div>
+            <span class="record-count">{negotiationDeals.length}</span>
+          </div>
+          <div class="negotiation-decision-list">
+            {negotiationDeals.map((deal) => {
+              const { company, lead } = detail(deal);
+              return (
+                <div class="negotiation-decision-row">
+                  <div class="negotiation-deal-context">
+                    <span>Ready to close</span>
+                    <strong>{company?.name ?? "Unknown company"}</strong>
+                    <small>
+                      {lead?.firstName} {lead?.lastName} ·{" "}
+                      {money.format(deal.monthlyValueCents / 100)} MRR
+                    </small>
+                  </div>
+                  <DealNegotiationControls
+                    dealId={deal.id}
+                    capacity={props.game.company.founderCapacityRemaining}
+                    cashCents={props.game.company.cashCents}
+                    dispatch={props.dispatch}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
       <section class="panel sales-team-panel">
         <div class="panel-heading">
           <div>
@@ -5766,6 +5780,30 @@ function LeadPanel(
           <div>
             <dt>Email</dt>
             <dd>{props.lead.email}</dd>
+          </div>
+          <div>
+            <dt>Owner</dt>
+            <dd>
+              <select
+                aria-label={`Owner for ${props.lead.firstName} ${props.lead.lastName}`}
+                value={props.lead.ownerId ?? ""}
+                disabled={Boolean(deal)}
+                title={deal
+                  ? "Reassign this qualified lead from its Pipeline deal"
+                  : undefined}
+                onChange={(event) =>
+                  props.dispatch({
+                    type: "assign_lead",
+                    leadId: props.lead.id,
+                    ownerId: event.currentTarget.value || undefined,
+                  })}
+              >
+                <option value="">Founder</option>
+                {Object.values(props.game.records.salesReps).map((rep) => (
+                  <option value={rep.id}>{rep.name}</option>
+                ))}
+              </select>
+            </dd>
           </div>
         </dl>
       </div>
