@@ -41,6 +41,12 @@ import { useEffect, useRef } from "preact/hooks";
 import { notificationToneFor, SoundDesign } from "../lib/client/audio.ts";
 import { useGameStore } from "../lib/client/gameStore.ts";
 import {
+  musicDirectionKey,
+  musicSnapshotFor,
+  type MusicTarget,
+  resolveMusicTarget,
+} from "../lib/client/music.ts";
+import {
   closeLossRiskPercent,
   quoteMonthlyValueCents,
 } from "../lib/game/actions.ts";
@@ -84,8 +90,6 @@ import type {
   SalesRepLevel,
   SalesTerritory,
   Task,
-  TicketChannel,
-  TicketPriority,
   TicketResolutionApproach,
 } from "../lib/game/types.ts";
 import { DEFAULT_RULES } from "../lib/game/state.ts";
@@ -616,10 +620,6 @@ function CustomerSuccessWorkspace(props: {
 }) {
   const repName = useSignal("");
   const repLevel = useSignal<SalesRepLevel>("junior");
-  const ticketCustomerId = useSignal("");
-  const ticketChannel = useSignal<TicketChannel>("email");
-  const ticketPriority = useSignal<TicketPriority>("normal");
-  const ticketTitle = useSignal("");
   const supportRepName = useSignal("");
   const supportRepLevel = useSignal<SalesRepLevel>("junior");
   const customers = Object.values(props.game.records.customers).sort((a, b) =>
@@ -672,17 +672,6 @@ function CustomerSuccessWorkspace(props: {
       level: repLevel.value,
     });
     if (accepted) repName.value = "";
-  };
-  const createTicket = (event: SubmitEvent) => {
-    event.preventDefault();
-    const accepted = props.dispatch({
-      type: "create_ticket",
-      customerId: ticketCustomerId.value,
-      channel: ticketChannel.value,
-      priority: ticketPriority.value,
-      title: ticketTitle.value,
-    });
-    if (accepted) ticketTitle.value = "";
   };
   const hireSupportRep = (event: SubmitEvent) => {
     event.preventDefault();
@@ -927,66 +916,6 @@ function CustomerSuccessWorkspace(props: {
             <strong>{tickets.length - openTickets.length}</strong>
           </div>
         </div>
-        <form class="ticket-create-form" onSubmit={createTicket}>
-          <label>
-            <span>Account</span>
-            <select
-              required
-              value={ticketCustomerId.value}
-              onChange={(event) =>
-                ticketCustomerId.value = event.currentTarget.value}
-            >
-              <option value="">Select account</option>
-              {customers.map((customer) => (
-                <option value={customer.id}>
-                  {props.game.records.companies[customer.companyId]?.name ??
-                    "Unknown company"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Channel</span>
-            <select
-              value={ticketChannel.value}
-              onChange={(event) =>
-                ticketChannel.value = event.currentTarget
-                  .value as TicketChannel}
-            >
-              <option value="email">Email</option>
-              <option value="chat">Chat</option>
-              <option value="phone">Phone</option>
-            </select>
-          </label>
-          <label>
-            <span>Priority</span>
-            <select
-              value={ticketPriority.value}
-              onChange={(event) =>
-                ticketPriority.value = event.currentTarget
-                  .value as TicketPriority}
-            >
-              <option value="low">Low</option>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
-          </label>
-          <label class="ticket-title-field">
-            <span>Issue</span>
-            <input
-              required
-              minLength={3}
-              maxLength={100}
-              placeholder="Describe the customer issue"
-              value={ticketTitle.value}
-              onInput={(event) => ticketTitle.value = event.currentTarget.value}
-            />
-          </label>
-          <button type="submit" class="primary" disabled={!customers.length}>
-            <Inbox size={16} />Create ticket
-          </button>
-        </form>
         {tickets.some((ticket) => ticket.status === "acknowledged") && (
           <div class="ticket-decision-list" aria-label="Ticket details">
             {tickets.filter((ticket) =>
@@ -3193,6 +3122,7 @@ export default function CrmApp(props: CrmAppProps) {
   const confirmReset = useSignal(false);
   const game = store.game.value;
   const soundDesign = useRef<SoundDesign | undefined>(undefined);
+  const previousMusicTarget = useRef<MusicTarget | undefined>(undefined);
   const previousActivityId = useRef(
     game.recentActivities.at(-1)?.id,
   );
@@ -3201,6 +3131,11 @@ export default function CrmApp(props: CrmAppProps) {
   >(undefined);
   const leadReturnFocus = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const musicTarget = resolveMusicTarget(
+    musicSnapshotFor(game),
+    previousMusicTarget.current,
+  );
+  const musicTargetKey = musicDirectionKey(musicTarget);
   if (!soundDesign.current) soundDesign.current = new SoundDesign();
 
   useEffect(() => {
@@ -3244,6 +3179,10 @@ export default function CrmApp(props: CrmAppProps) {
   }, [game.preferences.musicVolume]);
 
   useEffect(() => {
+    soundDesign.current?.setMusicTarget(musicTarget);
+  }, [musicTargetKey]);
+
+  useEffect(() => {
     if (!mobileNav.value) return;
     const scrollPosition = globalThis.scrollY;
     const body = document.body;
@@ -3270,6 +3209,13 @@ export default function CrmApp(props: CrmAppProps) {
       globalThis.scrollTo(0, scrollPosition);
     };
   }, [mobileNav.value]);
+  previousMusicTarget.current = musicTarget.movement === "recovery"
+    ? {
+      movement: musicTarget.nextMovement ?? "calm",
+      intensity: musicTarget.nextMovement === "growth" ? 1 : 0,
+      variant: musicTarget.variant,
+    }
+    : musicTarget;
   const leads = Object.values(game.records.leads).sort((a, b) =>
     b.createdAt - a.createdAt
   );

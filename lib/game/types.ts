@@ -676,13 +676,6 @@ export type GameCommand =
     customerId: EntityId;
     playbook: "onboarding" | "adoption" | "recovery";
   }
-  | {
-    type: "create_ticket";
-    customerId: EntityId;
-    channel: TicketChannel;
-    priority: TicketPriority;
-    title: string;
-  }
   | { type: "assign_ticket"; ticketId: EntityId; ownerId?: EntityId }
   | { type: "acknowledge_ticket"; ticketId: EntityId }
   | { type: "resolve_ticket"; ticketId: EntityId }

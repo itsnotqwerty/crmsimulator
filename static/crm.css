@@ -2652,35 +2652,6 @@ td small {
   font-size: 20px;
 }
 
-.ticket-create-form {
-  display: grid;
-  grid-template-columns: minmax(150px, 1fr) 120px 120px minmax(220px, 2fr) auto;
-  gap: 12px;
-  align-items: end;
-  padding: 15px 17px;
-}
-
-.ticket-create-form label {
-  display: grid;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.ticket-create-form input,
-.ticket-create-form select {
-  width: 100%;
-  min-width: 0;
-  height: 42px;
-  padding: 0 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  color: var(--ink);
-  background: white;
-  font: inherit;
-}
-
 .support-table {
   min-width: 1080px;
 }
@@ -4468,14 +4439,6 @@ table,
     grid-template-columns: 1fr 1fr;
   }
 
-  .ticket-create-form {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .ticket-title-field {
-    grid-column: 1 / -1;
-  }
-
   .success-hire-form button,
   .support-hire-form button {
     grid-column: 1 / -1;
@@ -5144,17 +5107,8 @@ table,
     grid-template-columns: 1fr;
   }
 
-  .support-summary,
-  .ticket-create-form {
+  .support-summary {
     grid-template-columns: 1fr;
-  }
-
-  .ticket-title-field {
-    grid-column: auto;
-  }
-
-  .ticket-create-form button {
-    width: 100%;
   }
 
   .success-hire-form button {

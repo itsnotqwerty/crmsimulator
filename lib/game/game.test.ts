@@ -21,6 +21,16 @@ import {
   validateGameState,
 } from "./state.ts";
 import type { GameState } from "./types.ts";
+import { createTicketWork } from "./work.ts";
+
+function seedTicket(
+  state: GameState,
+  input: Parameters<typeof createTicketWork>[1],
+): GameState {
+  const result = createTicketWork(state, input, DEFAULT_RULES);
+  assert(result.ok);
+  return result.state;
+}
 
 Deno.test("initial state is deterministic and valid", () => {
   const first = createInitialState({ seed: 42, now: 1_000 });
@@ -1074,15 +1084,14 @@ Deno.test("support tickets follow an assigned SLA lifecycle", () => {
     name: "Jordan Bell",
     level: "mid",
   }).state;
-  const created = applyCommand(state, {
-    type: "create_ticket",
+  const created = createTicketWork(state, {
     customerId: "customer_1",
     channel: "chat",
     priority: "urgent",
     title: "Unable to publish reports",
-  });
+  }, DEFAULT_RULES);
 
-  assert(created.accepted);
+  assert(created.ok);
   assertEquals(created.state.records.tickets.ticket_1.responseDueAt, 60);
   assertEquals(created.state.records.tickets.ticket_1.resolutionDueAt, 240);
   assertEquals(
@@ -1158,13 +1167,12 @@ Deno.test("support resolution approaches trade speed, spend, health, and risk", 
       name: "Jordan Bell",
       level: "mid",
     }).state;
-    state = applyCommand(state, {
-      type: "create_ticket",
+    state = seedTicket(state, {
       customerId: "customer_1",
       channel: "chat",
       priority: "high",
       title: "Unable to publish reports",
-    }).state;
+    });
     state = applyCommand(state, {
       type: "assign_ticket",
       ticketId: "ticket_1",
@@ -1352,13 +1360,12 @@ Deno.test("missed ticket SLAs fire once and damage account health", () => {
       },
     },
   };
-  const created = applyCommand(state, {
-    type: "create_ticket",
+  const created = seedTicket(state, {
     customerId: "customer_1",
     channel: "phone",
     priority: "urgent",
     title: "Service unavailable",
-  }).state;
+  });
 
   const responseMissed = advanceGame(created, 60);
   assertEquals(
@@ -1416,13 +1423,12 @@ Deno.test("escalated incidents resolve with staffed service quality", () => {
     name: "Alex Rivera",
     level: "senior",
   }).state;
-  state = applyCommand(state, {
-    type: "create_ticket",
+  state = seedTicket(state, {
     customerId: "customer_1",
     channel: "phone",
     priority: "high",
     title: "All users are locked out",
-  }).state;
+  });
   state = applyCommand(state, {
     type: "assign_ticket",
     ticketId: "ticket_1",
@@ -2854,13 +2860,12 @@ Deno.test("success and support staff work owned records without founder capacity
     name: "Jordan Bell",
     level: "mid",
   }).state;
-  state = applyCommand(state, {
-    type: "create_ticket",
+  state = seedTicket(state, {
     customerId: "customer_1",
     channel: "email",
     priority: "normal",
     title: "Login loop on reports",
-  }).state;
+  });
   state = applyCommand(state, {
     type: "assign_ticket",
     ticketId: "ticket_1",
@@ -2914,13 +2919,12 @@ Deno.test("support agents claim and acknowledge tickets in one action", () => {
     name: "Jordan Bell",
     level: "mid",
   }).state;
-  state = applyCommand(state, {
-    type: "create_ticket",
+  state = seedTicket(state, {
     customerId: "customer_1",
     channel: "chat",
     priority: "urgent",
     title: "Unable to publish reports",
-  }).state;
+  });
 
   const triaged = advanceGame(state, 50).state;
   assertEquals(triaged.records.tickets.ticket_1.status, "acknowledged");
@@ -2932,13 +2936,12 @@ Deno.test("support agents claim and acknowledge tickets in one action", () => {
 
   let queued = triaged;
   for (let index = 0; index < 4; index += 1) {
-    queued = applyCommand(queued, {
-      type: "create_ticket",
+    queued = seedTicket(queued, {
       customerId: "customer_1",
       channel: "email",
       priority: "normal",
       title: `Queued support request ${index + 1}`,
-    }).state;
+    });
   }
   queued = { ...queued, clock: { ...queued.clock, gameMinute: 350 } };
   const pressured = advanceGame(queued, 10).state;

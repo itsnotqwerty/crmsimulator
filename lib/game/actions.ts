@@ -17,7 +17,6 @@ import {
   completeOnboardingWork,
   contactLeadWork,
   createRelatedTaskWork,
-  createTicketWork,
   customerCheckInWork,
   followUpLeadWork,
   qualifyLeadWork,
@@ -44,8 +43,6 @@ import type {
   Lead,
   SalesRepLevel,
   SalesTerritory,
-  TicketChannel,
-  TicketPriority,
   TicketResolutionApproach,
 } from "./types.ts";
 
@@ -1556,25 +1553,6 @@ function sendNpsSurvey(
   }], rules);
 }
 
-function createTicket(
-  state: GameState,
-  input: {
-    customerId: string;
-    channel: TicketChannel;
-    priority: TicketPriority;
-    title: string;
-  },
-  rules: GameRules,
-): CommandResult {
-  if (!state.unlocks.includes("customer_success")) {
-    return rejected(state, "Unlock Customer Success to manage support");
-  }
-  const result = createTicketWork(state, input, rules);
-  return result.ok
-    ? accepted(result.state, result.events, rules)
-    : rejected(state, result.reason);
-}
-
 function assignTicket(
   state: GameState,
   ticketId: string,
@@ -2606,8 +2584,6 @@ export function applyCommand(
       );
     case "send_nps_survey":
       return sendNpsSurvey(state, command.customerId, rules);
-    case "create_ticket":
-      return createTicket(state, command, rules);
     case "assign_ticket":
       return assignTicket(state, command.ticketId, command.ownerId, rules);
     case "acknowledge_ticket":

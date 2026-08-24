@@ -11,6 +11,7 @@ import { compactGameState } from "../game/compaction.ts";
 import { advanceGame } from "../game/simulation.ts";
 import { createInitialState, DEFAULT_RULES } from "../game/state.ts";
 import { type GameState, SAVE_SCHEMA_VERSION } from "../game/types.ts";
+import { createTicketWork } from "../game/work.ts";
 import {
   createCookieBundle,
   createSetCookieHeaders,
@@ -1022,13 +1023,14 @@ Deno.test("codec preserves support tickets and SLA deadlines", async () => {
       },
     },
   };
-  const state = applyCommand(withCustomer, {
-    type: "create_ticket",
+  const ticket = createTicketWork(withCustomer, {
     customerId: "customer_1",
     channel: "email",
     priority: "high",
     title: "Dashboard export is unavailable",
-  }).state;
+  }, DEFAULT_RULES);
+  assert(ticket.ok);
+  const state = ticket.state;
 
   const decoded = await decodeGameState(await encodeGameState(state));
 

@@ -1,6 +1,14 @@
 /// <reference lib="dom" />
 
 import type { ActivityKind } from "../game/types.ts";
+import {
+  MOVEMENT_ARRANGEMENTS,
+  type MovementArrangement,
+  movementTonalCenter,
+  musicDirectionKey,
+  type MusicMovement,
+  type MusicTarget,
+} from "./music.ts";
 
 export type NotificationTone = "positive" | "attention" | "neutral";
 
@@ -29,13 +37,43 @@ export function notificationToneFor(
   return undefined;
 }
 
-const LOUNGE_NOTES = [
-  [130.81, 196, 246.94, 329.63],
-  [146.83, 220, 261.63, 349.23],
-  [98, 196, 246.94, 293.66],
-  [110, 164.81, 207.65, 293.66],
-] as const;
-const EIGHTH_NOTE_SECONDS = 60 / 78 / 2;
+const DEFAULT_MUSIC_TARGET: MusicTarget = {
+  movement: "calm",
+  intensity: 0,
+  variant: 0,
+};
+const STEPS_PER_PHRASE = 32;
+const PHRASES_PER_LOOP = 2;
+export const MUSIC_PHRASE_SECONDS = STEPS_PER_PHRASE * 60 / 78 / 2;
+
+const RECOVERY_ARRANGEMENT: MovementArrangement = {
+  tempo: 78,
+  chordRoots: [45, 43, 48, 48],
+  chordQualities: [[0, 3, 7, 10], [0, 5, 7, 11], [0, 4, 7, 11], [0, 7, 11, 16]],
+  motif: [0, 3, 7, 10, 7, 11, 12, 16],
+  bassPattern: [0, -1, 0, -1, 0, -1, 0, -1],
+  melodyDensity: 0.7,
+  tonalCenter: 60,
+};
+const BANKRUPTCY_ARRANGEMENT: MovementArrangement = {
+  tempo: 78,
+  chordRoots: [45, 44, 43, 36],
+  chordQualities: [[0, 3, 7, 10], [0, 4, 7, 10], [0, 3, 7, 10], [0, 7, 12, 15]],
+  motif: [7, 6, 3, 1, 0, -2, -5, -12],
+  bassPattern: [0, -1, -1, -1, 0, -1, -1, -1],
+  melodyDensity: 0.42,
+  tonalCenter: 57,
+};
+
+function midiFrequency(note: number): number {
+  return 440 * 2 ** ((note - 69) / 12);
+}
+
+function arrangementFor(movement: MusicMovement): MovementArrangement {
+  if (movement === "recovery") return RECOVERY_ARRANGEMENT;
+  if (movement === "bankruptcy") return BANKRUPTCY_ARRANGEMENT;
+  return MOVEMENT_ARRANGEMENTS[movement];
+}
 
 function addMusicTone(
   samples: Float32Array,
@@ -63,32 +101,66 @@ function addMusicTone(
   }
 }
 
-export function renderMusicLoop(sampleRate: number): Float32Array {
-  const steps = LOUNGE_NOTES.length * 8;
+export function renderMusicLoop(
+  sampleRate: number,
+  target: MusicTarget = DEFAULT_MUSIC_TARGET,
+): Float32Array {
+  const arrangement = arrangementFor(target.movement);
+  const eighthNoteSeconds = 60 / arrangement.tempo / 2;
+  const phraseCount = target.movement === "bankruptcy" ? 1 : PHRASES_PER_LOOP;
+  const steps = STEPS_PER_PHRASE * phraseCount;
   const samples = new Float32Array(
-    Math.ceil(steps * EIGHTH_NOTE_SECONDS * sampleRate),
+    Math.ceil(steps * eighthNoteSeconds * sampleRate),
   );
   for (let step = 0; step < steps; step += 1) {
-    const chord = LOUNGE_NOTES[Math.floor(step / 8) % LOUNGE_NOTES.length];
-    const start = step * EIGHTH_NOTE_SECONDS;
-    addMusicTone(
-      samples,
-      sampleRate,
-      chord[step % chord.length],
-      start,
-      EIGHTH_NOTE_SECONDS * 1.6,
-      0.12,
-      "triangle",
-    );
-    if (step % 4 === 0) {
+    const phrase = Math.floor(step / STEPS_PER_PHRASE);
+    const phraseStep = step % STEPS_PER_PHRASE;
+    const chordIndex = Math.floor(phraseStep / 8) %
+      arrangement.chordRoots.length;
+    const root = arrangement.chordRoots[chordIndex];
+    const quality = arrangement.chordQualities[chordIndex];
+    const start = step * eighthNoteSeconds;
+    const motifIndex = (phraseStep + target.variant * 2 + phrase) %
+      arrangement.motif.length;
+    const seededGate = (phraseStep * 5 + target.variant * 3 + phrase) % 8 / 8;
+    if (seededGate < arrangement.melodyDensity) {
+      const inversion = (target.variant + chordIndex + phrase) % quality.length;
+      const pitch = root + arrangement.motif[motifIndex] +
+        (quality[inversion] >= 12 ? 0 : quality[inversion] % 3);
       addMusicTone(
         samples,
         sampleRate,
-        chord[0] / 2,
+        midiFrequency(pitch + (target.intensity === 2 ? 0 : 12)),
         start,
-        EIGHTH_NOTE_SECONDS * 2.8,
-        0.16,
+        eighthNoteSeconds * (target.movement === "crisis" ? 1.15 : 1.6),
+        0.075 + target.intensity * 0.012,
+        "triangle",
+      );
+    }
+    const bassOffset =
+      arrangement.bassPattern[phraseStep % arrangement.bassPattern.length];
+    if (bassOffset >= 0) {
+      addMusicTone(
+        samples,
+        sampleRate,
+        midiFrequency(root - 12 + bassOffset),
+        start,
+        eighthNoteSeconds * 2.8,
+        0.13 + target.intensity * 0.01,
         "sine",
+      );
+    }
+    if (phraseStep % 8 === 0) {
+      quality.slice(0, 3).forEach((interval, index) =>
+        addMusicTone(
+          samples,
+          sampleRate,
+          midiFrequency(root + interval + 12),
+          start,
+          eighthNoteSeconds * 7.2,
+          0.025 - index * 0.004,
+          "sine",
+        )
       );
     }
   }
@@ -96,6 +168,19 @@ export function renderMusicLoop(sampleRate: number): Float32Array {
     samples[index] = Math.tanh(samples[index]);
   }
   return samples;
+}
+
+export function notificationFrequencies(
+  tone: NotificationTone,
+  movement: MusicMovement = "calm",
+): number[] {
+  const center = movementTonalCenter(movement);
+  const intervals = tone === "positive"
+    ? [12, 16]
+    : tone === "attention"
+    ? [7, 3]
+    : [9];
+  return intervals.map((interval) => midiFrequency(center + interval));
 }
 
 export function musicGainForVolume(volume: number): number {
@@ -108,9 +193,13 @@ export function musicGainForVolume(volume: number): number {
 export class SoundDesign {
   #context?: AudioContext;
   #musicGain?: GainNode;
-  #musicSource?: AudioBufferSourceNode;
+  #activeMusic?: MusicPlayback;
+  #pendingMusic?: MusicPlayback;
+  #transitionTimer?: ReturnType<typeof setTimeout>;
+  #musicTarget: MusicTarget = DEFAULT_MUSIC_TARGET;
   #musicEnabled = false;
   #musicVolume = 35;
+  #terminalSilenced = false;
 
   async enable(): Promise<boolean> {
     if (!this.#context) {
@@ -125,11 +214,10 @@ export class SoundDesign {
 
   async ping(tone: NotificationTone): Promise<void> {
     if (!await this.enable() || !this.#context) return;
-    const frequencies = tone === "positive"
-      ? [523.25, 659.25]
-      : tone === "attention"
-      ? [392, 329.63]
-      : [440];
+    const frequencies = notificationFrequencies(
+      tone,
+      this.#activeMusic?.target.movement ?? this.#musicTarget.movement,
+    );
     const start = this.#context.currentTime;
     frequencies.forEach((frequency, index) =>
       this.#playTone(
@@ -144,6 +232,12 @@ export class SoundDesign {
   }
 
   async setMusic(enabled: boolean): Promise<void> {
+    if (
+      this.#musicEnabled === enabled &&
+      (enabled ? this.#activeMusic !== undefined : true)
+    ) {
+      return;
+    }
     this.#musicEnabled = enabled;
     if (!enabled) {
       this.#stopMusic();
@@ -156,7 +250,26 @@ export class SoundDesign {
       this.#context.currentTime,
       0.8,
     );
-    this.#startMusicLoop();
+    if (!this.#terminalSilenced) this.#startMusic(this.#musicTarget);
+  }
+
+  setMusicTarget(target: MusicTarget): void {
+    const recovery = this.#pendingMusic?.target.movement === "recovery"
+      ? this.#pendingMusic.target
+      : this.#activeMusic?.target.movement === "recovery"
+      ? this.#activeMusic.target
+      : undefined;
+    if (recovery?.nextMovement === target.movement) {
+      this.#musicTarget = target;
+      return;
+    }
+    if (musicDirectionKey(target) === musicDirectionKey(this.#musicTarget)) {
+      return;
+    }
+    this.#musicTarget = target;
+    if (target.movement !== "bankruptcy") this.#terminalSilenced = false;
+    if (!this.#musicEnabled || !this.#context || !this.#musicGain) return;
+    this.#queueMusic(target);
   }
 
   setMusicVolume(volume: number): void {
@@ -183,9 +296,9 @@ export class SoundDesign {
     this.#musicGain = undefined;
   }
 
-  #startMusicLoop(): void {
-    if (this.#musicSource || !this.#context || !this.#musicGain) return;
-    const samples = renderMusicLoop(this.#context.sampleRate);
+  #createMusic(target: MusicTarget, start: number): MusicPlayback | undefined {
+    if (!this.#context || !this.#musicGain) return undefined;
+    const samples = renderMusicLoop(this.#context.sampleRate, target);
     const buffer = this.#context.createBuffer(
       1,
       samples.length,
@@ -193,11 +306,76 @@ export class SoundDesign {
     );
     buffer.getChannelData(0).set(samples);
     const source = this.#context.createBufferSource();
+    const gain = this.#context.createGain();
     source.buffer = buffer;
-    source.loop = true;
-    source.connect(this.#musicGain);
-    source.start();
-    this.#musicSource = source;
+    source.loop = target.movement !== "bankruptcy";
+    source.connect(gain);
+    gain.connect(this.#musicGain);
+    source.start(start);
+    return {
+      source,
+      gain,
+      target,
+      startedAt: start,
+      duration: buffer.duration,
+    };
+  }
+
+  #startMusic(target: MusicTarget): void {
+    if (this.#activeMusic || !this.#context) return;
+    const playback = this.#createMusic(target, this.#context.currentTime);
+    if (!playback) return;
+    playback.gain.gain.value = 1;
+    this.#activeMusic = playback;
+    if (target.movement === "bankruptcy") this.#scheduleTerminalStop(playback);
+  }
+
+  #queueMusic(target: MusicTarget): void {
+    if (!this.#context || !this.#musicGain) return;
+    if (!this.#activeMusic) {
+      this.#startMusic(target);
+      return;
+    }
+    if (
+      musicDirectionKey(target) === musicDirectionKey(this.#activeMusic.target)
+    ) return;
+    this.#cancelPendingMusic();
+    const now = this.#context.currentTime;
+    const elapsed = Math.max(0, now - this.#activeMusic.startedAt);
+    const boundary = now + MUSIC_PHRASE_SECONDS -
+      elapsed % MUSIC_PHRASE_SECONDS;
+    const crossfade = 60 / 78;
+    const pending = this.#createMusic(target, boundary);
+    if (!pending) return;
+    pending.gain.gain.setValueAtTime(0.0001, boundary);
+    pending.gain.gain.linearRampToValueAtTime(1, boundary + crossfade);
+    const active = this.#activeMusic;
+    active.gain.gain.cancelScheduledValues(now);
+    this.#activeMusic.gain.gain.setValueAtTime(
+      active.gain.gain.value,
+      now,
+    );
+    active.gain.gain.linearRampToValueAtTime(
+      0.0001,
+      boundary + crossfade,
+    );
+    this.#pendingMusic = pending;
+    this.#transitionTimer = globalThis.setTimeout(() => {
+      active.source.stop();
+      active.gain.disconnect();
+      this.#activeMusic = pending;
+      this.#pendingMusic = undefined;
+      this.#transitionTimer = undefined;
+      if (target.movement === "recovery" && target.nextMovement) {
+        this.#queueMusic({
+          movement: target.nextMovement,
+          intensity: target.nextMovement === "growth" ? 1 : 0,
+          variant: target.variant,
+        });
+      } else if (target.movement === "bankruptcy") {
+        this.#scheduleTerminalStop(pending);
+      }
+    }, Math.max(0, (boundary + crossfade - now) * 1_000));
   }
 
   #playTone(
@@ -231,5 +409,56 @@ export class SoundDesign {
         0.08,
       );
     }
+    this.#cancelPendingMusic();
+    const active = this.#activeMusic;
+    this.#activeMusic = undefined;
+    if (active && this.#context) {
+      const stopAt = this.#context.currentTime + 0.5;
+      active.source.stop(stopAt);
+      globalThis.setTimeout(() => active.gain.disconnect(), 550);
+    }
   }
+
+  #cancelPendingMusic(): void {
+    if (this.#transitionTimer !== undefined) {
+      globalThis.clearTimeout(this.#transitionTimer);
+      this.#transitionTimer = undefined;
+    }
+    if (this.#pendingMusic) {
+      try {
+        this.#pendingMusic.source.stop();
+      } catch {
+        // A source may already have ended while the page was suspended.
+      }
+      this.#pendingMusic.gain.disconnect();
+      this.#pendingMusic = undefined;
+    }
+    if (this.#activeMusic && this.#context) {
+      const now = this.#context.currentTime;
+      this.#activeMusic.gain.gain.cancelScheduledValues(now);
+      this.#activeMusic.gain.gain.setValueAtTime(1, now);
+    }
+  }
+
+  #scheduleTerminalStop(playback: MusicPlayback): void {
+    if (!this.#context) return;
+    const remaining = Math.max(
+      0,
+      playback.startedAt + playback.duration - this.#context.currentTime,
+    );
+    this.#transitionTimer = globalThis.setTimeout(() => {
+      playback.gain.disconnect();
+      if (this.#activeMusic === playback) this.#activeMusic = undefined;
+      this.#terminalSilenced = true;
+      this.#transitionTimer = undefined;
+    }, remaining * 1_000);
+  }
+}
+
+interface MusicPlayback {
+  source: AudioBufferSourceNode;
+  gain: GainNode;
+  target: MusicTarget;
+  startedAt: number;
+  duration: number;
 }
