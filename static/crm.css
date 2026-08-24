@@ -2399,8 +2399,7 @@ td small {
   cursor: default;
 }
 
-.pipeline-row-actions,
-.pipeline-card-actions {
+.pipeline-row-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -3381,148 +3380,12 @@ td small {
   width: min(240px, 100%);
 }
 
-.pipeline-board {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(260px, 1fr));
-  gap: 12px;
-  padding-bottom: 8px;
-  overflow-x: auto;
-}
-
 .pipeline-deals {
   scroll-margin-top: 84px;
 }
 
 .pipeline-deals:focus {
   outline: none;
-}
-
-.pipeline-column {
-  min-width: 260px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: #edf1ef;
-}
-
-.pipeline-column > header {
-  display: grid;
-  gap: 4px;
-  padding: 13px;
-  border-bottom: 1px solid var(--line-strong);
-}
-
-.pipeline-column > header div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.pipeline-column > header span {
-  display: grid;
-  min-width: 25px;
-  height: 25px;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--green-dark);
-  background: var(--green-soft);
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.pipeline-column > header small {
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.pipeline-column > div {
-  display: grid;
-  align-content: start;
-  gap: 9px;
-  min-height: 180px;
-  padding: 9px;
-}
-
-.pipeline-card {
-  display: grid;
-  gap: 9px;
-  padding: 13px;
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  background: white;
-  box-shadow: 0 2px 7px rgb(23 32 29 / 5%);
-}
-
-.dark-mode .pipeline-column {
-  background: var(--surface-soft);
-}
-
-.dark-mode .pipeline-card {
-  background: var(--surface);
-}
-
-.pipeline-card > div:first-child {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.pipeline-card > div:first-child span {
-  color: var(--green);
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.pipeline-card p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 15px;
-}
-
-.pipeline-card > b {
-  font-size: 18px;
-}
-
-.product-label {
-  width: max-content;
-  padding: 3px 7px;
-  border-radius: 4px;
-  color: var(--green-dark);
-  background: var(--green-soft);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.deal-owner {
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.pipeline-card dl {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin: 0;
-}
-
-.pipeline-card dt {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.pipeline-card dd {
-  margin: 2px 0 0;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.column-empty {
-  display: grid;
-  min-height: 130px;
-  place-items: center;
-  color: var(--faint);
-  font-size: 15px;
 }
 
 .acquisition-tool {
@@ -4961,10 +4824,6 @@ table,
 
   .pipeline-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .pipeline-board {
-    grid-template-columns: repeat(4, 280px);
   }
 
   .deal-editor form {

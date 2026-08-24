@@ -10,7 +10,6 @@ import {
   ChevronRight,
   CircleDollarSign,
   Clock3,
-  Columns3,
   Copy,
   Download,
   FileText,
@@ -18,7 +17,6 @@ import {
   GraduationCap,
   Inbox,
   LayoutDashboard,
-  List,
   LockKeyhole,
   Mail,
   Menu,
@@ -639,13 +637,6 @@ function PrologueScreen(props: {
     </main>
   );
 }
-
-const PIPELINE_STAGES = [
-  "qualified",
-  "discovery",
-  "evaluation",
-  "negotiation",
-] as const;
 
 const CUSTOMER_ACCOUNT_PLANS: ReadonlyArray<{
   value: CustomerAccountPlan;
@@ -2225,11 +2216,8 @@ function PlatformWorkspace(props: {
 function PipelineWorkspace(props: {
   game: GameState;
   currentMinute: number;
-  mode: "list" | "board";
-  onModeChange: (mode: "list" | "board") => void;
   dispatch: (command: GameCommand) => boolean;
 }) {
-  const displayMode = useSignal(props.mode);
   const editingDealId = useSignal<string | undefined>(undefined);
   const editProduct = useSignal<DealProduct>("growth");
   const editValue = useSignal("500");
@@ -2379,24 +2367,6 @@ function PipelineWorkspace(props: {
     selectedDeals.value = next;
   };
   const clearSelection = () => selectedDeals.value = new Set();
-  const changeMode = (mode: "list" | "board") => {
-    if (mode !== displayMode.value) {
-      displayMode.value = mode;
-      props.onModeChange(mode);
-    }
-    globalThis.requestAnimationFrame(() => {
-      const dealsView = document.getElementById("pipeline-deals");
-      dealsView?.scrollIntoView({
-        behavior: props.game.preferences.reducedMotion ? "auto" : "smooth",
-        block: "start",
-      });
-      dealsView?.focus({ preventScroll: true });
-    });
-  };
-
-  useEffect(() => {
-    displayMode.value = props.mode;
-  }, [props.mode]);
 
   return (
     <>
@@ -2408,24 +2378,6 @@ function PipelineWorkspace(props: {
             Assigned representatives contact, qualify, and advance their
             pipeline.
           </p>
-        </div>
-        <div class="segmented-control" aria-label="Pipeline view">
-          <button
-            type="button"
-            class={displayMode.value === "list" ? "active" : ""}
-            aria-pressed={displayMode.value === "list"}
-            onClick={() => changeMode("list")}
-          >
-            <List size={16} />List
-          </button>
-          <button
-            type="button"
-            class={displayMode.value === "board" ? "active" : ""}
-            aria-pressed={displayMode.value === "board"}
-            onClick={() => changeMode("board")}
-          >
-            <Columns3 size={16} />Board
-          </button>
         </div>
       </div>
       <div class="pipeline-summary" aria-label="Pipeline forecast">
@@ -3013,8 +2965,7 @@ function PipelineWorkspace(props: {
             />
           </div>
         )
-        : displayMode.value === "list"
-        ? (
+        : (
           <div
             id="pipeline-deals"
             class="panel table-panel pipeline-deals"
@@ -3179,125 +3130,6 @@ function PipelineWorkspace(props: {
                 </tbody>
               </table>
             </div>
-          </div>
-        )
-        : (
-          <div
-            id="pipeline-deals"
-            class="pipeline-board pipeline-deals"
-            tabIndex={-1}
-            aria-label="Deal stage board"
-          >
-            {PIPELINE_STAGES.map((stage) => {
-              const stageDeals = openDeals.filter((deal) =>
-                deal.stage === stage
-              );
-              const stageValue = stageDeals.reduce(
-                (total, deal) => total + deal.monthlyValueCents,
-                0,
-              );
-              return (
-                <section
-                  class="pipeline-column"
-                  aria-label={statusLabel(stage)}
-                >
-                  <header>
-                    <div>
-                      <strong>{statusLabel(stage)}</strong>
-                      <span>{stageDeals.length}</span>
-                    </div>
-                    <small>{money.format(stageValue / 100)} MRR</small>
-                  </header>
-                  <div>
-                    {stageDeals.map((deal) => {
-                      const { lead, company } = detail(deal);
-                      const closeRisk = deal.stage === "negotiation" && lead
-                        ? closeLossRiskPercent(lead.engagement)
-                        : 0;
-                      return (
-                        <article class="pipeline-card">
-                          <div>
-                            <strong>
-                              {company?.name ?? "Unknown company"}
-                            </strong>
-                            <span>{deal.probability}%</span>
-                          </div>
-                          <p>
-                            {lead
-                              ? `${lead.firstName} ${lead.lastName}`
-                              : "Unknown contact"}
-                          </p>
-                          <span class="product-label">
-                            {statusLabel(deal.product)}
-                          </span>
-                          <span class="deal-owner">
-                            {deal.ownerId
-                              ? props.game.records.salesReps[deal.ownerId]
-                                ?.name ?? "Unknown"
-                              : "Founder owned"}
-                          </span>
-                          <b>
-                            {money.format(deal.monthlyValueCents / 100)} MRR
-                          </b>
-                          <dl>
-                            <div>
-                              <dt>Stage age</dt>
-                              <dd>
-                                {relativeGameTime(
-                                  deal.updatedAt,
-                                  props.currentMinute,
-                                ).replace(" overdue", "")}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>Close</dt>
-                              <dd>
-                                {relativeGameTime(
-                                  deal.expectedCloseAt,
-                                  props.currentMinute,
-                                )}
-                              </dd>
-                            </div>
-                          </dl>
-                          <div class="pipeline-card-actions">
-                            {closeRisk > 0 && (
-                              <small class="close-risk-inline">
-                                {closeRisk}% loss risk
-                              </small>
-                            )}
-                            <button
-                              type="button"
-                              class="icon-button"
-                              aria-label={`Edit ${company?.name ?? "deal"}`}
-                              onClick={() => beginEdit(deal)}
-                            >
-                              <Pencil size={16} />
-                            </button>
-                            <button
-                              type="button"
-                              class="secondary"
-                              disabled={deal.stage === "negotiation"}
-                              onClick={() =>
-                                props.dispatch({
-                                  type: "advance_deal",
-                                  dealId: deal.id,
-                                })}
-                            >
-                              {deal.stage === "negotiation"
-                                ? "Decision needed"
-                                : "Advance"} <ChevronRight size={15} />
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })}
-                    {stageDeals.length === 0 && (
-                      <span class="column-empty">No deals</span>
-                    )}
-                  </div>
-                </section>
-              );
-            })}
           </div>
         )}
     </>
@@ -5550,9 +5382,6 @@ export default function CrmApp(props: CrmAppProps) {
             <PipelineWorkspace
               game={game}
               currentMinute={effectiveMinute}
-              mode={game.preferences.pipelineView}
-              onModeChange={(view) =>
-                dispatch({ type: "set_pipeline_view", view })}
               dispatch={dispatch}
             />
           )}
