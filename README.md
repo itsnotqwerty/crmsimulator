@@ -208,10 +208,21 @@ saves unless an explicit key-rotation strategy is added later.
 
 The `deploy/` directory is the project-neutral
 [DONUT Deploy](https://github.com/itsnotqwerty/donut-deploy) submodule. Initialize
-it with `git submodule update --init deploy`. The installer requires an explicit
-service name and production command, supports optional env/TLS/nginx
-configuration, and provides a non-root `--dry-run`. See
-[deploy/README.md](deploy/README.md) for usage and prerequisites.
+it with `git submodule update --init deploy`.
+
+Deploy CRM Simulator with its project-specific entrypoint so the systemd service
+name, port owner, and nginx hostname remain stable:
+
+```sh
+git pull
+sudo ./deploy-production.sh
+```
+
+The entrypoint updates the deploy submodule, removes the obsolete
+`crmsimulator` service/configuration if present, and installs the canonical
+`crm-simulator` service for `crmsim.coolfreakingames.dev`. Do not invoke the
+generic installer directly for production CRM deployments. See
+[deploy/README.md](deploy/README.md) for installer details and prerequisites.
 
 ## Documentation
 
