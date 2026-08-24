@@ -293,7 +293,7 @@ function CampaignWorkspace(props: { game: GameState }) {
         tabIndex={-1}
       >
         <div>
-          <span>Founder campaign</span>
+          <span>Founder Campaign</span>
           <h1>{chapter.title}</h1>
           <p>The decisions behind the dashboard, from last runway to scale.</p>
         </div>
@@ -3683,7 +3683,7 @@ export default function CrmApp(props: CrmAppProps) {
           <div class="brand-mark">{initials(game.company.name)}</div>
           <div>
             <strong>{game.company.name}</strong>
-            <span>Founder campaign · v18</span>
+            <span>Founder Campaign</span>
           </div>
           <button
             type="button"
