@@ -5275,7 +5275,7 @@ export default function CrmApp(props: CrmAppProps) {
                       <strong>
                         <Music2 size={17} />Lounge music
                       </strong>
-                      <small>Play the original procedural focus mix.</small>
+                      <small>Play a procedural jazz focus mix.</small>
                     </span>
                     <input
                       type="checkbox"

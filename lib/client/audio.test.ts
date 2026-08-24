@@ -1,5 +1,6 @@
 import { assert, assertAlmostEquals, assertEquals } from "$std/assert/mod.ts";
 import {
+  melodyNoteFor,
   MUSIC_PHRASE_SECONDS,
   MUSIC_SWING_RATIO,
   musicGainForVolume,
@@ -35,6 +36,22 @@ Deno.test("music loop is finite, bounded, and audible", () => {
 Deno.test("lounge arrangement uses audible swing", () => {
   assert(MUSIC_SWING_RATIO > 0.55);
   assert(MUSIC_SWING_RATIO < 0.67);
+});
+
+Deno.test("melody notes stay within the current chord scale", () => {
+  assertEquals(melodyNoteFor(50, [0, 3, 7, 10, 14], 4), 53);
+  assertEquals(melodyNoteFor(50, [0, 4, 7, 10, 14], 3), 52);
+  assertEquals(melodyNoteFor(48, [0, 4, 7, 11, 14], 11), 59);
+});
+
+Deno.test("music loop tails do not wrap across the opening downbeat", () => {
+  const samples = renderMusicLoop(8_000, {
+    movement: "growth",
+    intensity: 1,
+    variant: 0,
+  });
+
+  assert(Math.abs(samples.at(-1) ?? 1) < 0.001);
 });
 
 Deno.test("adaptive movements render deterministic phrase-aligned buffers", () => {

@@ -58,7 +58,7 @@ const RECOVERY_ARRANGEMENT: MovementArrangement = {
     14,
   ]],
   motif: [2, 3, 5, 7, 9, 7, 4, 2],
-  bassPattern: [0, -1, 3, -1, 7, -1, 10, -1],
+  bassPattern: [0, -1, 1, -1, 2, -1, 3, -1],
   melodyDensity: 0.8,
   tonalCenter: 64,
 };
@@ -73,7 +73,7 @@ const BANKRUPTCY_ARRANGEMENT: MovementArrangement = {
     14,
   ]],
   motif: [9, 7, 5, 3, 2, 3, 5, 2],
-  bassPattern: [0, -1, 3, -1, 7, -1, 10, -1],
+  bassPattern: [0, -1, 1, -1, 2, -1, 3, -1],
   melodyDensity: 0.62,
   tonalCenter: 62,
 };
@@ -88,6 +88,24 @@ function arrangementFor(movement: MusicMovement): MovementArrangement {
   return MOVEMENT_ARRANGEMENTS[movement];
 }
 
+export function melodyNoteFor(
+  root: number,
+  quality: readonly number[],
+  motifOffset: number,
+): number {
+  const scale = quality.includes(3)
+    ? [0, 2, 3, 5, 7, 9, 10, 12, 14]
+    : quality.includes(10)
+    ? [0, 2, 4, 5, 7, 9, 10, 12, 14]
+    : [0, 2, 4, 5, 7, 9, 11, 12, 14];
+  const offset = scale.reduce((closest, candidate) =>
+    Math.abs(candidate - motifOffset) < Math.abs(closest - motifOffset)
+      ? candidate
+      : closest
+  );
+  return root + offset;
+}
+
 function addMusicTone(
   samples: Float32Array,
   sampleRate: number,
@@ -97,9 +115,16 @@ function addMusicTone(
   level: number,
   type: "sine" | "triangle",
 ): void {
-  const frameCount = Math.ceil(duration * sampleRate);
-  const attackFrames = Math.max(1, Math.round(0.025 * sampleRate));
   const startFrame = Math.round(start * sampleRate);
+  const frameCount = Math.min(
+    Math.ceil(duration * sampleRate),
+    samples.length - startFrame,
+  );
+  if (frameCount <= 0) return;
+  const attackFrames = Math.min(
+    frameCount,
+    Math.max(1, Math.round(0.025 * sampleRate)),
+  );
   for (let offset = 0; offset < frameCount; offset += 1) {
     const progress = offset / frameCount;
     const envelope = offset < attackFrames
@@ -109,7 +134,7 @@ function addMusicTone(
     const wave = type === "triangle"
       ? 2 / Math.PI * Math.asin(Math.sin(phase))
       : Math.sin(phase);
-    const index = (startFrame + offset) % samples.length;
+    const index = startFrame + offset;
     samples[index] += wave * envelope * level;
   }
 }
@@ -161,9 +186,7 @@ export function renderMusicLoop(
       arrangement.motif.length;
     const seededGate = (phraseStep * 5 + target.variant * 3 + phrase) % 8 / 8;
     if (seededGate < arrangement.melodyDensity) {
-      const inversion = (target.variant + chordIndex + phrase) % quality.length;
-      const pitch = root + arrangement.motif[motifIndex] +
-        (quality[inversion] >= 12 ? 0 : quality[inversion] % 3);
+      const pitch = melodyNoteFor(root, quality, arrangement.motif[motifIndex]);
       addMusicTone(
         samples,
         sampleRate,
@@ -174,13 +197,13 @@ export function renderMusicLoop(
         "triangle",
       );
     }
-    const bassOffset =
+    const bassDegree =
       arrangement.bassPattern[phraseStep % arrangement.bassPattern.length];
-    if (bassOffset >= 0) {
+    if (bassDegree >= 0) {
       addMusicTone(
         samples,
         sampleRate,
-        midiFrequency(root - 12 + bassOffset),
+        midiFrequency(root - 12 + (quality[bassDegree] ?? 0)),
         start,
         eighthNoteSeconds * 1.55,
         0.115 + target.intensity * 0.008,
