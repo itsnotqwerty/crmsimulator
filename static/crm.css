@@ -257,6 +257,13 @@ body {
   text-align: center;
 }
 
+.crm-app + .site-footer {
+  width: calc(100% - 268px);
+  max-width: none;
+  box-sizing: border-box;
+  margin-left: 268px;
+}
+
 .site-footer p {
   margin: 0.5rem 0;
 }
@@ -4405,6 +4412,11 @@ table,
   }
 
   main {
+    margin-left: 0;
+  }
+
+  .crm-app + .site-footer {
+    width: 100%;
     margin-left: 0;
   }
 
