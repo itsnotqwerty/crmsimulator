@@ -2295,9 +2295,14 @@ export function applyCommand(
     }
     case "set_palette":
       if (
-        !["emerald", "sapphire", "ruby", "pearl", "opal", "onyx"].includes(
-          command.palette,
-        )
+        ![
+          "emerald",
+          "sapphire",
+          "ruby",
+          "pearl",
+          "moonstone",
+          "onyx",
+        ].includes(command.palette)
       ) {
         return rejected(state, "Color palette is invalid");
       }

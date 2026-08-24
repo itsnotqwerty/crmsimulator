@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 26 as const;
+export const SAVE_SCHEMA_VERSION = 27 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -11,7 +11,7 @@ export type ColorPalette =
   | "sapphire"
   | "ruby"
   | "pearl"
-  | "opal"
+  | "moonstone"
   | "onyx";
 export type LeadStatus =
   | "new"

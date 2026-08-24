@@ -5154,7 +5154,7 @@ export default function CrmApp(props: CrmAppProps) {
                       ["sapphire", "Sapphire"],
                       ["ruby", "Ruby"],
                       ["pearl", "Pearl"],
-                      ["opal", "Opal"],
+                      ["moonstone", "Moonstone"],
                       ["onyx", "Onyx"],
                     ] as Array<[ColorPalette, string]>).map(([
                       palette,

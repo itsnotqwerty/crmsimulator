@@ -563,9 +563,14 @@ export function parseGameState(value: unknown): GameState {
     typeof value.preferences.musicEnabled !== "boolean" ||
     !isInteger(value.preferences.musicVolume) ||
     Number(value.preferences.musicVolume) > 100 ||
-    !["emerald", "sapphire", "ruby", "pearl", "opal", "onyx"].includes(
-      String(value.preferences.palette),
-    ) ||
+    ![
+      "emerald",
+      "sapphire",
+      "ruby",
+      "pearl",
+      "moonstone",
+      "onyx",
+    ].includes(String(value.preferences.palette)) ||
     !["list", "board"].includes(String(value.preferences.pipelineView)) ||
     ![1, 2, 4].includes(Number(value.preferences.timeScale))
   ) {

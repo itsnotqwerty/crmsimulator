@@ -17,6 +17,13 @@
   --amber-soft: #fff6df;
   --sidebar: #173f35;
   --sidebar-soft: #225246;
+  --sidebar-ink: #eff8f4;
+  --sidebar-text: #cce0d9;
+  --sidebar-muted: #8fb0a5;
+  --sidebar-heading: #86aa9e;
+  --sidebar-accent: #e9c46a;
+  --sidebar-border: rgb(255 255 255 / 10%);
+  --sidebar-wash: rgb(255 255 255 / 4%);
   --focus-ring: rgb(31 102 84 / 24%);
   font-family: "IBM Plex Sans", "Aptos", "Segoe UI", sans-serif;
   font-size: 15px;
@@ -72,22 +79,23 @@
   --focus-ring: rgb(120 100 119 / 24%);
 }
 
-.crm-app.palette-opal {
-  --ink: #25282b;
-  --muted: #5d6668;
-  --faint: #758083;
-  --line: #e5dfe4;
-  --line-strong: #d5cbd3;
-  --canvas: #f3f8f7;
-  --surface-soft: #fbf8fa;
-  --green: #527f7b;
-  --green-dark: #3e625f;
-  --green-soft: #e6f1ef;
-  --coral: #ad5f86;
-  --coral-soft: #f8e9f0;
-  --sidebar: #3f5558;
-  --sidebar-soft: #526c70;
-  --focus-ring: rgb(82 127 123 / 24%);
+.crm-app.palette-moonstone {
+  --ink: #202b33;
+  --muted: #566672;
+  --faint: #6e7c86;
+  --line: #dbe2e6;
+  --line-strong: #c5d1d7;
+  --canvas: #eef2f4;
+  --surface: #ffffff;
+  --surface-soft: #f7f9fa;
+  --green: #36747a;
+  --green-dark: #28595e;
+  --green-soft: #e2eff0;
+  --coral: #a44f5f;
+  --coral-soft: #f8e8eb;
+  --sidebar: #344956;
+  --sidebar-soft: #425f6c;
+  --focus-ring: rgb(54 116 122 / 24%);
 }
 
 .crm-app.palette-onyx {
@@ -342,7 +350,7 @@ button:disabled {
   overflow-y: auto;
   overscroll-behavior: contain;
   background: var(--sidebar);
-  color: #eff8f4;
+  color: var(--sidebar-ink);
 }
 
 .nav-scrim,
@@ -359,7 +367,7 @@ button:disabled {
   align-items: center;
   gap: 11px;
   padding: 12px 7px;
-  border-bottom: 1px solid rgb(255 255 255 / 10%);
+  border-bottom: 1px solid var(--sidebar-border);
 }
 
 .brand-mark,
@@ -368,7 +376,7 @@ button:disabled {
   place-items: center;
   flex: 0 0 auto;
   color: #173f35;
-  background: #e9c46a;
+  background: var(--sidebar-accent);
   font-weight: 800;
 }
 
@@ -393,7 +401,7 @@ button:disabled {
 }
 
 .brand span {
-  color: #a9c4bb;
+  color: var(--sidebar-muted);
   font-size: 12px;
 }
 
@@ -405,7 +413,7 @@ button:disabled {
 
 .nav-heading {
   padding: 14px 10px 6px;
-  color: #86aa9e;
+  color: var(--sidebar-heading);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -423,7 +431,7 @@ button:disabled {
   padding: 7px 10px;
   border: 0;
   border-radius: 6px;
-  color: #cce0d9;
+  color: var(--sidebar-text);
   background: transparent;
   font-size: 13px;
   text-align: left;
@@ -434,26 +442,26 @@ button:disabled {
 .sidebar nav button.active,
 .settings-link:hover,
 .settings-link.active {
-  color: #fff;
+  color: var(--sidebar-ink);
   background: var(--sidebar-soft);
 }
 
 .sidebar nav button.active {
-  box-shadow: inset 3px 0 #e9c46a;
+  box-shadow: inset 3px 0 var(--sidebar-accent);
 }
 
 .sidebar nav button b {
   min-width: 22px;
   padding: 2px 6px;
   border-radius: 10px;
-  color: #d8e9e3;
-  background: rgb(255 255 255 / 9%);
+  color: var(--sidebar-ink);
+  background: var(--sidebar-wash);
   font-size: 11px;
   text-align: center;
 }
 
 .sidebar nav button.locked {
-  color: #78998e;
+  color: var(--sidebar-muted);
 }
 
 .unlock-note {
@@ -461,16 +469,16 @@ button:disabled {
   gap: 9px;
   margin: auto 5px 12px;
   padding: 11px;
-  border: 1px solid rgb(255 255 255 / 10%);
+  border: 1px solid var(--sidebar-border);
   border-radius: 7px;
-  color: #c9ddd6;
-  background: rgb(255 255 255 / 4%);
+  color: var(--sidebar-text);
+  background: var(--sidebar-wash);
 }
 
 .unlock-note svg {
   flex: 0 0 auto;
   margin-top: 2px;
-  color: #e9c46a;
+  color: var(--sidebar-accent);
 }
 
 .unlock-note div {
@@ -483,7 +491,7 @@ button:disabled {
 }
 
 .unlock-note span {
-  color: #8fb0a5;
+  color: var(--sidebar-muted);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -3388,14 +3396,14 @@ td small {
 .palette-swatch.pearl i:nth-child(3) {
   background: #f0eaef;
 }
-.palette-swatch.opal i:nth-child(1) {
-  background: #87b9b2;
+.palette-swatch.moonstone i:nth-child(1) {
+  background: #344956;
 }
-.palette-swatch.opal i:nth-child(2) {
-  background: #d8b8ca;
+.palette-swatch.moonstone i:nth-child(2) {
+  background: #36747a;
 }
-.palette-swatch.opal i:nth-child(3) {
-  background: #e9eee1;
+.palette-swatch.moonstone i:nth-child(3) {
+  background: #e2eff0;
 }
 .palette-swatch.onyx i:nth-child(1) {
   background: #29302e;

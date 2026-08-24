@@ -354,6 +354,18 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       quarterInitiativeCompleted: false,
     },
   }),
+  27: (save) => {
+    const preferences = save.preferences as Record<string, unknown>;
+    return {
+      ...save,
+      preferences: {
+        ...preferences,
+        palette: preferences.palette === "opal"
+          ? "moonstone"
+          : preferences.palette,
+      },
+    };
+  },
 };
 
 export function migrateGameState(value: unknown): GameState {
