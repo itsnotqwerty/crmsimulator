@@ -682,6 +682,10 @@ main {
   font-size: 13px;
 }
 
+.crm-app.dark-mode .search input {
+  background: transparent;
+}
+
 .search input::placeholder {
   color: #99a49f;
 }
