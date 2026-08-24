@@ -46,7 +46,11 @@ export default function RootPage({ data }: PageProps<RootPageData>) {
       <div class="site-shell">
         {showPrologue
           ? (
-            <main class="prologue-screen">
+            <main
+              class={`crm-app prologue-screen palette-${data.game.preferences.palette} ${
+                data.game.preferences.darkMode ? "dark-mode" : ""
+              }`}
+            >
               <div class="prologue-atmosphere" />
               <article class="prologue-letter">
                 <span class="story-eyebrow">Prologue · The runway email</span>

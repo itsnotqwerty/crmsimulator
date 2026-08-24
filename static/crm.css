@@ -383,6 +383,11 @@ body {
   margin-left: 268px;
 }
 
+.prologue-screen + .site-footer {
+  width: 100%;
+  margin-left: 0;
+}
+
 .site-footer p {
   margin: 0.5rem 0;
 }
@@ -3577,6 +3582,10 @@ td small {
   min-height: 44px;
 }
 
+.acquisition-tool > .blocked-reason {
+  grid-column: 1 / -1;
+}
+
 .referral-list {
   display: grid;
 }
@@ -4117,7 +4126,7 @@ td small {
 
 .narrative-heading span,
 .story-eyebrow {
-  color: #85611e;
+  color: var(--amber);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -4209,7 +4218,7 @@ td small {
 
 .story-copy {
   margin: 0 0 16px;
-  color: #334943;
+  color: var(--ink);
   font-family: "Iowan Old Style", "Palatino Linotype", serif;
   font-size: 18px;
   line-height: 1.6;
@@ -4222,7 +4231,7 @@ td small {
   margin-bottom: 18px;
   padding: 12px;
   border-radius: 6px;
-  color: #684b17;
+  color: color-mix(in srgb, var(--amber) 75%, var(--ink));
   background: var(--amber-soft);
 }
 
@@ -4260,7 +4269,7 @@ td small {
   padding: 34px 38px;
   border: 1px solid #dacda9;
   border-radius: 9px;
-  background: #fffdf7;
+  background: var(--surface);
   box-shadow: 0 35px 100px rgb(0 0 0 / 35%);
 }
 
@@ -4294,7 +4303,7 @@ td small {
 
 .prologue-copy {
   margin: 20px 0 24px;
-  color: #263d36;
+  color: var(--ink);
   font-family: "Iowan Old Style", "Palatino Linotype", serif;
   font-size: 19px;
   line-height: 1.68;
@@ -4415,7 +4424,7 @@ td small {
 
 .board-letter > p {
   margin: 12px 0 20px;
-  color: #263d36;
+  color: var(--ink);
   font-family: "Iowan Old Style", "Palatino Linotype", serif;
   font-size: 22px;
   line-height: 1.65;
@@ -4425,7 +4434,7 @@ td small {
   margin: 0 0 24px;
   padding: 13px 15px;
   border-left: 3px solid var(--amber);
-  color: #684b17;
+  color: color-mix(in srgb, var(--amber) 75%, var(--ink));
   background: var(--amber-soft);
   font-weight: 700;
   line-height: 1.5;

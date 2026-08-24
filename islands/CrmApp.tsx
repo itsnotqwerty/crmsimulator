@@ -555,7 +555,11 @@ function PrologueScreen(props: {
     ? props.game.records.companies[firstLead.companyId]
     : undefined;
   return (
-    <main class="prologue-screen">
+    <main
+      class={`crm-app prologue-screen palette-${props.game.preferences.palette} ${
+        props.game.preferences.darkMode ? "dark-mode" : ""
+      }`}
+    >
       <div class="prologue-atmosphere" />
       <article class="prologue-letter">
         <span class="story-eyebrow">Prologue · The runway email</span>
