@@ -59,6 +59,7 @@ const TASK_KINDS = new Set(["call", "email", "follow_up", "onboarding"]);
 const TASK_STATUSES = new Set(["open", "completed", "cancelled"]);
 const ONBOARDING_STEPS = new Set([
   "inspect_lead",
+  "explain_capacity",
   "contact_lead",
   "explain_spam",
   "review_contacts",

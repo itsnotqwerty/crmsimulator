@@ -396,6 +396,19 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       }
       : save;
   },
+  31: (save) => {
+    const onboarding = save.onboarding as Record<string, unknown>;
+    const step = onboarding.step;
+    const needsCapacityLesson = onboarding.dismissed !== true &&
+      step !== "inspect_lead" && step !== "explain_capacity" &&
+      step !== "complete";
+    return needsCapacityLesson
+      ? {
+        ...save,
+        onboarding: { ...onboarding, step: "explain_capacity" },
+      }
+      : save;
+  },
 };
 
 export function migrateGameState(value: unknown): GameState {

@@ -11,6 +11,7 @@ export type OnboardingWorkspace =
 
 export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   "inspect_lead",
+  "explain_capacity",
   "contact_lead",
   "explain_spam",
   "review_contacts",
@@ -26,6 +27,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
 
 const INFORMATIONAL_STEPS = new Set<OnboardingStep>([
   "inspect_lead",
+  "explain_capacity",
   "explain_spam",
   "review_contacts",
   "review_company",
@@ -35,6 +37,7 @@ const INFORMATIONAL_STEPS = new Set<OnboardingStep>([
 
 const STEP_WORKSPACE: Record<OnboardingStep, OnboardingWorkspace> = {
   inspect_lead: "leads",
+  explain_capacity: "leads",
   contact_lead: "leads",
   explain_spam: "leads",
   review_contacts: "contacts",

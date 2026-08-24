@@ -987,7 +987,7 @@ Deno.test("version 27 saves migrate with dark mode disabled", () => {
   assertEquals(migrated.preferences.darkMode, false);
 });
 
-Deno.test("version 28 close-step saves migrate through the spam lesson", () => {
+Deno.test("version 28 close-step saves migrate through capacity training", () => {
   const current = createInitialState({ seed: 281, now: 1_000 });
   const legacy = structuredClone(current) as unknown as Record<string, unknown>;
   legacy.schemaVersion = 28;
@@ -996,7 +996,7 @@ Deno.test("version 28 close-step saves migrate through the spam lesson", () => {
   const migrated = migrateGameState(legacy);
 
   assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
-  assertEquals(migrated.onboarding.step, "explain_spam");
+  assertEquals(migrated.onboarding.step, "explain_capacity");
 });
 
 Deno.test("version 29 guided-opening saves remain compatible", () => {
@@ -1008,7 +1008,19 @@ Deno.test("version 29 guided-opening saves remain compatible", () => {
   const migrated = migrateGameState(legacy);
 
   assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
-  assertEquals(migrated.onboarding.step, "explain_spam");
+  assertEquals(migrated.onboarding.step, "explain_capacity");
+});
+
+Deno.test("version 30 active tutorials receive capacity training", () => {
+  const current = createInitialState({ seed: 301, now: 1_000 });
+  const legacy = structuredClone(current) as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 30;
+  (legacy.onboarding as Record<string, unknown>).step = "explain_spam";
+
+  const migrated = migrateGameState(legacy);
+
+  assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
+  assertEquals(migrated.onboarding.step, "explain_capacity");
 });
 
 Deno.test("save validation rejects unknown customer account plans", () => {

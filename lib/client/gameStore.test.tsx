@@ -117,6 +117,13 @@ Deno.test("informational tutorial steps discard elapsed simulation time", () => 
     }),
     true,
   );
+  assertEquals(
+    store.dispatch({
+      type: "acknowledge_onboarding",
+      step: "explain_capacity",
+    }),
+    true,
+  );
   const resumedAt = store.game.value.lastSimulatedAt;
   store.catchUp(resumedAt + 10_000);
 

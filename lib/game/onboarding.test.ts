@@ -18,6 +18,15 @@ Deno.test("guided opening advances through the first customer workflow", () => {
   });
   assert(result.accepted);
   state = result.state;
+  assertEquals(state.onboarding.step, "explain_capacity");
+  assert(onboardingPausesSimulation(state));
+
+  result = applyCommand(state, {
+    type: "acknowledge_onboarding",
+    step: "explain_capacity",
+  });
+  assert(result.accepted);
+  state = result.state;
   assertEquals(state.onboarding.step, "contact_lead");
   assertEquals(onboardingPausesSimulation(state), false);
 

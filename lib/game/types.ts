@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 30 as const;
+export const SAVE_SCHEMA_VERSION = 31 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -511,6 +511,7 @@ export interface RecordState {
 export interface OnboardingState {
   step:
     | "inspect_lead"
+    | "explain_capacity"
     | "contact_lead"
     | "explain_spam"
     | "review_contacts"

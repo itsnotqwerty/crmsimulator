@@ -130,6 +130,13 @@ const TUTORIAL_COPY: Record<
       "Open the first lead and read their role, company, fit, and intent. Fit shows whether they match the product; intent shows how ready they are to talk.",
     action: "Inspect the first lead",
   },
+  explain_capacity: {
+    title: "Your time is the company's first bottleneck",
+    important: "Important: Founder capacity",
+    detail:
+      "You begin each game day with 480 minutes of founder capacity. Email costs 10 minutes, a call costs 20, prospecting costs 45, and follow-up costs 15; later work can cost more. Work is blocked when you cannot cover its full cost. Capacity resets to 480 every 24 in-game hours and unused time does not carry over. Employees perform assigned work without spending founder capacity, so hiring eventually buys back your time.",
+    action: "I understand, start outreach",
+  },
   contact_lead: {
     title: "Make the first outreach",
     detail:

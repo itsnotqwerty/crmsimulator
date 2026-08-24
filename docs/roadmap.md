@@ -135,6 +135,8 @@ realistic CRM work, reload safely, and fail through active bankruptcy.
       follow-up, and closing.
 - [x] Introduce Inbox, Contacts, Companies, Tasks, and Dashboard one at a time
       with a persistent step indicator and a single current action.
+- [x] Explain daily founder capacity, opening action costs, reset behavior, and
+      employee delegation before the first outreach.
 - [x] Explain the one-hour manual outreach spam window, intent penalties, and
       paced automation exception immediately after the first contact.
 - [x] Pause company time during explanation steps and resume it for live work

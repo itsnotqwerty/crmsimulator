@@ -51,16 +51,18 @@ There is no detached tutorial level.
 Guided Chapter I teaches one workspace at a time. It takes the player from
 inspecting the first lead through contacting, qualification, deal work, customer
 onboarding, and repeating the workflow until the company retains three
-customers. Immediately after the first outreach, an important information step
-explains spam protection: manually contacting the same lead again within one
-game hour still consumes capacity and reduces intent by 20 for email or 30 for a
-call, with each repeat restarting the window; paced automated outreach avoids
-the penalty. A persistent lesson panel presents one goal and one primary action;
-unexplained workspaces remain visible but locked. Company time pauses during
-explanation-only steps and resumes during action steps. Players may skip the
-guided locks through a confirmation, but skipping grants no business progression
-unlocks. Marketing unlocks at three customers, and the first campaign is taught
-in the following chapter.
+customers. Before the first outreach, an important information step explains the
+founder's 480-minute daily capacity, opening action costs, full daily reset,
+blocked work, and employee delegation. Immediately after the first outreach, a
+second important step explains spam protection: manually contacting the same
+lead again within one game hour still consumes capacity and reduces intent by 20
+for email or 30 for a call, with each repeat restarting the window; paced
+automated outreach avoids the penalty. A persistent lesson panel presents one
+goal and one primary action; unexplained workspaces remain visible but locked.
+Company time pauses during explanation-only steps and resumes during action
+steps. Players may skip the guided locks through a confirmation, but skipping
+grants no business progression unlocks. Marketing unlocks at three customers,
+and the first campaign is taught in the following chapter.
 
 ## 4. Company premise
 
