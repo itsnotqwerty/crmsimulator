@@ -1057,6 +1057,12 @@ function setQuoteStatus(
   if (status === "sent" && quote.status !== "draft") {
     return rejected(state, "Only draft quotes can be sent");
   }
+  if (
+    status === "sent" &&
+    state.records.deals[quote.dealId]?.stage !== "negotiation"
+  ) {
+    return rejected(state, "Advance the deal to negotiation before sending");
+  }
   if (status === "expired" && !["draft", "sent"].includes(quote.status)) {
     return rejected(state, "Only active quotes can expire");
   }
@@ -1078,7 +1084,7 @@ function setQuoteStatus(
   }], rules);
 }
 
-function acceptQuote(
+export function resolveQuoteResponse(
   state: GameState,
   quoteId: string,
   rules: GameRules,
@@ -1120,7 +1126,7 @@ function acceptQuote(
     relatedId: quote.id,
     gameMinute,
   };
-  const closed = advanceDeal(prepared, deal.id, rules);
+  const closed = advanceDeal(prepared, deal.id, rules, true);
   if (!closed.accepted) return closed;
   if (closed.state.records.deals[deal.id].stage === "lost") {
     const quoteExpired: DomainEvent = {
@@ -1925,7 +1931,16 @@ function advanceDeal(
   state: GameState,
   dealId: string,
   rules: GameRules,
+  resolvingQuote = false,
 ): CommandResult {
+  if (
+    !resolvingQuote &&
+    Object.values(state.records.quotes).some((quote) =>
+      quote.dealId === dealId && quote.status === "sent"
+    )
+  ) {
+    return rejected(state, "Wait for the prospect to respond to the quote");
+  }
   const result = advanceDealWork(state, dealId, rules);
   if (result.ok) return accepted(result.state, result.events, rules);
   return rejected(state, result.reason);
@@ -1988,6 +2003,13 @@ function negotiateDeal(
   if (!deal) return rejected(state, "Deal does not exist");
   if (deal.stage !== "negotiation") {
     return rejected(state, "Negotiation choices are available at negotiation");
+  }
+  if (
+    Object.values(state.records.quotes).some((quote) =>
+      quote.dealId === dealId && quote.status === "sent"
+    )
+  ) {
+    return rejected(state, "Wait for the prospect to respond to the quote");
   }
   const lead = state.records.leads[deal.leadId];
   if (!lead) return rejected(state, "Deal contact does not exist");
@@ -2540,8 +2562,6 @@ export function applyCommand(
       return updateQuote(state, command, rules);
     case "set_quote_status":
       return setQuoteStatus(state, command.quoteId, command.status, rules);
-    case "accept_quote":
-      return acceptQuote(state, command.quoteId, rules);
     case "complete_task": {
       const task = state.records.tasks[command.taskId];
       if (!task) return rejected(state, "Task does not exist");

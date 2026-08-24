@@ -621,7 +621,6 @@ export type GameCommand =
     validDays: number;
   }
   | { type: "set_quote_status"; quoteId: EntityId; status: "sent" | "expired" }
-  | { type: "accept_quote"; quoteId: EntityId }
   | { type: "follow_up_lead"; leadId: EntityId }
   | { type: "request_referrals" }
   | {

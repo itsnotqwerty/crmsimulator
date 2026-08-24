@@ -7,6 +7,7 @@ import { applyStaffWork } from "./staff.ts";
 import { applyManagerDecisions } from "./managers.ts";
 import { createTicketWork } from "./work.ts";
 import { syncNarrative } from "./narrative.ts";
+import { resolveQuoteResponse } from "./actions.ts";
 import type {
   AdvanceResult,
   AdvanceSummary,
@@ -18,6 +19,8 @@ import type {
 } from "./types.ts";
 
 export type AdvanceMode = "active" | "offline";
+
+const QUOTE_RESPONSE_MINUTES = 12 * 60;
 
 function accruedBetween(
   monthlyCents: number,
@@ -832,8 +835,23 @@ function processStep(
     };
   }
 
+  nextState = syncNarrative(projectEvents(nextState, events, rules));
+  for (const quote of Object.values(nextState.records.quotes)) {
+    const responseAt = quote.updatedAt + QUOTE_RESPONSE_MINUTES;
+    if (
+      quote.status === "sent" && startMinute < responseAt &&
+      responseAt <= endMinute && responseAt <= quote.validUntil
+    ) {
+      const response = resolveQuoteResponse(nextState, quote.id, rules);
+      if (response.accepted) {
+        nextState = response.state;
+        events.push(...response.events);
+      }
+    }
+  }
+
   return {
-    state: syncNarrative(projectEvents(nextState, events, rules)),
+    state: nextState,
     events,
     stopped: nextState.clock.status !== "active",
   };

@@ -1578,7 +1578,7 @@ Deno.test("pipeline deals can be edited and closed with a loss reason", () => {
   assertEquals(lost.state.records.deals[dealId].lossReason, "competition");
 });
 
-Deno.test("sent quotes close negotiation deals with subscription terms", () => {
+Deno.test("sent quotes pause negotiation until the lead responds", () => {
   let state = createInitialState({ seed: 46, now: 1_000 });
   state = applyCommand(state, {
     type: "contact_lead",
@@ -1614,16 +1614,27 @@ Deno.test("sent quotes close negotiation deals with subscription terms", () => {
     quoteId: "quote_1",
     status: "sent",
   });
-  const accepted = applyCommand(sent.state, {
-    type: "accept_quote",
-    quoteId: "quote_1",
-  });
+  assert(sent.accepted);
+  assertEquals(sent.state.records.quotes.quote_1.status, "sent");
+  assertEquals(sent.state.records.deals.deal_1.stage, "negotiation");
 
-  assert(accepted.accepted);
-  assertEquals(accepted.state.records.quotes.quote_1.status, "accepted");
-  assertEquals(accepted.state.records.deals.deal_1.stage, "won");
-  assertEquals(accepted.state.company.mrrCents, 60_750);
-  assertEquals(accepted.state.history.dealsWon, 1);
+  const paused = applyCommand(sent.state, {
+    type: "advance_deal",
+    dealId: "deal_1",
+  });
+  assertEquals(paused.accepted, false);
+  assertStringIncludes(paused.reason ?? "", "respond");
+
+  const waiting = advanceGame(sent.state, 12 * 60 - 1);
+  assertEquals(waiting.state.records.quotes.quote_1.status, "sent");
+  assertEquals(waiting.state.records.deals.deal_1.stage, "negotiation");
+
+  const responded = advanceGame(waiting.state, 1);
+
+  assertEquals(responded.state.records.quotes.quote_1.status, "accepted");
+  assertEquals(responded.state.records.deals.deal_1.stage, "won");
+  assertEquals(responded.state.company.mrrCents, 60_750);
+  assertEquals(responded.state.history.dealsWon, 1);
 });
 
 Deno.test("sales representatives can be hired and assigned to deals", () => {

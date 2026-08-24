@@ -2235,7 +2235,10 @@ function PipelineWorkspace(props: {
     deal.stage !== "won" && deal.stage !== "lost"
   );
   const negotiationDeals = openDeals.filter((deal) =>
-    deal.stage === "negotiation"
+    deal.stage === "negotiation" &&
+    !Object.values(props.game.records.quotes).some((quote) =>
+      quote.dealId === deal.id && quote.status === "sent"
+    )
   );
   const salesReps = Object.values(props.game.records.salesReps).sort((a, b) =>
     a.hiredAt - b.hiredAt
@@ -2836,6 +2839,10 @@ function PipelineWorkspace(props: {
                         <button
                           type="button"
                           class="secondary"
+                          disabled={deal?.stage !== "negotiation"}
+                          title={deal?.stage === "negotiation"
+                            ? "Send quote"
+                            : "Advance deal to negotiation first"}
                           onClick={() =>
                             props.dispatch({
                               type: "set_quote_status",
@@ -2847,21 +2854,7 @@ function PipelineWorkspace(props: {
                         </button>
                       )}
                       {quote.status === "sent" && (
-                        <button
-                          type="button"
-                          class="primary"
-                          disabled={deal?.stage !== "negotiation"}
-                          title={deal?.stage === "negotiation"
-                            ? "Accept quote"
-                            : "Advance deal to negotiation first"}
-                          onClick={() =>
-                            props.dispatch({
-                              type: "accept_quote",
-                              quoteId: quote.id,
-                            })}
-                        >
-                          <Check size={15} />Accept
-                        </button>
+                        <small>Awaiting lead response</small>
                       )}
                       {(quote.status === "draft" || quote.status === "sent") &&
                         (
