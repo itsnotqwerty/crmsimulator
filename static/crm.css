@@ -1400,6 +1400,10 @@ main {
   gap: 14px;
 }
 
+.record-layout.single-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .table-panel {
   overflow: hidden;
 }
@@ -1431,8 +1435,8 @@ td {
   min-width: 86px;
   height: 62px;
   padding: 9px 13px;
-  border-bottom: 1px solid #edf0ee;
-  color: #37433f;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -1442,7 +1446,7 @@ tbody tr:last-child td {
 
 tbody tr:hover td,
 tbody tr.selected td {
-  background: #f3f8f6;
+  background: var(--surface-soft);
 }
 
 tbody tr.selected td:first-child {
@@ -4728,7 +4732,7 @@ table,
     padding: 13px;
     border: 1px solid var(--line);
     border-radius: 8px;
-    background: white;
+    background: var(--surface);
   }
 
   .lead-table td {
@@ -4795,8 +4799,8 @@ table,
     padding: 8px 10px;
     border: 1px solid var(--line-strong);
     border-radius: 6px;
-    color: var(--sidebar);
-    background: white;
+    color: var(--green-dark);
+    background: var(--surface);
     font: inherit;
     font-weight: 700;
   }
@@ -5103,8 +5107,8 @@ table,
     padding: 8px 10px;
     border: 1px solid var(--line-strong);
     border-radius: 6px;
-    color: var(--sidebar);
-    background: white;
+    color: var(--green-dark);
+    background: var(--surface);
     font: inherit;
     font-weight: 700;
   }
@@ -5149,7 +5153,7 @@ table,
     padding: 13px;
     border: 1px solid var(--line);
     border-radius: 8px;
-    background: white;
+    background: var(--surface);
   }
 
   .lead-table td,

@@ -4419,7 +4419,9 @@ export default function CrmApp(props: CrmAppProps) {
                   <p>Every person connected to your pipeline and customers.</p>
                 </div>
               </div>
-              <div class="record-layout">
+              <div
+                class={`record-layout ${selectedLead ? "" : "single-panel"}`}
+              >
                 <div class="panel table-panel">
                   <div class="table-toolbar">
                     <strong>{leads.length} contacts</strong>
