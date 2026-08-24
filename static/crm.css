@@ -242,6 +242,63 @@ body {
   color: var(--ink);
 }
 
+.site-shell {
+  min-height: 100vh;
+  background: var(--canvas);
+}
+
+.site-footer {
+  max-width: 88rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.site-footer p {
+  margin: 0.5rem 0;
+}
+
+.site-footer a {
+  color: var(--green);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--muted);
+}
+
+.site-footer a:hover {
+  color: var(--green-dark);
+  border-bottom-color: var(--green-dark);
+}
+
+.site-footer .donate-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.site-footer a.donate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.75rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: #f7931a;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 20%);
+  color: #fff;
+  font-weight: 700;
+}
+
+.site-footer a.donate:hover {
+  border: 0;
+  background: #e0830f;
+  color: #fff;
+}
+
 button,
 input {
   font: inherit;
