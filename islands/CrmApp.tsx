@@ -120,6 +120,25 @@ type View =
   | "operations"
   | "settings";
 
+type WorkspaceSearchResult = {
+  id: string;
+  view: View;
+  kind:
+    | "contact"
+    | "company"
+    | "task"
+    | "campaign"
+    | "deal"
+    | "quote"
+    | "customer"
+    | "staff"
+    | "ticket"
+    | "incident";
+  title: string;
+  detail: string;
+  searchable: string;
+};
+
 const TUTORIAL_COPY: Record<
   Exclude<OnboardingStep, "complete">,
   { title: string; detail: string; action: string; important?: string }
@@ -3435,18 +3454,170 @@ export default function CrmApp(props: CrmAppProps) {
     ? game.records.companies[selectedCompanyId.value]
     : undefined;
   const normalizedQuery = searchQuery.value.trim().toLowerCase();
-  const searchResults = normalizedQuery
-    ? leads.filter((lead) => {
+  const workspaceSearchResults: WorkspaceSearchResult[] = [
+    ...leads.map((lead) => {
       const company = game.records.companies[lead.companyId];
-      return [
-        lead.firstName,
-        lead.lastName,
-        lead.email,
-        lead.role,
-        company?.name,
-        company?.industry,
-      ].some((value) => value?.toLowerCase().includes(normalizedQuery));
-    }).slice(0, 6)
+      return {
+        id: lead.id,
+        view: "contacts" as const,
+        kind: "contact" as const,
+        title: `${lead.firstName} ${lead.lastName}`,
+        detail: `${lead.role} · ${company?.name ?? "Unknown company"}`,
+        searchable: [
+          lead.firstName,
+          lead.lastName,
+          lead.email,
+          lead.role,
+          lead.status,
+          company?.name,
+          company?.industry,
+        ].join(" "),
+      };
+    }),
+    ...companies.map((company) => ({
+      id: company.id,
+      view: "companies" as const,
+      kind: "company" as const,
+      title: company.name,
+      detail: `${company.industry} · ${company.region}`,
+      searchable: [company.name, company.industry, company.region].join(" "),
+    })),
+    ...Object.values(game.records.tasks).map((task) => ({
+      id: task.id,
+      view: "tasks" as const,
+      kind: "task" as const,
+      title: task.title,
+      detail: `${statusLabel(task.kind)} task · ${statusLabel(task.status)}`,
+      searchable: [task.id, task.title, task.kind, task.status].join(" "),
+    })),
+    ...Object.values(game.records.campaigns).map((campaign) => ({
+      id: campaign.id,
+      view: "marketing" as const,
+      kind: "campaign" as const,
+      title: campaign.name,
+      detail: `${statusLabel(campaign.channel)} campaign · ${
+        statusLabel(campaign.status)
+      }`,
+      searchable: [
+        campaign.id,
+        campaign.name,
+        campaign.channel,
+        campaign.audience,
+        campaign.objective,
+        campaign.status,
+        campaign.message,
+      ].join(" "),
+    })),
+    ...Object.values(game.records.deals).map((deal) => ({
+      id: deal.id,
+      view: "pipeline" as const,
+      kind: "deal" as const,
+      title: game.records.companies[deal.companyId]?.name ?? "Unknown deal",
+      detail: `${statusLabel(deal.product)} deal · ${statusLabel(deal.stage)}`,
+      searchable: [
+        deal.id,
+        game.records.companies[deal.companyId]?.name,
+        deal.product,
+        deal.stage,
+        deal.lossReason,
+      ].join(" "),
+    })),
+    ...Object.values(game.records.quotes).map((quote) => {
+      const deal = game.records.deals[quote.dealId];
+      const company = deal && game.records.companies[deal.companyId];
+      return {
+        id: quote.id,
+        view: "pipeline" as const,
+        kind: "quote" as const,
+        title: `Quote for ${company?.name ?? "Unknown company"}`,
+        detail: `${statusLabel(quote.product)} · ${statusLabel(quote.status)}`,
+        searchable: [
+          quote.id,
+          company?.name,
+          quote.product,
+          quote.billingCycle,
+          quote.status,
+        ].join(" "),
+      };
+    }),
+    ...Object.values(game.records.customers).map((customer) => {
+      const company = game.records.companies[customer.companyId];
+      return {
+        id: customer.id,
+        view: "customers" as const,
+        kind: "customer" as const,
+        title: company?.name ?? "Unknown customer",
+        detail: `Customer · ${statusLabel(customer.lifecycle)}`,
+        searchable: [
+          customer.id,
+          company?.name,
+          company?.industry,
+          customer.lifecycle,
+          customer.accountPlan,
+        ].join(" "),
+      };
+    }),
+    ...[
+      ...Object.values(game.records.salesReps).map((rep) => ({
+        ...rep,
+        view: "pipeline" as const,
+        detail: `${statusLabel(rep.level)} sales representative`,
+      })),
+      ...Object.values(game.records.successReps).map((rep) => ({
+        ...rep,
+        view: "customers" as const,
+        detail: `${statusLabel(rep.level)} success representative`,
+      })),
+      ...Object.values(game.records.supportReps).map((rep) => ({
+        ...rep,
+        view: "customers" as const,
+        detail: `${statusLabel(rep.level)} support representative`,
+      })),
+    ].map((rep) => ({
+      id: rep.id,
+      view: rep.view,
+      kind: "staff" as const,
+      title: rep.name,
+      detail: rep.detail,
+      searchable: [rep.id, rep.name, rep.level, rep.detail].join(" "),
+    })),
+    ...Object.values(game.records.tickets).map((ticket) => ({
+      id: ticket.id,
+      view: "customers" as const,
+      kind: "ticket" as const,
+      title: ticket.title,
+      detail: `${statusLabel(ticket.priority)} ticket · ${
+        statusLabel(ticket.status)
+      }`,
+      searchable: [
+        ticket.id,
+        ticket.title,
+        ticket.channel,
+        ticket.priority,
+        ticket.status,
+      ].join(" "),
+    })),
+    ...Object.values(game.records.incidents).map((incident) => ({
+      id: incident.id,
+      view: "customers" as const,
+      kind: "incident" as const,
+      title: incident.title,
+      detail: `${statusLabel(incident.severity)} incident · ${
+        statusLabel(incident.status)
+      }`,
+      searchable: [
+        incident.id,
+        incident.title,
+        incident.severity,
+        incident.status,
+      ].join(" "),
+    })),
+  ];
+  const searchResults = normalizedQuery
+    ? workspaceSearchResults.filter((result) =>
+      `${result.title} ${result.detail} ${result.searchable}`.toLowerCase()
+        .includes(normalizedQuery)
+    ).slice(0, 10)
     : [];
   const filteredLeads = leads.filter((lead) =>
     leadFilter.value === "all" || lead.status === leadFilter.value
@@ -3573,10 +3744,19 @@ export default function CrmApp(props: CrmAppProps) {
     });
   };
 
-  const openSearchResult = (leadId: string, trigger: HTMLElement) => {
-    openLead(leadId, trigger);
+  const openSearchResult = (
+    result: WorkspaceSearchResult,
+    trigger: HTMLElement,
+  ) => {
     searchQuery.value = "";
-    navigate("leads");
+    navigate(result.view);
+    if (result.kind === "contact") openLead(result.id, trigger);
+    if (result.kind === "company") selectedCompanyId.value = result.id;
+    globalThis.requestAnimationFrame(() => {
+      const target = document.getElementById(`record-${result.id}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.focus({ preventScroll: true });
+    });
   };
 
   const openGuidance = (trigger?: HTMLElement) => {
@@ -4029,8 +4209,8 @@ export default function CrmApp(props: CrmAppProps) {
               <Search size={16} />
               <input
                 ref={searchInputRef}
-                aria-label="Search CRM"
-                placeholder="Search contacts and companies"
+                aria-label="Search Workspace"
+                placeholder="Search Workspace"
                 value={searchQuery.value}
                 onInput={(event) =>
                   searchQuery.value = event.currentTarget.value}
@@ -4047,19 +4227,26 @@ export default function CrmApp(props: CrmAppProps) {
             </div>
             {normalizedQuery && (
               <div class="search-results">
-                {searchResults.map((lead) => (
+                {searchResults.map((result) => (
                   <button
                     type="button"
                     onClick={(event) =>
-                      openSearchResult(lead.id, event.currentTarget)}
+                      openSearchResult(result, event.currentTarget)}
                   >
-                    <Users size={17} />
+                    {result.kind === "company"
+                      ? <Building2 size={17} />
+                      : result.kind === "campaign"
+                      ? <Target size={17} />
+                      : result.kind === "deal" || result.kind === "quote"
+                      ? <FileText size={17} />
+                      : result.kind === "task"
+                      ? <Check size={17} />
+                      : result.kind === "ticket" || result.kind === "incident"
+                      ? <TriangleAlert size={17} />
+                      : <Users size={17} />}
                     <span>
-                      <strong>{lead.firstName} {lead.lastName}</strong>
-                      <small>
-                        {lead.role} ·{" "}
-                        {game.records.companies[lead.companyId].name}
-                      </small>
+                      <strong>{result.title}</strong>
+                      <small>{result.detail}</small>
                     </span>
                   </button>
                 ))}
@@ -5332,7 +5519,7 @@ export default function CrmApp(props: CrmAppProps) {
                           <button
                             type="button"
                             onClick={(event) =>
-                              openSearchResult(lead.id, event.currentTarget)}
+                              openLead(lead.id, event.currentTarget)}
                           >
                             <span>
                               <strong>{lead.firstName} {lead.lastName}</strong>
