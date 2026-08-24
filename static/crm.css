@@ -709,7 +709,7 @@ main {
   border: 1px solid var(--line-strong);
   border-radius: 7px;
   background: var(--surface);
-  box-shadow: 0 16px 38px rgb(23 32 29 / 16%);
+  box-shadow: 0 16px 38px color-mix(in srgb, var(--ink) 16%, transparent);
 }
 
 .search-results button {
@@ -723,7 +723,7 @@ main {
   border: 0;
   border-bottom: 1px solid var(--line);
   color: var(--green);
-  background: white;
+  background: var(--surface);
   text-align: left;
   cursor: pointer;
 }
