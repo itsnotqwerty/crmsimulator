@@ -366,6 +366,13 @@ const MIGRATIONS: Readonly<Record<number, Migration>> = {
       },
     };
   },
+  28: (save) => ({
+    ...save,
+    preferences: {
+      ...(save.preferences as Record<string, unknown>),
+      darkMode: false,
+    },
+  }),
 };
 
 export function migrateGameState(value: unknown): GameState {

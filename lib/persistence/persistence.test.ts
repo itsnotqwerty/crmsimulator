@@ -966,6 +966,18 @@ Deno.test("version 26 saves migrate Opal to Moonstone", () => {
   assertEquals(migrated.preferences.palette, "moonstone");
 });
 
+Deno.test("version 27 saves migrate with dark mode disabled", () => {
+  const current = createInitialState({ seed: 271, now: 1_000 });
+  const legacy = structuredClone(current) as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 27;
+  delete (legacy.preferences as Record<string, unknown>).darkMode;
+
+  const migrated = migrateGameState(legacy);
+
+  assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
+  assertEquals(migrated.preferences.darkMode, false);
+});
+
 Deno.test("save validation rejects unknown customer account plans", () => {
   const current = createInitialState({ seed: 116, now: 1_000 });
   const invalid = structuredClone(current) as unknown as Record<

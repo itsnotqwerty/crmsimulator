@@ -173,6 +173,7 @@ export function createInitialState(options: InitialStateOptions): GameState {
     narrative: { chapter: 0, pendingBriefing: true },
     preferences: {
       palette: "emerald",
+      darkMode: false,
       reducedMotion: false,
       soundEnabled: false,
       musicEnabled: false,

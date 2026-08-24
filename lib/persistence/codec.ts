@@ -144,6 +144,7 @@ const KEY_MAP: Readonly<Record<string, string>> = {
   pendingBriefing: "np",
   preferences: "p",
   palette: "pa",
+  darkMode: "dk",
   reducedMotion: "rm",
   soundEnabled: "se",
   musicEnabled: "mu",

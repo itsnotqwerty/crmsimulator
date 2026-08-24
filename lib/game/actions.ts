@@ -2320,6 +2320,18 @@ export function applyCommand(
         [],
         rules,
       );
+    case "set_dark_mode":
+      if (command.enabled === state.preferences.darkMode) {
+        return rejected(state, "Dark mode preference is unchanged");
+      }
+      return accepted(
+        {
+          ...state,
+          preferences: { ...state.preferences, darkMode: command.enabled },
+        },
+        [],
+        rules,
+      );
     case "set_reduced_motion":
       if (command.enabled === state.preferences.reducedMotion) {
         return rejected(state, "Reduced motion preference is unchanged");

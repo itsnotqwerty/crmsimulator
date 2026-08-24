@@ -558,6 +558,7 @@ export function parseGameState(value: unknown): GameState {
   }
   if (
     !isRecord(value.preferences) ||
+    typeof value.preferences.darkMode !== "boolean" ||
     typeof value.preferences.reducedMotion !== "boolean" ||
     typeof value.preferences.soundEnabled !== "boolean" ||
     typeof value.preferences.musicEnabled !== "boolean" ||

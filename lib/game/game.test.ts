@@ -2428,6 +2428,23 @@ Deno.test("reduced motion preference updates immutably", () => {
   assertEquals(initial.preferences.reducedMotion, false);
 });
 
+Deno.test("dark mode updates independently from the color palette", () => {
+  const initial = createInitialState({ seed: 631, now: 1_000 });
+  const updated = applyCommand(initial, {
+    type: "set_dark_mode",
+    enabled: true,
+  });
+
+  assert(updated.accepted);
+  assertEquals(updated.state.preferences.darkMode, true);
+  assertEquals(updated.state.preferences.palette, initial.preferences.palette);
+  assertEquals(initial.preferences.darkMode, false);
+  assertStrictEquals(
+    applyCommand(updated.state, { type: "set_dark_mode", enabled: true }).state,
+    updated.state,
+  );
+});
+
 Deno.test("sound preferences are independent and reject no-op updates", () => {
   const initial = createInitialState({ seed: 64, now: 1_000 });
   const pings = applyCommand(initial, {

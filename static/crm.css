@@ -185,6 +185,46 @@
   --focus-ring: rgb(65 107 97 / 26%);
 }
 
+.crm-app.dark-mode {
+  color-scheme: dark;
+  --ink: #edf2f0;
+  --muted: #b0bbb6;
+  --faint: #8e9b95;
+  --line: #35413c;
+  --line-strong: #48564f;
+  --canvas: #151a18;
+  --surface: #202724;
+  --surface-soft: #27302c;
+  --green-dark: color-mix(in srgb, var(--green) 52%, white);
+  --green-soft: color-mix(in srgb, var(--green) 22%, var(--surface));
+  --coral: #e08372;
+  --coral-soft: #412925;
+  --amber: #e0ad55;
+  --amber-soft: #3b3020;
+  color: var(--ink);
+}
+
+.crm-app.dark-mode .topbar {
+  background: rgb(32 39 36 / 95%);
+}
+
+.crm-app.dark-mode input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.crm-app.dark-mode select,
+.crm-app.dark-mode textarea {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.crm-app.dark-mode + .site-footer {
+  border-color: #35413c;
+  background: #151a18;
+  color: #b0bbb6;
+}
+
+.crm-app.dark-mode + .site-footer a {
+  color: #8bc4b8;
+}
+
 .initiative-panel {
   display: grid;
   gap: 16px;
@@ -1291,7 +1331,7 @@ main {
   border: 1px solid var(--line-strong);
   border-radius: 5px;
   color: transparent;
-  background: white;
+  background: var(--surface);
   cursor: pointer;
 }
 
@@ -3733,6 +3773,56 @@ td small {
   background: linear-gradient(105deg, #f0faf6, #fbfefc);
 }
 
+.dark-mode .narrative-panel {
+  border-color: #655634;
+  border-left-color: var(--amber);
+  background: linear-gradient(105deg, var(--amber-soft), var(--surface));
+}
+
+.dark-mode .narrative-panel.complete {
+  border-color: color-mix(in srgb, var(--green) 45%, var(--line));
+  border-left-color: var(--green-dark);
+  background: linear-gradient(105deg, var(--green-soft), var(--surface));
+}
+
+.dark-mode .narrative-heading span {
+  color: var(--amber);
+}
+
+.dark-mode .narrative-heading > b {
+  color: #f0d49b;
+  background: #493b22;
+}
+
+.dark-mode .narrative-open {
+  color: #e3bd73;
+}
+
+.dark-mode .narrative-objectives > div {
+  border-color: color-mix(in srgb, var(--amber) 28%, var(--line));
+  background: color-mix(in srgb, var(--amber-soft) 45%, var(--surface));
+}
+
+.dark-mode .narrative-objectives i,
+.dark-mode .campaign-objective-list i,
+.dark-mode .chapter-entry > i {
+  color: #f0d49b;
+  background: #493b22;
+}
+
+.dark-mode .narrative-objectives .done,
+.dark-mode .campaign-objective-list .done {
+  color: var(--green-dark);
+  background: var(--green-soft);
+}
+
+.dark-mode .narrative-objectives .done i,
+.dark-mode .campaign-objective-list .done i,
+.dark-mode .chapter-entry.complete > i {
+  color: white;
+  background: var(--green);
+}
+
 .narrative-heading {
   display: flex;
   align-items: flex-start;
@@ -4192,7 +4282,7 @@ td small {
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: white;
+  background: var(--surface);
   box-shadow: 0 24px 70px rgb(10 24 19 / 25%);
   animation: modal-in 180ms ease-out;
 }

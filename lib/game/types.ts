@@ -1,4 +1,4 @@
-export const SAVE_SCHEMA_VERSION = 27 as const;
+export const SAVE_SCHEMA_VERSION = 28 as const;
 export const CONTENT_VERSION = 1 as const;
 
 export type EntityId = string;
@@ -526,6 +526,7 @@ export interface NarrativeState {
 
 export interface PreferenceState {
   palette: ColorPalette;
+  darkMode: boolean;
   reducedMotion: boolean;
   soundEnabled: boolean;
   musicEnabled: boolean;
@@ -643,6 +644,7 @@ export type GameCommand =
   | { type: "archive_campaign"; campaignId: EntityId }
   | { type: "rename_company"; name: string }
   | { type: "set_palette"; palette: ColorPalette }
+  | { type: "set_dark_mode"; enabled: boolean }
   | { type: "set_reduced_motion"; enabled: boolean }
   | { type: "set_sound_enabled"; enabled: boolean }
   | { type: "set_music_enabled"; enabled: boolean }

@@ -3621,8 +3621,8 @@ export default function CrmApp(props: CrmAppProps) {
   return (
     <div
       class={`crm-app palette-${game.preferences.palette} ${
-        game.preferences.reducedMotion ? "reduce-motion" : ""
-      }`}
+        game.preferences.darkMode ? "dark-mode" : ""
+      } ${game.preferences.reducedMotion ? "reduce-motion" : ""}`}
     >
       <aside class={`sidebar ${mobileNav.value ? "open" : ""}`}>
         <div class="brand">
@@ -5182,6 +5182,30 @@ export default function CrmApp(props: CrmAppProps) {
                       </button>
                     ))}
                   </div>
+                </div>
+                <div class="panel settings-panel appearance-panel">
+                  <h2>Appearance</h2>
+                  <p>
+                    Adjust workspace brightness independently of your color
+                    palette.
+                  </p>
+                  <label class="toggle-row">
+                    <span>
+                      <strong>Dark mode</strong>
+                      <small>
+                        Use lower-glare surfaces throughout the CRM.
+                      </small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={game.preferences.darkMode}
+                      onChange={(event) =>
+                        dispatch({
+                          type: "set_dark_mode",
+                          enabled: event.currentTarget.checked,
+                        })}
+                    />
+                  </label>
                 </div>
                 <div class="panel settings-panel identity-panel">
                   <h2>Workspace identity</h2>
