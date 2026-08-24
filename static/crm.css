@@ -1100,6 +1100,10 @@ main {
   box-shadow: none;
 }
 
+.dark-mode .primary:disabled {
+  background: var(--surface-soft);
+}
+
 .secondary {
   border: 1px solid var(--line-strong);
   color: var(--ink);
@@ -1901,6 +1905,10 @@ td small {
   background: #e9eeeb;
 }
 
+.dark-mode .segmented-control {
+  background: var(--surface-soft);
+}
+
 .segmented-control button {
   display: inline-flex;
   min-height: 34px;
@@ -2344,6 +2352,11 @@ td small {
   border: 1px solid #b8d3c9;
   border-radius: 8px;
   background: white;
+}
+
+.dark-mode .quote-preview {
+  border-color: var(--line-strong);
+  background: var(--surface);
 }
 
 .quote-preview > span,
