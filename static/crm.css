@@ -1219,6 +1219,11 @@ main {
   background: #edf1ef;
 }
 
+.dark-mode .kpi-icon {
+  color: var(--muted);
+  background: var(--surface-soft);
+}
+
 .kpi-icon.positive {
   color: var(--green);
   background: var(--green-soft);
