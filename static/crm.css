@@ -4318,6 +4318,10 @@ table,
     grid-template-columns: 1fr;
   }
 
+  .hire-rep-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .record-detail {
     position: static;
   }
@@ -4385,10 +4389,6 @@ table,
   }
 
   .deal-editor form {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .hire-rep-form {
     grid-template-columns: 1fr 1fr;
   }
 

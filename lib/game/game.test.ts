@@ -1675,6 +1675,37 @@ Deno.test("sales representatives can be hired and assigned to deals", () => {
   assertEquals(reassigned.state.records.leads.lead_1.ownerId, "sales_rep_2");
 });
 
+Deno.test("Founder-owned qualified leads can be assigned through their deal", () => {
+  let state = createInitialState({ seed: 440, now: 1_000 });
+  state = applyCommand(state, {
+    type: "contact_lead",
+    leadId: "lead_1",
+    channel: "email",
+  }).state;
+  state = applyCommand(state, {
+    type: "qualify_lead",
+    leadId: "lead_1",
+  }).state;
+  state = { ...state, unlocks: ["pipeline"] };
+  state = applyCommand(state, {
+    type: "hire_sales_rep",
+    name: "Avery Chen",
+    level: "mid",
+    territory: "all",
+    monthlyTargetCents: 1_500_000,
+  }).state;
+
+  const assigned = applyCommand(state, {
+    type: "assign_deal",
+    dealId: "deal_1",
+    ownerId: "sales_rep_1",
+  });
+
+  assert(assigned.accepted);
+  assertEquals(assigned.state.records.deals.deal_1.ownerId, "sales_rep_1");
+  assertEquals(assigned.state.records.leads.lead_1.ownerId, "sales_rep_1");
+});
+
 Deno.test("active leads can be reassigned after their owner is fired", () => {
   let state = createInitialState({ seed: 441, now: 1_000 });
   state = { ...state, unlocks: ["pipeline"] };

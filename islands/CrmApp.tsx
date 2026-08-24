@@ -5686,6 +5686,7 @@ function LeadPanel(
   const deal = Object.values(props.game.records.deals).find((entry) =>
     entry.leadId === props.lead.id
   );
+  const dealClosed = deal?.stage === "won" || deal?.stage === "lost";
   useEffect(() => {
     closeButton.current?.focus();
   }, [props.lead.id]);
@@ -5787,16 +5788,26 @@ function LeadPanel(
               <select
                 aria-label={`Owner for ${props.lead.firstName} ${props.lead.lastName}`}
                 value={props.lead.ownerId ?? ""}
-                disabled={Boolean(deal)}
-                title={deal
-                  ? "Reassign this qualified lead from its Pipeline deal"
+                disabled={dealClosed}
+                title={dealClosed
+                  ? "Closed deals cannot be reassigned"
                   : undefined}
-                onChange={(event) =>
-                  props.dispatch({
-                    type: "assign_lead",
-                    leadId: props.lead.id,
-                    ownerId: event.currentTarget.value || undefined,
-                  })}
+                onChange={(event) => {
+                  const ownerId = event.currentTarget.value || undefined;
+                  props.dispatch(
+                    deal
+                      ? {
+                        type: "assign_deal",
+                        dealId: deal.id,
+                        ownerId,
+                      }
+                      : {
+                        type: "assign_lead",
+                        leadId: props.lead.id,
+                        ownerId,
+                      },
+                  );
+                }}
               >
                 <option value="">Founder</option>
                 {Object.values(props.game.records.salesReps).map((rep) => (
