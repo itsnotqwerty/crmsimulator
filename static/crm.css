@@ -454,6 +454,7 @@ main {
 
 .search-shell {
   position: relative;
+  min-width: 0;
   width: min(520px, 46vw);
 }
 
@@ -563,7 +564,7 @@ main {
 
 .topbar-meta {
   display: flex;
-  min-width: 0;
+  flex: 0 0 auto;
   align-items: center;
   gap: 12px;
   margin-left: auto;
@@ -571,6 +572,7 @@ main {
 
 .time-controls {
   display: inline-flex;
+  flex: 0 0 auto;
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
@@ -1262,6 +1264,11 @@ tbody tr.selected td {
 
 tbody tr.selected td:first-child {
   box-shadow: inset 3px 0 var(--green);
+}
+
+.lead-table tbody tr:hover td,
+.lead-table tbody tr.selected td {
+  background: transparent;
 }
 
 td strong,
@@ -4194,14 +4201,6 @@ table,
 }
 
 @media (min-width: 1101px) {
-  .lead-table tbody tr:hover:not(.selected) td {
-    background: transparent;
-  }
-
-  .lead-table tbody tr:hover:not(.selected) td:first-child {
-    box-shadow: inset 2px 0 var(--line-strong);
-  }
-
   .lead-table tbody tr:focus-visible {
     outline: 2px solid var(--green);
     outline-offset: -2px;
