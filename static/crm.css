@@ -415,14 +415,14 @@ body {
   border-radius: 0.5rem;
   background: #f7931a;
   box-shadow: 0 2px 6px rgb(0 0 0 / 20%);
-  color: #fff;
+  color: #2b1700;
   font-weight: 700;
 }
 
 .site-footer a.donate:hover {
   border: 0;
   background: #e0830f;
-  color: #fff;
+  color: #2b1700;
 }
 
 button,

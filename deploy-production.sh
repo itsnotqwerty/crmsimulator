@@ -15,13 +15,13 @@ domain="crmsim.coolfreakingames.dev"
 cd "$repo_root"
 git submodule update --init deploy
 
-if systemctl cat "$legacy_name.service" >/dev/null 2>&1; then
-  systemctl disable --now "$legacy_name.service"
-fi
+systemctl stop "$legacy_name.service" >/dev/null 2>&1 || true
+systemctl disable "$legacy_name.service" >/dev/null 2>&1 || true
 rm -f \
   "/etc/systemd/system/$legacy_name.service" \
   "/etc/nginx/conf.d/$legacy_name.conf"
 systemctl daemon-reload
+systemctl reset-failed "$legacy_name.service" >/dev/null 2>&1 || true
 
 exec ./deploy/install.sh \
   --name "$canonical_name" \
