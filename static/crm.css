@@ -1508,6 +1508,14 @@ td small {
   background: var(--green-soft);
 }
 
+.dark-mode .status.contacted {
+  color: #f0d49b;
+}
+
+.dark-mode .status.converted {
+  color: var(--green-dark);
+}
+
 .status.disqualified,
 .status.lost,
 .status.cold {
