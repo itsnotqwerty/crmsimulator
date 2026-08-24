@@ -2,12 +2,14 @@
 // This file SHOULD be checked into source version control.
 // This file is automatically updated during development when running `dev.ts`.
 
+import * as $crm_styles from "./routes/crm-styles.ts";
 import * as $index from "./routes/index.tsx";
 import * as $CrmApp from "./islands/CrmApp.tsx";
 import type { Manifest } from "$fresh/server.ts";
 
 const manifest = {
   routes: {
+    "./routes/crm-styles.ts": $crm_styles,
     "./routes/index.tsx": $index,
   },
   islands: {

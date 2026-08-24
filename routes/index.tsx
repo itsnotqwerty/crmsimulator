@@ -41,7 +41,7 @@ export default function RootPage({ data }: PageProps<RootPageData>) {
         />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#173f35" />
-        <link rel="stylesheet" href="/crm.css" />
+        <link rel="stylesheet" href="/crm-styles" />
       </Head>
       <div class="site-shell">
         {showPrologue
