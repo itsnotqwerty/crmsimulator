@@ -95,6 +95,8 @@
   --coral-soft: #f8e8eb;
   --sidebar: #344956;
   --sidebar-soft: #425f6c;
+  --sidebar-muted: #a5c1c4;
+  --sidebar-heading: #a5c1c4;
   --focus-ring: rgb(54 116 122 / 24%);
 }
 
@@ -112,6 +114,75 @@
   --sidebar: #29302e;
   --sidebar-soft: #3a4542;
   --focus-ring: rgb(79 111 104 / 24%);
+}
+
+.crm-app.palette-citrine {
+  --ink: #2e2922;
+  --muted: #655d52;
+  --faint: #7b7164;
+  --line: #e5ddd1;
+  --line-strong: #d3c5b2;
+  --canvas: #f5f2ec;
+  --surface: #ffffff;
+  --surface-soft: #faf7f2;
+  --green: #b1661d;
+  --green-dark: #81470f;
+  --green-soft: #f7ead8;
+  --coral: #a64e45;
+  --coral-soft: #f8e8e4;
+  --sidebar: #493a2d;
+  --sidebar-soft: #604b38;
+  --sidebar-text: #eadfd0;
+  --sidebar-muted: #c9b79f;
+  --sidebar-heading: #d6c2a8;
+  --sidebar-accent: #e3a83b;
+  --focus-ring: rgb(177 102 29 / 24%);
+}
+
+.crm-app.palette-amethyst {
+  --ink: #29242e;
+  --muted: #62596a;
+  --faint: #796f80;
+  --line: #e2dce6;
+  --line-strong: #cec3d5;
+  --canvas: #f3f1f5;
+  --surface: #ffffff;
+  --surface-soft: #faf8fb;
+  --green: #735b86;
+  --green-dark: #554363;
+  --green-soft: #eee8f2;
+  --coral: #a85068;
+  --coral-soft: #f7e7ec;
+  --sidebar: #403548;
+  --sidebar-soft: #55445f;
+  --sidebar-text: #dfd3e5;
+  --sidebar-muted: #bdaac7;
+  --sidebar-heading: #c9b5d3;
+  --sidebar-accent: #d6a85b;
+  --focus-ring: rgb(115 91 134 / 24%);
+}
+
+.crm-app.palette-obsidian {
+  --ink: #1e2322;
+  --muted: #59625f;
+  --faint: #717b77;
+  --line: #d9dfdc;
+  --line-strong: #c5ceca;
+  --canvas: #e9edeb;
+  --surface: #fbfcfb;
+  --surface-soft: #f3f5f4;
+  --green: #416b61;
+  --green-dark: #2d5148;
+  --green-soft: #e2ece8;
+  --coral: #9b4f4b;
+  --coral-soft: #f5e7e5;
+  --sidebar: #151918;
+  --sidebar-soft: #252b29;
+  --sidebar-text: #d6dfdb;
+  --sidebar-muted: #9eada7;
+  --sidebar-heading: #acbbb5;
+  --sidebar-accent: #d5a84f;
+  --focus-ring: rgb(65 107 97 / 26%);
 }
 
 .initiative-panel {
@@ -3413,6 +3484,33 @@ td small {
 }
 .palette-swatch.onyx i:nth-child(3) {
   background: #e9efed;
+}
+.palette-swatch.citrine i:nth-child(1) {
+  background: #493a2d;
+}
+.palette-swatch.citrine i:nth-child(2) {
+  background: #b1661d;
+}
+.palette-swatch.citrine i:nth-child(3) {
+  background: #f7ead8;
+}
+.palette-swatch.amethyst i:nth-child(1) {
+  background: #403548;
+}
+.palette-swatch.amethyst i:nth-child(2) {
+  background: #735b86;
+}
+.palette-swatch.amethyst i:nth-child(3) {
+  background: #eee8f2;
+}
+.palette-swatch.obsidian i:nth-child(1) {
+  background: #151918;
+}
+.palette-swatch.obsidian i:nth-child(2) {
+  background: #416b61;
+}
+.palette-swatch.obsidian i:nth-child(3) {
+  background: #e2ece8;
 }
 
 @media (max-width: 600px) {

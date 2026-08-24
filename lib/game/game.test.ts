@@ -58,6 +58,18 @@ Deno.test("color palette preference updates deterministically", () => {
   );
 });
 
+Deno.test("expanded gemstone palettes are accepted", () => {
+  for (const palette of ["citrine", "amethyst", "obsidian"] as const) {
+    const changed = applyCommand(createInitialState({ seed: 44, now: 1_000 }), {
+      type: "set_palette",
+      palette,
+    });
+
+    assert(changed.accepted);
+    assertEquals(changed.state.preferences.palette, palette);
+  }
+});
+
 Deno.test("random values depend only on seed and cursor", () => {
   assertEquals(randomAt(99, 7), randomAt(99, 7));
   assert(randomAt(99, 7) !== randomAt(99, 8));
@@ -3081,16 +3093,20 @@ Deno.test("qualification workflows require contacted leads over 70 intent", () =
   const atThreshold = applyAutomations(state, [contactedEvent], DEFAULT_RULES);
   assertEquals(atThreshold.state.records.leads.lead_1.status, "contacted");
 
-  const overThreshold = applyAutomations({
-    ...state,
-    records: {
-      ...state.records,
-      leads: {
-        ...state.records.leads,
-        lead_1: { ...state.records.leads.lead_1, engagement: 71 },
+  const overThreshold = applyAutomations(
+    {
+      ...state,
+      records: {
+        ...state.records,
+        leads: {
+          ...state.records.leads,
+          lead_1: { ...state.records.leads.lead_1, engagement: 71 },
+        },
       },
     },
-  }, [contactedEvent], DEFAULT_RULES);
+    [contactedEvent],
+    DEFAULT_RULES,
+  );
   assertEquals(overThreshold.state.records.leads.lead_1.status, "qualified");
   assert(
     Object.values(overThreshold.state.records.deals).some((deal) =>

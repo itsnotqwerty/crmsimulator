@@ -954,6 +954,18 @@ Deno.test("version 25 saves gain bounded initiative state", () => {
   assertEquals(migrated.platform.quarterInitiativeCompleted, false);
 });
 
+Deno.test("version 26 saves migrate Opal to Moonstone", () => {
+  const current = createInitialState({ seed: 261, now: 1_000 });
+  const legacy = structuredClone(current) as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 26;
+  (legacy.preferences as Record<string, unknown>).palette = "opal";
+
+  const migrated = migrateGameState(legacy);
+
+  assertEquals(migrated.schemaVersion, SAVE_SCHEMA_VERSION);
+  assertEquals(migrated.preferences.palette, "moonstone");
+});
+
 Deno.test("save validation rejects unknown customer account plans", () => {
   const current = createInitialState({ seed: 116, now: 1_000 });
   const invalid = structuredClone(current) as unknown as Record<

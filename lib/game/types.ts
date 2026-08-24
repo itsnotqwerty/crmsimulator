@@ -12,7 +12,10 @@ export type ColorPalette =
   | "ruby"
   | "pearl"
   | "moonstone"
-  | "onyx";
+  | "onyx"
+  | "citrine"
+  | "amethyst"
+  | "obsidian";
 export type LeadStatus =
   | "new"
   | "contacted"

@@ -570,6 +570,9 @@ export function parseGameState(value: unknown): GameState {
       "pearl",
       "moonstone",
       "onyx",
+      "citrine",
+      "amethyst",
+      "obsidian",
     ].includes(String(value.preferences.palette)) ||
     !["list", "board"].includes(String(value.preferences.pipelineView)) ||
     ![1, 2, 4].includes(Number(value.preferences.timeScale))

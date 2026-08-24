@@ -2302,6 +2302,9 @@ export function applyCommand(
           "pearl",
           "moonstone",
           "onyx",
+          "citrine",
+          "amethyst",
+          "obsidian",
         ].includes(command.palette)
       ) {
         return rejected(state, "Color palette is invalid");
