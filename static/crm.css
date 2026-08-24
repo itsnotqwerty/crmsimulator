@@ -1508,12 +1508,38 @@ td small {
   background: var(--green-soft);
 }
 
-.dark-mode .status.contacted {
-  color: #f0d49b;
+.dark-mode .status {
+  color: var(--muted);
+  background: var(--surface-soft);
 }
 
-.dark-mode .status.converted {
+.dark-mode .status.new,
+.dark-mode .status.qualified {
+  color: #a9cff1;
+  background: #25394a;
+}
+
+.dark-mode .status.contacted,
+.dark-mode .status.discovery,
+.dark-mode .status.evaluation,
+.dark-mode .status.negotiation,
+.dark-mode .status.paused {
+  color: #f0d49b;
+  background: var(--amber-soft);
+}
+
+.dark-mode .status.converted,
+.dark-mode .status.won,
+.dark-mode .status.active {
   color: var(--green-dark);
+  background: var(--green-soft);
+}
+
+.dark-mode .status.disqualified,
+.dark-mode .status.lost,
+.dark-mode .status.cold {
+  color: #efb3a7;
+  background: var(--coral-soft);
 }
 
 .status.disqualified,
@@ -1896,6 +1922,10 @@ td small {
   box-shadow: 0 1px 3px rgb(23 32 29 / 15%);
 }
 
+.dark-mode .segmented-control button.active {
+  background: var(--surface);
+}
+
 .pipeline-summary {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -2027,6 +2057,17 @@ td small {
 .workflow-card.paused {
   background: #fafbfa;
   opacity: 0.78;
+}
+
+.dark-mode .workflow-preview,
+.dark-mode .workflow-card {
+  border-color: var(--line-strong);
+  background: var(--surface);
+}
+
+.dark-mode .workflow-list,
+.dark-mode .workflow-card.paused {
+  background: var(--surface-soft);
 }
 
 .workflow-card > header,
@@ -3176,6 +3217,14 @@ td small {
   border-radius: 6px;
   background: white;
   box-shadow: 0 2px 7px rgb(23 32 29 / 5%);
+}
+
+.dark-mode .pipeline-column {
+  background: var(--surface-soft);
+}
+
+.dark-mode .pipeline-card {
+  background: var(--surface);
 }
 
 .pipeline-card > div:first-child {
