@@ -425,6 +425,11 @@ body {
   color: #2b1700;
 }
 
+.crm-app.dark-mode + .site-footer a.donate,
+.crm-app.dark-mode + .site-footer a.donate:hover {
+  color: #2b1700;
+}
+
 button,
 input {
   font: inherit;
