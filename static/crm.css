@@ -3401,13 +3401,13 @@ td small {
 
 .palette-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(94px, 1fr));
+  grid-template-columns: repeat(3, minmax(114px, 1fr));
   gap: 8px;
 }
 
 .palette-options button {
   display: grid;
-  min-width: 94px;
+  min-width: 114px;
   gap: 8px;
   justify-items: start;
   padding: 10px;
@@ -3416,6 +3416,10 @@ td small {
   color: var(--ink);
   background: var(--surface);
   cursor: pointer;
+}
+
+.palette-options button strong {
+  white-space: nowrap;
 }
 
 .palette-options button.active {
@@ -3512,6 +3516,35 @@ td small {
 }
 .palette-swatch.obsidian i:nth-child(3) {
   background: #e2ece8;
+}
+
+@media (max-width: 1180px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .palette-panel {
+    margin-inline: -14px;
+    padding: 14px 8px;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .palette-options {
+    grid-template-columns: repeat(3, minmax(90px, 1fr));
+  }
+
+  .palette-options button {
+    min-width: 90px;
+    padding: 8px 6px;
+  }
+
+  .palette-options button strong {
+    font-size: 11px;
+  }
 }
 
 .identity-panel {
