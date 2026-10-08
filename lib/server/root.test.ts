@@ -1,4 +1,9 @@
-import { assert, assertEquals, assertStringIncludes } from "$std/assert/mod.ts";
+import {
+  assert,
+  assertEquals,
+  assertStringIncludes,
+  assertThrows,
+} from "$std/assert/mod.ts";
 import { createInitialState } from "../game/state.ts";
 import {
   createSetCookieHeaders,
@@ -119,22 +124,31 @@ Deno.test("forwarded HTTPS marks proxy-served cookies secure", () => {
   assertEquals(getRootConfig(request).secure, true);
 });
 
-Deno.test("production smoke sets secure cookie flags behind forwarded HTTPS", async () => {
+Deno.test("production smoke sets secure legacy cookie flags behind forwarded HTTPS", async () => {
   const request = new Request("http://127.0.0.1:8000/", {
     headers: { "x-forwarded-proto": "https" },
   });
   const secret = Deno.env.get("COOKIE_SECRET");
   const deploymentId = Deno.env.get("DENO_DEPLOYMENT_ID");
   let productionConfig: RootConfig;
+  const databaseUrl = Deno.env.get("DATABASE_URL");
   try {
     Deno.env.set("COOKIE_SECRET", SECRET);
     Deno.env.set("DENO_DEPLOYMENT_ID", "release-verification");
-    productionConfig = { ...getRootConfig(request), now: 1_000, seed: 81 };
+    Deno.env.set("DATABASE_URL", "postgres://test:test@localhost:5432/test");
+    productionConfig = {
+      ...getRootConfig(request),
+      saveStore: undefined,
+      now: 1_000,
+      seed: 81,
+    };
   } finally {
     if (secret === undefined) Deno.env.delete("COOKIE_SECRET");
     else Deno.env.set("COOKIE_SECRET", secret);
     if (deploymentId === undefined) Deno.env.delete("DENO_DEPLOYMENT_ID");
     else Deno.env.set("DENO_DEPLOYMENT_ID", deploymentId);
+    if (databaseUrl === undefined) Deno.env.delete("DATABASE_URL");
+    else Deno.env.set("DATABASE_URL", databaseUrl);
   }
 
   const loaded = await loadRoot(request, productionConfig);
@@ -146,6 +160,26 @@ Deno.test("production smoke sets secure cookie flags behind forwarded HTTPS", as
     assertStringIncludes(header, "HttpOnly");
     assertStringIncludes(header, "SameSite=Strict");
     assertStringIncludes(header, "Secure");
+  }
+});
+
+Deno.test("local production requires DATABASE_URL", () => {
+  const names = ["DATABASE_URL", "DENO_ENV", "COOKIE_SECRET"];
+  const previous = names.map((name) => Deno.env.get(name));
+  try {
+    Deno.env.delete("DATABASE_URL");
+    Deno.env.set("DENO_ENV", "production");
+    Deno.env.set("COOKIE_SECRET", SECRET);
+    assertThrows(
+      () => getRootConfig(new Request(URL)),
+      Error,
+      "DATABASE_URL is required",
+    );
+  } finally {
+    names.forEach((name, index) => {
+      if (previous[index] === undefined) Deno.env.delete(name);
+      else Deno.env.set(name, previous[index]!);
+    });
   }
 });
 

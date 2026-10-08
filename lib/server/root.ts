@@ -16,7 +16,7 @@ import {
 import { fitGameStateToEncodedBudget } from "../persistence/fit.ts";
 import { migrateGameState } from "../persistence/migrations.ts";
 import {
-  createSupabaseGameSaveStore,
+  createPostgresGameSaveStore,
   type GameSaveStore,
   type SaveCredential,
 } from "../persistence/save_store.ts";
@@ -78,15 +78,14 @@ function requestOrigin(request: Request): string {
 
 export function getRootConfig(request: Request): RootConfig {
   const configuredSecret = Deno.env.get("COOKIE_SECRET");
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!configuredSecret && Deno.env.get("DENO_DEPLOYMENT_ID")) {
+  const databaseUrl = Deno.env.get("DATABASE_URL");
+  const production = Deno.env.get("DENO_DEPLOYMENT_ID") ||
+    Deno.env.get("DENO_ENV") === "production";
+  if (!configuredSecret && production) {
     throw new Error("COOKIE_SECRET is required in production");
   }
-  if (Deno.env.get("DENO_DEPLOYMENT_ID") && (!supabaseUrl || !serviceRoleKey)) {
-    throw new Error(
-      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production",
-    );
+  if (production && !databaseUrl) {
+    throw new Error("DATABASE_URL is required in production");
   }
 
   return {
@@ -95,8 +94,8 @@ export function getRootConfig(request: Request): RootConfig {
     seed: crypto.getRandomValues(new Uint32Array(1))[0],
     secure: requestProtocol(request) === "https" ||
       new URL(request.url).protocol === "https:",
-    saveStore: supabaseUrl && serviceRoleKey
-      ? createSupabaseGameSaveStore(supabaseUrl, serviceRoleKey)
+    saveStore: databaseUrl
+      ? createPostgresGameSaveStore(databaseUrl)
       : undefined,
   };
 }

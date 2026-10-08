@@ -8,14 +8,14 @@ success, support, analytics, automation, and operations tools.
 The CRM is the game: leads arrive over time, outreach consumes capacity, deals
 become subscriptions, recurring revenue competes with operating costs, and
 neglected work creates measurable business consequences. There is no login or
-multiplayer. Anonymous saves are stored in Supabase and are tied to an opaque,
+multiplayer. Anonymous saves are stored in local PostgreSQL and are tied to an opaque,
 HttpOnly browser capability cookie.
 
 ## Status
 
 The product specification, technical design, and implementation roadmap are
 complete. Release 1 is implemented: the deterministic headless company engine,
-command reducers, offline crisis rules, schema migrations, anonymous Supabase
+command reducers, offline crisis rules, schema migrations, anonymous PostgreSQL
 persistence, and foundation tests are available under `lib/`.
 
 Release 2 is complete with a playable root-only SPA: the responsive CRM shell,
@@ -122,16 +122,16 @@ There are no feature pages or API routes. Fresh-generated JavaScript, CSS,
 source maps, icons, fonts, and static media may use their normal asset paths
 because Fresh requires those requests to run the client application.
 
-### Anonymous Supabase storage
+### Anonymous PostgreSQL storage
 
-The complete schema-versioned game state is stored server-side in Supabase. No
+The complete schema-versioned game state is stored server-side in PostgreSQL. No
 account is required. The browser receives one opaque capability cookie
 containing a random save ID and a 256-bit token; only a SHA-256 hash of that
 token is stored in the database. The cookie is HttpOnly, SameSite=Strict, and
-Secure in production. Supabase is accessed only by the Fresh server with the
-service-role key, and row-level security blocks direct browser access.
+Secure in production. Only the Fresh server connects to PostgreSQL, using a
+private connection string and parameterized queries.
 
-Existing signed, chunked cookie saves are imported into Supabase on their first
+Existing signed, chunked cookie saves are imported into PostgreSQL on their first
 request after deployment. The old save cookies are then cleared. `COOKIE_SECRET`
 must remain stable while this migration path is supported.
 
@@ -161,7 +161,7 @@ company operations.
 - [Deno](https://deno.com/) 2.x
 - [Fresh](https://fresh.deno.dev/) 1.7
 - [Preact](https://preactjs.com/) and Signals
-- [Supabase](https://supabase.com/) Postgres
+- Local PostgreSQL 16+ with Postgres.js
 - Hand-authored responsive CSS in `static/crm.css`
 - Deno standard library
 
@@ -201,25 +201,22 @@ Copy `.env.example` to `.env` and provide these server-only values:
 
 ```text
 COOKIE_SECRET=<stable high-entropy secret>
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+DATABASE_URL=postgres://crmsimulator:<password>@127.0.0.1:5432/crmsimulator
+DENO_ENV=production
 ```
 
-Find the URL and service-role key in the Supabase project API settings. Never
-expose `SUPABASE_SERVICE_ROLE_KEY` in browser code, source control, or a public
-environment. It bypasses row-level security and is used only by the Fresh
-server.
-
-Apply the database migration before starting the application. With the Supabase
-CLI linked to the project:
+Keep `DATABASE_URL` server-only. Apply the schema before starting the app,
+with `DATABASE_URL` exported in your shell:
 
 ```sh
-supabase db push
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
 ```
 
-Alternatively, run `supabase/migrations/20260824000000_anonymous_saves.sql` in
-the Supabase SQL Editor. The migration creates `crm_anonymous_saves`, enables
-row-level security, and revokes browser roles.
+See [docs/postgres.md](docs/postgres.md) for local server provisioning, backup,
+and importing existing Supabase saves. Historical migrations under `supabase/`
+are not used for new installations. Production refuses to start a request
+without `DATABASE_URL` and `COOKIE_SECRET`; development without a database
+retains the legacy cookie-only save path.
 
 The deployed application must use HTTPS so the anonymous capability cookie can
 use the Secure flag. `COOKIE_SECRET` signs and verifies legacy chunked saves

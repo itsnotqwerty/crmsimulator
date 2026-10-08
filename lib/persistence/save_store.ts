@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import postgres from "postgres";
 import { decodeBase64Url, encodeBase64Url } from "$std/encoding/base64url.ts";
 import type { GameState } from "../game/types.ts";
 import { parseGameState } from "./schema.ts";
@@ -40,29 +40,28 @@ async function tokenHash(token: string): Promise<string> {
   ).join("");
 }
 
-export class SupabaseGameSaveStore implements GameSaveStore {
-  constructor(private readonly client: SupabaseClient) {}
+export class PostgresGameSaveStore implements GameSaveStore {
+  constructor(private readonly sql: ReturnType<typeof postgres>) {}
 
   async create(state: GameState): Promise<SaveCredential> {
     const credential = { id: crypto.randomUUID(), token: randomToken() };
-    const { error } = await this.client.from("crm_anonymous_saves").insert({
-      id: credential.id,
-      token_hash: await tokenHash(credential.token),
-      state,
-      revision: state.revision,
-    });
-    if (error) throw new Error(`Could not create save: ${error.message}`);
+    await this.sql`
+      INSERT INTO crm_anonymous_saves (id, token_hash, state, revision)
+      VALUES (${credential.id}, ${await tokenHash(credential.token)},
+        ${
+      this.sql.json(state as unknown as postgres.JSONValue)
+    }, ${state.revision})
+    `;
     return credential;
   }
 
   async load(credential: SaveCredential): Promise<GameState | undefined> {
-    const { data, error } = await this.client.from("crm_anonymous_saves")
-      .select("state")
-      .eq("id", credential.id)
-      .eq("token_hash", await tokenHash(credential.token))
-      .maybeSingle<SaveRow>();
-    if (error) throw new Error(`Could not load save: ${error.message}`);
-    return data ? parseGameState(data.state) : undefined;
+    const [row] = await this.sql<SaveRow[]>`
+      SELECT state FROM crm_anonymous_saves
+      WHERE id = ${credential.id}
+        AND token_hash = ${await tokenHash(credential.token)}
+    `;
+    return row ? parseGameState(row.state) : undefined;
   }
 
   async update(
@@ -71,46 +70,39 @@ export class SupabaseGameSaveStore implements GameSaveStore {
     expectedRevision: number,
   ): Promise<SaveUpdateResult> {
     const hash = await tokenHash(credential.token);
-    const { data, error } = await this.client.from("crm_anonymous_saves")
-      .update({
-        state,
-        revision: state.revision,
-        updated_at: new Date(state.savedAt).toISOString(),
-      })
-      .eq("id", credential.id)
-      .eq("token_hash", hash)
-      .eq("revision", expectedRevision)
-      .select("id")
-      .maybeSingle();
-    if (error) throw new Error(`Could not update save: ${error.message}`);
-    if (data) return "saved";
-
-    const { data: existing, error: loadError } = await this.client.from(
-      "crm_anonymous_saves",
-    )
-      .select("id")
-      .eq("id", credential.id)
-      .eq("token_hash", hash)
-      .maybeSingle();
-    if (loadError) {
-      throw new Error(`Could not check save revision: ${loadError.message}`);
-    }
+    const updated = await this.sql`
+      UPDATE crm_anonymous_saves
+      SET state = ${
+      this.sql.json(state as unknown as postgres.JSONValue)
+    }, revision = ${state.revision},
+        updated_at = ${new Date(state.savedAt).toISOString()}
+      WHERE id = ${credential.id} AND token_hash = ${hash}
+        AND revision = ${expectedRevision}
+      RETURNING id
+    `;
+    if (updated.length) return "saved";
+    const [existing] = await this.sql`
+      SELECT id FROM crm_anonymous_saves
+      WHERE id = ${credential.id} AND token_hash = ${hash}
+    `;
     return existing ? "conflict" : "missing";
   }
 
   async delete(credential: SaveCredential): Promise<void> {
-    const { error } = await this.client.from("crm_anonymous_saves").delete()
-      .eq("id", credential.id)
-      .eq("token_hash", await tokenHash(credential.token));
-    if (error) throw new Error(`Could not delete save: ${error.message}`);
+    await this.sql`
+      DELETE FROM crm_anonymous_saves WHERE id = ${credential.id}
+        AND token_hash = ${await tokenHash(credential.token)}
+    `;
   }
 }
 
-export function createSupabaseGameSaveStore(
-  url: string,
-  serviceRoleKey: string,
-): GameSaveStore {
-  return new SupabaseGameSaveStore(createClient(url, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  }));
+const stores = new Map<string, GameSaveStore>();
+
+export function createPostgresGameSaveStore(url: string): GameSaveStore {
+  let store = stores.get(url);
+  if (!store) {
+    store = new PostgresGameSaveStore(postgres(url, { max: 5 }));
+    stores.set(url, store);
+  }
+  return store;
 }
